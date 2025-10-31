@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Mis Reservas{% endblock %}
+
+{% block styles %}
+h2 {
+    color: #667eea;
+    margin-bottom: 30px;
+}
+.reservas-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+.reserva-card {
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.3s;
+}
+.reserva-card:hover {
+    border-color: #667eea;
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.2);
+}
+.reserva-info h3 {
+    color: #333;
+    margin-bottom: 10px;
+}
+.reserva-detalle {
+    color: #666;
+    font-size: 14px;
+    margin: 5px 0;
+}
+.reserva-detalle strong {
+    color: #333;
+}
+.btn-cancelar {
+    padding: 10px 20px;
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+.btn-cancelar:hover {
+    background: #dc2626;
+}
+.no-reservas {
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+}
+.no-reservas p {
+    margin-bottom: 20px;
+    font-size: 18px;
+}
+.btn-reservar {
+    display: inline-block;
+    padding: 12px 24px;
+    background: #667eea;
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+    transition: background 0.3s;
+}
+.btn-reservar:hover {
+    background: #5568d3;
+}
+{% endblock %}
+
+{% block content %}
+<h2>📋 Mis Reservas</h2>
+
+{% if reservas %}
+<div class="reservas-list">
+    {% for reserva in reservas %}
+    <div class="reserva-card">
+        <div class="reserva-info">
+            <h3>{{ reserva.espacio.nombre }}</h3>
+            <p class="reserva-detalle"><strong>📅 Fecha:</strong> {{ reserva.fecha.strftime('%d/%m/%Y') }}</p>
+            <p class="reserva-detalle"><strong>🕐 Horario:</strong> {{ reserva.hora_inicio.strftime('%H:%M') }} - {{ reserva.hora_fin.strftime('%H:%M') }}</p>
+            <p class="reserva-detalle"><strong>📝 Descripción:</strong> {{ reserva.espacio.descripcion }}</p>
+        </div>
+        <button class="btn-cancelar" onclick="cancelarReserva({{ reserva.espacio.id }}, '{{ reserva.fecha.strftime('%Y-%m-%d') }}', '{{ reserva.hora_inicio.strftime('%H:%M') }}')">
+            Cancelar
+        </button>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="no-reservas">
+    <p>📭 No tienes reservas activas</p>
+    <a href="{{ url_for('reservas') }}" class="btn-reservar">Hacer una reserva</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function cancelarReserva(espacioId, fecha, horaInicio) {
+    if (!confirm('¿Estás seguro de que deseas cancelar esta reserva?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/cancelar', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                espacio_id: espacioId,
+                fecha: fecha,
+                hora_inicio: horaInicio
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('Reserva cancelada correctamente');
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error al cancelar la reserva');
+        console.error(error);
+    }
+}
+</script>
+{% endblock %}
