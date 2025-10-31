@@ -1,33 +1,45 @@
 {% extends "base.html" %}
-{% block title %}Reservar Espacios{% endblock %}
+{% block title %}Reservar Franjas Horarias{% endblock %}
 
 {% block styles %}
 h2 {
     color: #667eea;
     margin-bottom: 20px;
 }
-.date-selector {
-    margin-bottom: 30px;
+.week-navigation {
     display: flex;
-    gap: 10px;
+    justify-content: space-between;
     align-items: center;
-}
-.date-selector input {
-    padding: 10px;
-    border: 2px solid #e0e0e0;
-    border-radius: 5px;
-    font-size: 14px;
-}
-.date-selector button {
-    padding: 10px 20px;
-    background: #667eea;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 10px;
     color: white;
-    border: none;
+}
+.week-info {
+    text-align: center;
+}
+.week-info h3 {
+    margin: 0;
+    font-size: 24px;
+}
+.week-info p {
+    margin: 5px 0 0 0;
+    opacity: 0.9;
+}
+.nav-button {
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 2px solid white;
     border-radius: 5px;
     cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s;
 }
-.date-selector button:hover {
-    background: #5568d3;
+.nav-button:hover {
+    background: white;
+    color: #667eea;
 }
 .espacios-container {
     display: flex;
@@ -38,31 +50,40 @@ h2 {
     border: 2px solid #e0e0e0;
     border-radius: 10px;
     padding: 20px;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 .espacio-header {
     margin-bottom: 20px;
+    padding: 15px;
+    border-radius: 8px;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 .espacio-header h3 {
-    color: #333;
-    margin-bottom: 5px;
+    margin: 0;
+    font-size: 20px;
 }
-.espacio-header p {
-    color: #666;
+.espacio-header .fecha {
     font-size: 14px;
+    opacity: 0.9;
 }
 .franjas-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px;
 }
 .franja {
-    padding: 15px;
+    padding: 12px;
     border-radius: 8px;
     text-align: center;
     cursor: pointer;
     transition: all 0.3s;
     font-weight: 500;
     border: 2px solid transparent;
+    position: relative;
 }
 .franja.disponible {
     background: #4ade80;
@@ -81,13 +102,29 @@ h2 {
 .franja.ocupada:hover {
     background: #dc2626;
 }
+.franja.mi-reserva {
+    background: #f59e0b;
+    color: white;
+    cursor: pointer;
+}
+.franja.mi-reserva:hover {
+    background: #d97706;
+    transform: translateY(-2px);
+}
+.franja.mi-reserva::after {
+    content: '⭐';
+    position: absolute;
+    top: 2px;
+    right: 5px;
+    font-size: 10px;
+}
 .franja-hora {
-    font-size: 16px;
+    font-size: 14px;
     display: block;
 }
 .franja-estado {
-    font-size: 12px;
-    margin-top: 5px;
+    font-size: 11px;
+    margin-top: 3px;
     display: block;
 }
 .loading {
@@ -98,10 +135,11 @@ h2 {
 .leyenda {
     display: flex;
     gap: 20px;
-    margin-top: 30px;
+    margin-bottom: 30px;
     padding: 15px;
     background: #f9f9f9;
     border-radius: 8px;
+    flex-wrap: wrap;
 }
 .leyenda-item {
     display: flex;
@@ -119,15 +157,133 @@ h2 {
 .leyenda-color.ocupada {
     background: #ef4444;
 }
+.leyenda-color.mi-reserva {
+    background: #f59e0b;
+}
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+}
+.modal-content {
+    background-color: white;
+    margin: 10% auto;
+    padding: 30px;
+    border-radius: 10px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.modal-header h3 {
+    margin: 0;
+    color: #667eea;
+}
+.close {
+    font-size: 28px;
+    font-weight: bold;
+    color: #aaa;
+    cursor: pointer;
+}
+.close:hover {
+    color: #000;
+}
+.form-group {
+    margin-bottom: 20px;
+}
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: #333;
+}
+.form-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #e0e0e0;
+    border-radius: 5px;
+    resize: vertical;
+    min-height: 80px;
+    font-family: inherit;
+}
+.modal-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s;
+}
+.btn-primary {
+    background: #667eea;
+    color: white;
+}
+.btn-primary:hover {
+    background: #5568d3;
+}
+.btn-danger {
+    background: #ef4444;
+    color: white;
+}
+.btn-danger:hover {
+    background: #dc2626;
+}
+.btn-secondary {
+    background: #6b7280;
+    color: white;
+}
+.btn-secondary:hover {
+    background: #4b5563;
+}
+.acceso-rapido {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+.btn-rapido {
+    padding: 10px 15px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+}
+.btn-rapido:hover {
+    background: #5568d3;
+}
 {% endblock %}
 
 {% block content %}
-<h2>📅 Reservar Espacios</h2>
+<h2>📅 Reservar Franjas Horarias</h2>
 
-<div class="date-selector">
-    <label>Seleccionar fecha:</label>
-    <input type="date" id="fecha-input" value="{{ fecha_seleccionada }}">
-    <button onclick="cargarFranjas()">Buscar</button>
+<div class="acceso-rapido">
+    <button class="btn-rapido" onclick="window.location.href='{{ url_for('mis_reservas') }}'">📋 Mis Reservas</button>
+    <button class="btn-rapido" onclick="irHoy()">📆 Semana Actual</button>
+</div>
+
+<div class="week-navigation">
+    <button class="nav-button" onclick="window.location.href='?fecha={{ semana_anterior }}'">← Semana Anterior</button>
+    <div class="week-info">
+        <h3>Semana del {{ fecha_inicio_semana }} al {{ fecha_fin_semana }}</h3>
+        <p>Selecciona un día y franja horaria para reservar</p>
+    </div>
+    <button class="nav-button" onclick="window.location.href='?fecha={{ semana_siguiente }}'">Semana Siguiente →</button>
 </div>
 
 <div class="leyenda">
@@ -139,43 +295,88 @@ h2 {
         <div class="leyenda-color ocupada"></div>
         <span>Ocupada</span>
     </div>
+    <div class="leyenda-item">
+        <div class="leyenda-color mi-reserva"></div>
+        <span>Mis Reservas ⭐</span>
+    </div>
 </div>
 
 <div class="espacios-container" id="espacios-container">
-    <div class="loading">Cargando espacios...</div>
+    <div class="loading">Cargando franjas horarias...</div>
+</div>
+
+<!-- Modal para reservar -->
+<div id="modalReserva" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Nueva Reserva</h3>
+            <span class="close" onclick="cerrarModal()">&times;</span>
+        </div>
+        <div id="modal-info"></div>
+        <div class="form-group">
+            <label>Notas (opcional):</label>
+            <textarea id="notas-reserva" placeholder="Añade notas sobre tu reserva..."></textarea>
+        </div>
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="confirmarReserva()">Confirmar Reserva</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para cancelar -->
+<div id="modalCancelar" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Cancelar Reserva</h3>
+            <span class="close" onclick="cerrarModalCancelar()">&times;</span>
+        </div>
+        <div id="modal-cancelar-info"></div>
+        <div class="modal-buttons">
+            <button class="btn btn-secondary" onclick="cerrarModalCancelar()">Volver</button>
+            <button class="btn btn-danger" onclick="confirmarCancelacion()">Cancelar Reserva</button>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 const espacios = {{ espacios | tojson }};
-let fechaSeleccionada = '{{ fecha_seleccionada }}';
+let reservaActual = null;
+
+function irHoy() {
+    window.location.href = '?fecha=' + new Date().toISOString().split('T')[0];
+}
 
 async function cargarFranjas() {
-    fechaSeleccionada = document.getElementById('fecha-input').value;
     const container = document.getElementById('espacios-container');
     container.innerHTML = '<div class="loading">Cargando franjas horarias...</div>';
     
     for (const espacio of espacios) {
         try {
-            const response = await fetch(`/api/franjas/${espacio.id}?fecha=${fechaSeleccionada}`);
+            const response = await fetch(`/api/franjas/${espacio.id}?fecha=${espacio.fecha}`);
             const franjas = await response.json();
             
             const espacioCard = document.createElement('div');
             espacioCard.className = 'espacio-card';
             espacioCard.innerHTML = `
-                <div class="espacio-header">
+                <div class="espacio-header" style="background: ${espacio.color}">
                     <h3>${espacio.nombre}</h3>
-                    <p>${espacio.descripcion}</p>
+                    <span class="fecha">${espacio.fecha_completa}</span>
                 </div>
                 <div class="franjas-grid" id="franjas-${espacio.id}">
-                    ${franjas.map(franja => `
-                        <div class="franja ${franja.disponible ? 'disponible' : 'ocupada'}" 
-                             onclick="handleFranjaClick(${espacio.id}, '${franja.hora_inicio}', '${franja.hora_fin}', ${franja.disponible}, '${franja.reservada_por || ''}')">
+                    ${franjas.map(franja => {
+                        let claseExtra = franja.disponible ? 'disponible' : (franja.es_mia ? 'mi-reserva' : 'ocupada');
+                        let textoEstado = franja.disponible ? '✓ Libre' : (franja.es_mia ? '★ Mía' : '✗ Ocupada');
+                        return `
+                        <div class="franja ${claseExtra}" 
+                             onclick="handleFranjaClick(${espacio.id}, '${espacio.fecha}', '${espacio.nombre}', '${franja.hora_inicio}', '${franja.hora_fin}', ${franja.disponible}, '${franja.reservada_por || ''}', ${franja.es_mia}, ${franja.reserva_id}, '${franja.notas || ''}')">
                             <span class="franja-hora">${franja.hora_inicio}</span>
-                            <span class="franja-estado">${franja.disponible ? '✓ Libre' : '✗ Ocupada'}</span>
+                            <span class="franja-estado">${textoEstado}</span>
                         </div>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </div>
             `;
             
@@ -189,15 +390,59 @@ async function cargarFranjas() {
     }
 }
 
-async function handleFranjaClick(espacioId, horaInicio, horaFin, disponible, reservadaPor) {
-    if (!disponible) {
+function handleFranjaClick(espacioId, fecha, nombreDia, horaInicio, horaFin, disponible, reservadaPor, esMia, reservaId, notas) {
+    if (esMia) {
+        // Mostrar modal para cancelar
+        mostrarModalCancelar(espacioId, fecha, nombreDia, horaInicio, horaFin, reservaId, notas);
+    } else if (!disponible) {
         alert(`Esta franja está ocupada por: ${reservadaPor}`);
-        return;
+    } else {
+        // Mostrar modal para reservar
+        mostrarModalReserva(espacioId, fecha, nombreDia, horaInicio, horaFin);
     }
+}
+
+function mostrarModalReserva(espacioId, fecha, nombreDia, horaInicio, horaFin) {
+    reservaActual = { espacioId, fecha, horaInicio, horaFin };
     
-    if (!confirm(`¿Deseas reservar de ${horaInicio} a ${horaFin}?`)) {
-        return;
-    }
+    document.getElementById('modal-info').innerHTML = `
+        <p><strong>Día:</strong> ${nombreDia}</p>
+        <p><strong>Horario:</strong> ${horaInicio} - ${horaFin}</p>
+    `;
+    
+    document.getElementById('notas-reserva').value = '';
+    document.getElementById('modalReserva').style.display = 'block';
+}
+
+function mostrarModalCancelar(espacioId, fecha, nombreDia, horaInicio, horaFin, reservaId, notas) {
+    reservaActual = { espacioId, fecha, horaInicio, horaFin, reservaId };
+    
+    let notasHtml = notas ? `<p><strong>Notas:</strong> ${notas}</p>` : '';
+    
+    document.getElementById('modal-cancelar-info').innerHTML = `
+        <p><strong>Día:</strong> ${nombreDia}</p>
+        <p><strong>Horario:</strong> ${horaInicio} - ${horaFin}</p>
+        ${notasHtml}
+        <p style="color: #ef4444; margin-top: 15px;">¿Estás seguro de que deseas cancelar esta reserva?</p>
+    `;
+    
+    document.getElementById('modalCancelar').style.display = 'block';
+}
+
+function cerrarModal() {
+    document.getElementById('modalReserva').style.display = 'none';
+    reservaActual = null;
+}
+
+function cerrarModalCancelar() {
+    document.getElementById('modalCancelar').style.display = 'none';
+    reservaActual = null;
+}
+
+async function confirmarReserva() {
+    if (!reservaActual) return;
+    
+    const notas = document.getElementById('notas-reserva').value;
     
     try {
         const response = await fetch('/api/reservar', {
@@ -206,10 +451,11 @@ async function handleFranjaClick(espacioId, horaInicio, horaFin, disponible, res
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                espacio_id: espacioId,
-                fecha: fechaSeleccionada,
-                hora_inicio: horaInicio,
-                hora_fin: horaFin
+                espacio_id: reservaActual.espacioId,
+                fecha: reservaActual.fecha,
+                hora_inicio: reservaActual.horaInicio,
+                hora_fin: reservaActual.horaFin,
+                notas: notas
             })
         });
         
@@ -217,6 +463,7 @@ async function handleFranjaClick(espacioId, horaInicio, horaFin, disponible, res
         
         if (response.ok) {
             alert('¡Reserva realizada correctamente!');
+            cerrarModal();
             cargarFranjas();
         } else {
             alert('Error: ' + data.error);
@@ -224,6 +471,50 @@ async function handleFranjaClick(espacioId, horaInicio, horaFin, disponible, res
     } catch (error) {
         alert('Error al realizar la reserva');
         console.error(error);
+    }
+}
+
+async function confirmarCancelacion() {
+    if (!reservaActual) return;
+    
+    try {
+        const response = await fetch('/api/cancelar', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                reserva_id: reservaActual.reservaId,
+                espacio_id: reservaActual.espacioId,
+                fecha: reservaActual.fecha,
+                hora_inicio: reservaActual.horaInicio
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('Reserva cancelada correctamente');
+            cerrarModalCancelar();
+            cargarFranjas();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error al cancelar la reserva');
+        console.error(error);
+    }
+}
+
+// Cerrar modal al hacer clic fuera
+window.onclick = function(event) {
+    const modalReserva = document.getElementById('modalReserva');
+    const modalCancelar = document.getElementById('modalCancelar');
+    if (event.target == modalReserva) {
+        cerrarModal();
+    }
+    if (event.target == modalCancelar) {
+        cerrarModalCancelar();
     }
 }
 

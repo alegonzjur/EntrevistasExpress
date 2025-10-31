@@ -25,6 +25,7 @@ class Espacio(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
     descripcion = db.Column(db.Text)
+    color = db.Column(db.String(7), default='#667eea')  # Color en hexadecimal para cada día
     reservas = db.relationship('Reserva', backref='espacio', lazy=True)
 
 class Reserva(db.Model):
@@ -36,6 +37,7 @@ class Reserva(db.Model):
     hora_inicio = db.Column(db.Time, nullable=False)
     hora_fin = db.Column(db.Time, nullable=False)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    notas = db.Column(db.Text)  # Campo para notas adicionales
 
 # Rutas
 @app.route('/')
@@ -94,50 +96,83 @@ def reservas():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    espacios = Espacio.query.all()
-    # Convertir objetos SQLAlchemy a diccionarios para que sean serializables a JSON
-    espacios_dict = [
-        {
-            'id': espacio.id,
-            'nombre': espacio.nombre,
-            'descripcion': espacio.descripcion
-        }
-        for espacio in espacios
-    ]
-    fecha_seleccionada = request.args.get('fecha', datetime.now().strftime('%Y-%m-%d'))
+    # Obtener la semana actual o la semana seleccionada
+    fecha_str = request.args.get('fecha', datetime.now().strftime('%Y-%m-%d'))
+    fecha_base = datetime.strptime(fecha_str, '%Y-%m-%d')
+    
+    # Calcular el lunes de esa semana
+    dias_hasta_lunes = fecha_base.weekday()
+    lunes = fecha_base - timedelta(days=dias_hasta_lunes)
+    
+    # Generar los 5 días de la semana (Lunes a Viernes)
+    dias_semana = []
+    nombres_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+    colores_dias = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b']
+    
+    for i in range(5):
+        dia = lunes + timedelta(days=i)
+        dias_semana.append({
+            'id': i + 1,
+            'nombre': nombres_dias[i],
+            'fecha': dia.strftime('%Y-%m-%d'),
+            'fecha_completa': dia.strftime('%d/%m/%Y'),
+            'color': colores_dias[i]
+        })
+    
+    # Calcular semana anterior y siguiente
+    semana_anterior = (lunes - timedelta(days=7)).strftime('%Y-%m-%d')
+    semana_siguiente = (lunes + timedelta(days=7)).strftime('%Y-%m-%d')
     
     return render_template('reservas.html', 
-                         espacios=espacios_dict, 
-                         fecha_seleccionada=fecha_seleccionada,
+                         espacios=dias_semana,
+                         fecha_seleccionada=fecha_str,
+                         semana_anterior=semana_anterior,
+                         semana_siguiente=semana_siguiente,
+                         fecha_inicio_semana=lunes.strftime('%d/%m/%Y'),
+                         fecha_fin_semana=(lunes + timedelta(days=4)).strftime('%d/%m/%Y'),
                          username=session['username'])
 
-@app.route('/api/franjas/<int:espacio_id>')
-def obtener_franjas(espacio_id):
-    fecha_str = request.args.get('fecha', datetime.now().strftime('%Y-%m-%d'))
+@app.route('/api/franjas/<int:dia_id>')
+def obtener_franjas(dia_id):
+    fecha_str = request.args.get('fecha')
+    if not fecha_str:
+        return jsonify({'error': 'Fecha no proporcionada'}), 400
+    
     fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
     
-    # Generar franjas horarias (de 8:00 a 20:00, cada hora)
+    # Generar franjas horarias de media hora (de 9:00 a 19:30)
     franjas = []
-    hora_inicio = 8
+    hora_inicio = 9
     hora_fin = 20
     
     for hora in range(hora_inicio, hora_fin):
-        franja_inicio = f"{hora:02d}:00"
-        franja_fin = f"{hora + 1:02d}:00"
-        
-        # Verificar si está reservada
-        reserva = Reserva.query.filter_by(
-            espacio_id=espacio_id,
-            fecha=fecha,
-            hora_inicio=datetime.strptime(franja_inicio, '%H:%M').time()
-        ).first()
-        
-        franjas.append({
-            'hora_inicio': franja_inicio,
-            'hora_fin': franja_fin,
-            'disponible': reserva is None,
-            'reservada_por': reserva.usuario.username if reserva else None
-        })
+        for minuto in [0, 30]:
+            if hora == 19 and minuto == 30:  # Última franja
+                franja_inicio = f"{hora:02d}:30"
+                franja_fin = "20:00"
+            else:
+                franja_inicio = f"{hora:02d}:{minuto:02d}"
+                if minuto == 0:
+                    franja_fin = f"{hora:02d}:30"
+                else:
+                    franja_fin = f"{hora + 1:02d}:00"
+            
+            # Verificar si está reservada
+            reserva = Reserva.query.filter_by(
+                espacio_id=dia_id,
+                fecha=fecha,
+                hora_inicio=datetime.strptime(franja_inicio, '%H:%M').time()
+            ).first()
+            
+            franjas.append({
+                'hora_inicio': franja_inicio,
+                'hora_fin': franja_fin,
+                'disponible': reserva is None,
+                'reservada_por': reserva.usuario.username if reserva else None,
+                'reserva_id': reserva.id if reserva else None,
+                'notas': reserva.notas if reserva else None,
+                'es_mia': reserva.usuario_id == session.get('user_id') if reserva else False
+            })
     
     return jsonify(franjas)
 
@@ -151,6 +186,7 @@ def hacer_reserva():
     fecha_str = data['fecha']
     hora_inicio_str = data['hora_inicio']
     hora_fin_str = data['hora_fin']
+    notas = data.get('notas', '')
     
     fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
     hora_inicio = datetime.strptime(hora_inicio_str, '%H:%M').time()
@@ -172,7 +208,8 @@ def hacer_reserva():
         espacio_id=espacio_id,
         fecha=fecha,
         hora_inicio=hora_inicio,
-        hora_fin=hora_fin
+        hora_fin=hora_fin,
+        notas=notas
     )
     
     db.session.add(nueva_reserva)
@@ -186,21 +223,29 @@ def cancelar_reserva():
         return jsonify({'error': 'No autenticado'}), 401
     
     data = request.json
-    espacio_id = data['espacio_id']
-    fecha_str = data['fecha']
-    hora_inicio_str = data['hora_inicio']
+    reserva_id = data.get('reserva_id')
     
-    fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
-    hora_inicio = datetime.strptime(hora_inicio_str, '%H:%M').time()
-    
-    reserva = Reserva.query.filter_by(
-        espacio_id=espacio_id,
-        fecha=fecha,
-        hora_inicio=hora_inicio,
-        usuario_id=session['user_id']
-    ).first()
+    if reserva_id:
+        reserva = Reserva.query.get(reserva_id)
+    else:
+        espacio_id = data['espacio_id']
+        fecha_str = data['fecha']
+        hora_inicio_str = data['hora_inicio']
+        
+        fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        hora_inicio = datetime.strptime(hora_inicio_str, '%H:%M').time()
+        
+        reserva = Reserva.query.filter_by(
+            espacio_id=espacio_id,
+            fecha=fecha,
+            hora_inicio=hora_inicio,
+            usuario_id=session['user_id']
+        ).first()
     
     if not reserva:
+        return jsonify({'error': 'Reserva no encontrada'}), 404
+    
+    if reserva.usuario_id != session['user_id']:
         return jsonify({'error': 'No tienes permiso para cancelar esta reserva'}), 403
     
     db.session.delete(reserva)
@@ -213,21 +258,63 @@ def mis_reservas():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    reservas = Reserva.query.filter_by(usuario_id=session['user_id']).order_by(Reserva.fecha.desc()).all()
-    return render_template('mis_reservas.html', reservas=reservas, username=session['username'])
+    # Obtener reservas futuras y pasadas
+    hoy = datetime.now().date()
+    reservas_futuras = Reserva.query.filter(
+        Reserva.usuario_id == session['user_id'],
+        Reserva.fecha >= hoy
+    ).order_by(Reserva.fecha, Reserva.hora_inicio).all()
+    
+    reservas_pasadas = Reserva.query.filter(
+        Reserva.usuario_id == session['user_id'],
+        Reserva.fecha < hoy
+    ).order_by(Reserva.fecha.desc(), Reserva.hora_inicio.desc()).limit(10).all()
+    
+    return render_template('mis_reservas.html', 
+                         reservas_futuras=reservas_futuras,
+                         reservas_pasadas=reservas_pasadas,
+                         username=session['username'])
+
+@app.route('/api/estadisticas')
+def estadisticas():
+    if 'user_id' not in session:
+        return jsonify({'error': 'No autenticado'}), 401
+    
+    # Estadísticas del usuario
+    total_reservas = Reserva.query.filter_by(usuario_id=session['user_id']).count()
+    
+    # Reservas por día de la semana
+    reservas_usuario = Reserva.query.filter_by(usuario_id=session['user_id']).all()
+    reservas_por_dia = {}
+    nombres_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+    
+    for reserva in reservas_usuario:
+        dia_semana = nombres_dias[reserva.fecha.weekday()]
+        reservas_por_dia[dia_semana] = reservas_por_dia.get(dia_semana, 0) + 1
+    
+    return jsonify({
+        'total_reservas': total_reservas,
+        'reservas_por_dia': reservas_por_dia
+    })
 
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        # Crear espacios de ejemplo si no existen
+        # Actualizar la tabla espacios si existe para añadir el campo color
+        # Esto es una migración simple, en producción usarías Alembic
+        
+        # Crear espacios (días de la semana) si no existen
         if Espacio.query.count() == 0:
-            espacios_ejemplo = [
-                Espacio(nombre='Sala de Reuniones A', descripcion='Capacidad para 10 personas'),
-                Espacio(nombre='Sala de Reuniones B', descripcion='Capacidad para 6 personas'),
-                Espacio(nombre='Espacio Coworking', descripcion='Escritorios compartidos'),
+            dias_semana = [
+                Espacio(nombre='Lunes', descripcion='Primer día de la semana', color='#667eea'),
+                Espacio(nombre='Martes', descripcion='Segundo día de la semana', color='#764ba2'),
+                Espacio(nombre='Miércoles', descripcion='Tercer día de la semana', color='#f093fb'),
+                Espacio(nombre='Jueves', descripcion='Cuarto día de la semana', color='#4facfe'),
+                Espacio(nombre='Viernes', descripcion='Quinto día de la semana', color='#43e97b'),
             ]
-            for espacio in espacios_ejemplo:
-                db.session.add(espacio)
+            for dia in dias_semana:
+                db.session.add(dia)
             db.session.commit()
+            print("Días de la semana creados correctamente")
     
     app.run(debug=True)
