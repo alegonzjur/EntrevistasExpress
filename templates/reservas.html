@@ -3,7 +3,7 @@
 
 {% block styles %}
 h2 {
-    color: #667eea;
+    color: #0066B3;
     margin-bottom: 20px;
 }
 .week-navigation {
@@ -12,9 +12,10 @@ h2 {
     align-items: center;
     margin-bottom: 30px;
     padding: 20px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #0066B3 0%, #003D7A 100%);
     border-radius: 10px;
     color: white;
+    box-shadow: 0 4px 15px rgba(0, 102, 179, 0.3);
 }
 .week-info {
     text-align: center;
@@ -22,24 +23,29 @@ h2 {
 .week-info h3 {
     margin: 0;
     font-size: 24px;
+    font-weight: 600;
 }
 .week-info p {
     margin: 5px 0 0 0;
-    opacity: 0.9;
+    opacity: 0.95;
+    font-size: 14px;
 }
 .nav-button {
-    padding: 10px 20px;
-    background: rgba(255, 255, 255, 0.2);
+    padding: 12px 24px;
+    background: rgba(255, 255, 255, 0.15);
     color: white;
     border: 2px solid white;
-    border-radius: 5px;
+    border-radius: 8px;
     cursor: pointer;
-    font-weight: bold;
+    font-weight: 600;
     transition: all 0.3s;
+    font-size: 14px;
 }
 .nav-button:hover {
     background: white;
-    color: #667eea;
+    color: #0066B3;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 .espacios-container {
     display: flex;
@@ -47,37 +53,47 @@ h2 {
     gap: 30px;
 }
 .espacio-card {
-    border: 2px solid #e0e0e0;
-    border-radius: 10px;
+    border: 2px solid #E0E0E0;
+    border-radius: 12px;
     padding: 20px;
     background: white;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s;
+}
+.espacio-card:hover {
+    box-shadow: 0 4px 20px rgba(0, 102, 179, 0.15);
 }
 .espacio-header {
     margin-bottom: 20px;
-    padding: 15px;
-    border-radius: 8px;
+    padding: 18px;
+    border-radius: 10px;
     color: white;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    background: linear-gradient(135deg, #0066B3 0%, #003D7A 100%);
+    box-shadow: 0 2px 8px rgba(0, 102, 179, 0.2);
 }
 .espacio-header h3 {
     margin: 0;
     font-size: 20px;
+    font-weight: 600;
 }
 .espacio-header .fecha {
     font-size: 14px;
-    opacity: 0.9;
+    opacity: 0.95;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 5px 12px;
+    border-radius: 15px;
 }
 .franjas-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 8px;
+    gap: 10px;
 }
 .franja {
-    padding: 12px;
-    border-radius: 8px;
+    padding: 14px;
+    border-radius: 10px;
     text-align: center;
     cursor: pointer;
     transition: all 0.3s;
@@ -88,16 +104,18 @@ h2 {
 .franja.disponible {
     background: #4ade80;
     color: white;
+    border-color: #22c55e;
 }
 .franja.disponible:hover {
     background: #22c55e;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 15px rgba(74, 222, 128, 0.4);
 }
 .franja.ocupada {
     background: #ef4444;
     color: white;
     cursor: not-allowed;
+    border-color: #dc2626;
 }
 .franja.ocupada:hover {
     background: #dc2626;
@@ -106,26 +124,30 @@ h2 {
     background: #f59e0b;
     color: white;
     cursor: pointer;
+    border-color: #d97706;
 }
 .franja.mi-reserva:hover {
     background: #d97706;
-    transform: translateY(-2px);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 15px rgba(245, 158, 11, 0.4);
 }
 .franja.mi-reserva::after {
     content: '⭐';
     position: absolute;
-    top: 2px;
-    right: 5px;
-    font-size: 10px;
+    top: 3px;
+    right: 6px;
+    font-size: 11px;
 }
 .franja-hora {
-    font-size: 14px;
+    font-size: 15px;
     display: block;
+    font-weight: 600;
 }
 .franja-estado {
     font-size: 11px;
-    margin-top: 3px;
+    margin-top: 4px;
     display: block;
+    opacity: 0.95;
 }
 .loading {
     text-align: center;
@@ -134,31 +156,38 @@ h2 {
 }
 .leyenda {
     display: flex;
-    gap: 20px;
+    gap: 25px;
     margin-bottom: 30px;
-    padding: 15px;
-    background: #f9f9f9;
-    border-radius: 8px;
+    padding: 18px;
+    background: white;
+    border-radius: 10px;
     flex-wrap: wrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 .leyenda-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    font-weight: 500;
+    color: #333333;
 }
 .leyenda-color {
-    width: 30px;
-    height: 30px;
-    border-radius: 5px;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
 }
 .leyenda-color.disponible {
     background: #4ade80;
+    border: 2px solid #22c55e;
 }
 .leyenda-color.ocupada {
     background: #ef4444;
+    border: 2px solid #dc2626;
 }
 .leyenda-color.mi-reserva {
     background: #f59e0b;
+    border: 2px solid #d97706;
 }
 .modal {
     display: none;
@@ -168,73 +197,91 @@ h2 {
     top: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0,0,0,0.5);
+    background-color: rgba(0, 61, 122, 0.5);
+    backdrop-filter: blur(4px);
 }
 .modal-content {
     background-color: white;
-    margin: 10% auto;
-    padding: 30px;
-    border-radius: 10px;
+    margin: 8% auto;
+    padding: 35px;
+    border-radius: 12px;
     width: 90%;
-    max-width: 500px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    max-width: 520px;
+    box-shadow: 0 8px 30px rgba(0, 102, 179, 0.3);
 }
 .modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #E0E0E0;
 }
 .modal-header h3 {
     margin: 0;
-    color: #667eea;
+    color: #0066B3;
+    font-size: 22px;
+    font-weight: 600;
 }
 .close {
-    font-size: 28px;
+    font-size: 30px;
     font-weight: bold;
-    color: #aaa;
+    color: #999;
     cursor: pointer;
+    line-height: 1;
+    transition: all 0.3s;
 }
 .close:hover {
-    color: #000;
+    color: #0066B3;
+    transform: scale(1.1);
 }
 .form-group {
     margin-bottom: 20px;
 }
 .form-group label {
     display: block;
-    margin-bottom: 5px;
-    font-weight: 500;
-    color: #333;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #333333;
 }
 .form-group textarea {
     width: 100%;
-    padding: 10px;
-    border: 2px solid #e0e0e0;
-    border-radius: 5px;
+    padding: 12px;
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
     resize: vertical;
-    min-height: 80px;
+    min-height: 90px;
     font-family: inherit;
+    transition: all 0.3s;
+}
+.form-group textarea:focus {
+    outline: none;
+    border-color: #0066B3;
+    box-shadow: 0 0 0 3px rgba(0, 102, 179, 0.1);
 }
 .modal-buttons {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     justify-content: flex-end;
+    margin-top: 25px;
 }
 .btn {
-    padding: 10px 20px;
+    padding: 12px 24px;
     border: none;
-    border-radius: 5px;
+    border-radius: 8px;
     cursor: pointer;
-    font-weight: 500;
+    font-weight: 600;
     transition: all 0.3s;
+    font-size: 14px;
 }
 .btn-primary {
-    background: #667eea;
+    background: #0066B3;
     color: white;
 }
 .btn-primary:hover {
-    background: #5568d3;
+    background: #003D7A;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 102, 179, 0.3);
 }
 .btn-danger {
     background: #ef4444;
@@ -242,6 +289,8 @@ h2 {
 }
 .btn-danger:hover {
     background: #dc2626;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
 .btn-secondary {
     background: #6b7280;
@@ -252,20 +301,28 @@ h2 {
 }
 .acceso-rapido {
     display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
+    gap: 12px;
+    margin-bottom: 25px;
+    flex-wrap: wrap;
 }
 .btn-rapido {
-    padding: 10px 15px;
-    background: #667eea;
+    padding: 12px 20px;
+    background: #0066B3;
     color: white;
     border: none;
-    border-radius: 5px;
+    border-radius: 8px;
     cursor: pointer;
     font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 .btn-rapido:hover {
-    background: #5568d3;
+    background: #003D7A;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 102, 179, 0.3);
 }
 {% endblock %}
 
@@ -273,8 +330,12 @@ h2 {
 <h2>📅 Reservar Franjas Horarias</h2>
 
 <div class="acceso-rapido">
-    <button class="btn-rapido" onclick="window.location.href='{{ url_for('mis_reservas') }}'">📋 Mis Reservas</button>
-    <button class="btn-rapido" onclick="irHoy()">📆 Semana Actual</button>
+    <button class="btn-rapido" onclick="window.location.href='{{ url_for('mis_reservas') }}'">
+        <span>📋</span> Mis Reservas
+    </button>
+    <button class="btn-rapido" onclick="irHoy()">
+        <span>📆</span> Semana Actual
+    </button>
 </div>
 
 <div class="week-navigation">
@@ -361,7 +422,7 @@ async function cargarFranjas() {
             const espacioCard = document.createElement('div');
             espacioCard.className = 'espacio-card';
             espacioCard.innerHTML = `
-                <div class="espacio-header" style="background: ${espacio.color}">
+                <div class="espacio-header">
                     <h3>${espacio.nombre}</h3>
                     <span class="fecha">${espacio.fecha_completa}</span>
                 </div>
@@ -392,12 +453,10 @@ async function cargarFranjas() {
 
 function handleFranjaClick(espacioId, fecha, nombreDia, horaInicio, horaFin, disponible, reservadaPor, esMia, reservaId, notas) {
     if (esMia) {
-        // Mostrar modal para cancelar
         mostrarModalCancelar(espacioId, fecha, nombreDia, horaInicio, horaFin, reservaId, notas);
     } else if (!disponible) {
         alert(`Esta franja está ocupada por: ${reservadaPor}`);
     } else {
-        // Mostrar modal para reservar
         mostrarModalReserva(espacioId, fecha, nombreDia, horaInicio, horaFin);
     }
 }
@@ -506,7 +565,6 @@ async function confirmarCancelacion() {
     }
 }
 
-// Cerrar modal al hacer clic fuera
 window.onclick = function(event) {
     const modalReserva = document.getElementById('modalReserva');
     const modalCancelar = document.getElementById('modalCancelar');
@@ -518,7 +576,6 @@ window.onclick = function(event) {
     }
 }
 
-// Cargar franjas al inicio
 window.onload = cargarFranjas;
 </script>
 {% endblock %}
