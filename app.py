@@ -1,7 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
+from functools import wraps
 import os
 
 app = Flask(__name__)
@@ -18,14 +19,28 @@ class Usuario(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    reservas = db.relationship('Reserva', backref='usuario', lazy=True)
+    rol = db.Column(db.String(20), default='profesor')  # 'admin' o 'profesor'
+    activo = db.Column(db.Boolean, default=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relación con reservas (especificando foreign_keys para evitar ambigüedad)
+    reservas = db.relationship('Reserva', 
+                              foreign_keys='Reserva.usuario_id',
+                              backref='usuario', 
+                              lazy=True)
+    
+    # Relación con reservas creadas como admin
+    reservas_creadas = db.relationship('Reserva',
+                                      foreign_keys='Reserva.creado_por_admin',
+                                      backref='creador_admin',
+                                      lazy=True)
 
 class Espacio(db.Model):
     __tablename__ = 'espacios'
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
     descripcion = db.Column(db.Text)
-    color = db.Column(db.String(7), default='#667eea')  # Color en hexadecimal para cada día
+    color = db.Column(db.String(7), default='#667eea')
     reservas = db.relationship('Reserva', backref='espacio', lazy=True)
 
 class Reserva(db.Model):
@@ -37,65 +52,109 @@ class Reserva(db.Model):
     hora_inicio = db.Column(db.Time, nullable=False)
     hora_fin = db.Column(db.Time, nullable=False)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
-    notas = db.Column(db.Text)  # Campo para notas adicionales
+    notas = db.Column(db.Text)
+    creado_por_admin = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+
+# Decoradores para proteger rutas
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Debes iniciar sesión para acceder a esta página', 'error')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Debes iniciar sesión para acceder a esta página', 'error')
+            return redirect(url_for('login'))
+        
+        usuario = Usuario.query.get(session['user_id'])
+        if not usuario or usuario.rol != 'admin':
+            flash('No tienes permisos para acceder a esta página', 'error')
+            return redirect(url_for('reservas'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Rutas
 @app.route('/')
 def index():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    return redirect(url_for('reservas'))
+    if 'user_id' in session:
+        return redirect(url_for('reservas'))
+    return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Si ya está logueado, redirigir
+    if 'user_id' in session:
+        return redirect(url_for('reservas'))
+    
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
         
         usuario = Usuario.query.filter_by(username=username).first()
         
-        if usuario and check_password_hash(usuario.password, password):
+        if usuario and usuario.activo and check_password_hash(usuario.password, password):
             session['user_id'] = usuario.id
             session['username'] = usuario.username
+            session['rol'] = usuario.rol
+            flash(f'¡Bienvenido, {usuario.username}!', 'success')
             return redirect(url_for('reservas'))
         else:
-            return render_template('login.html', error='Usuario o contraseña incorrectos')
+            if usuario and not usuario.activo:
+                error = 'Tu cuenta ha sido desactivada. Contacta con el administrador.'
+            else:
+                error = 'Usuario o contraseña incorrectos'
+            return render_template('login.html', error=error)
     
     return render_template('login.html')
 
 @app.route('/registro', methods=['GET', 'POST'])
+@admin_required
 def registro():
     if request.method == 'POST':
         username = request.form['username']
         email = request.form['email']
         password = request.form['password']
+        rol = request.form.get('rol', 'profesor')
         
         if Usuario.query.filter_by(username=username).first():
-            return render_template('registro.html', error='El usuario ya existe')
+            flash('El usuario ya existe', 'error')
+            return render_template('registro.html')
         
         if Usuario.query.filter_by(email=email).first():
-            return render_template('registro.html', error='El email ya está registrado')
+            flash('El email ya está registrado', 'error')
+            return render_template('registro.html')
         
         hashed_password = generate_password_hash(password)
-        nuevo_usuario = Usuario(username=username, email=email, password=hashed_password)
+        nuevo_usuario = Usuario(
+            username=username, 
+            email=email, 
+            password=hashed_password,
+            rol=rol
+        )
         
         db.session.add(nuevo_usuario)
         db.session.commit()
         
-        return redirect(url_for('login'))
+        flash(f'Usuario {username} creado correctamente como {rol}', 'success')
+        return redirect(url_for('admin_usuarios'))
     
     return render_template('registro.html')
 
 @app.route('/logout')
 def logout():
     session.clear()
+    flash('Has cerrado sesión correctamente', 'success')
     return redirect(url_for('login'))
 
 @app.route('/reservas')
+@login_required
 def reservas():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
     # Obtener la semana actual o la semana seleccionada
     fecha_str = request.args.get('fecha', datetime.now().strftime('%Y-%m-%d'))
     fecha_base = datetime.strptime(fecha_str, '%Y-%m-%d')
@@ -123,6 +182,12 @@ def reservas():
     semana_anterior = (lunes - timedelta(days=7)).strftime('%Y-%m-%d')
     semana_siguiente = (lunes + timedelta(days=7)).strftime('%Y-%m-%d')
     
+    # Si es admin, obtener lista de todos los usuarios para el selector
+    usuarios_lista = []
+    if session.get('rol') == 'admin':
+        usuarios_lista = Usuario.query.filter_by(activo=True).order_by(Usuario.username).all()
+        usuarios_lista = [{'id': u.id, 'username': u.username, 'email': u.email} for u in usuarios_lista]
+    
     return render_template('reservas.html', 
                          espacios=dias_semana,
                          fecha_seleccionada=fecha_str,
@@ -130,9 +195,12 @@ def reservas():
                          semana_siguiente=semana_siguiente,
                          fecha_inicio_semana=lunes.strftime('%d/%m/%Y'),
                          fecha_fin_semana=(lunes + timedelta(days=4)).strftime('%d/%m/%Y'),
-                         username=session['username'])
+                         username=session['username'],
+                         es_admin=session.get('rol') == 'admin',
+                         usuarios_lista=usuarios_lista)
 
 @app.route('/api/franjas/<int:dia_id>')
+@login_required
 def obtener_franjas(dia_id):
     fecha_str = request.args.get('fecha')
     if not fecha_str:
@@ -147,7 +215,7 @@ def obtener_franjas(dia_id):
     
     for hora in range(hora_inicio, hora_fin):
         for minuto in [0, 30]:
-            if hora == 19 and minuto == 30:  # Última franja
+            if hora == 19 and minuto == 30:
                 franja_inicio = f"{hora:02d}:30"
                 franja_fin = "20:00"
             else:
@@ -171,22 +239,28 @@ def obtener_franjas(dia_id):
                 'reservada_por': reserva.usuario.username if reserva else None,
                 'reserva_id': reserva.id if reserva else None,
                 'notas': reserva.notas if reserva else None,
-                'es_mia': reserva.usuario_id == session.get('user_id') if reserva else False
+                'es_mia': reserva.usuario_id == session.get('user_id') if reserva else False,
+                'puede_cancelar': (reserva.usuario_id == session.get('user_id') or session.get('rol') == 'admin') if reserva else False
             })
     
     return jsonify(franjas)
 
 @app.route('/api/reservar', methods=['POST'])
+@login_required
 def hacer_reserva():
-    if 'user_id' not in session:
-        return jsonify({'error': 'No autenticado'}), 401
-    
     data = request.json
     espacio_id = data['espacio_id']
     fecha_str = data['fecha']
     hora_inicio_str = data['hora_inicio']
     hora_fin_str = data['hora_fin']
     notas = data.get('notas', '')
+    
+    # NUEVO: Permitir al admin reservar para otro usuario
+    usuario_id_destino = data.get('usuario_id', session['user_id'])
+    
+    # Solo admins pueden reservar para otros usuarios
+    if usuario_id_destino != session['user_id'] and session.get('rol') != 'admin':
+        return jsonify({'error': 'No tienes permiso para reservar en nombre de otros usuarios'}), 403
     
     fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
     hora_inicio = datetime.strptime(hora_inicio_str, '%H:%M').time()
@@ -204,24 +278,30 @@ def hacer_reserva():
     
     # Crear nueva reserva
     nueva_reserva = Reserva(
-        usuario_id=session['user_id'],
+        usuario_id=usuario_id_destino,
         espacio_id=espacio_id,
         fecha=fecha,
         hora_inicio=hora_inicio,
         hora_fin=hora_fin,
-        notas=notas
+        notas=notas,
+        creado_por_admin=session['user_id'] if usuario_id_destino != session['user_id'] else None
     )
     
     db.session.add(nueva_reserva)
     db.session.commit()
     
-    return jsonify({'success': True, 'mensaje': 'Reserva realizada correctamente'})
+    # Mensaje diferente si es admin reservando para otro
+    if usuario_id_destino != session['user_id']:
+        usuario_destino = Usuario.query.get(usuario_id_destino)
+        mensaje = f'Reserva creada correctamente para {usuario_destino.username}'
+    else:
+        mensaje = 'Reserva realizada correctamente'
+    
+    return jsonify({'success': True, 'mensaje': mensaje})
 
 @app.route('/api/cancelar', methods=['POST'])
+@login_required
 def cancelar_reserva():
-    if 'user_id' not in session:
-        return jsonify({'error': 'No autenticado'}), 401
-    
     data = request.json
     reserva_id = data.get('reserva_id')
     
@@ -238,14 +318,14 @@ def cancelar_reserva():
         reserva = Reserva.query.filter_by(
             espacio_id=espacio_id,
             fecha=fecha,
-            hora_inicio=hora_inicio,
-            usuario_id=session['user_id']
+            hora_inicio=hora_inicio
         ).first()
     
     if not reserva:
         return jsonify({'error': 'Reserva no encontrada'}), 404
     
-    if reserva.usuario_id != session['user_id']:
+    # Los admins pueden cancelar cualquier reserva, los profesores solo las suyas
+    if reserva.usuario_id != session['user_id'] and session.get('rol') != 'admin':
         return jsonify({'error': 'No tienes permiso para cancelar esta reserva'}), 403
     
     db.session.delete(reserva)
@@ -254,10 +334,8 @@ def cancelar_reserva():
     return jsonify({'success': True, 'mensaje': 'Reserva cancelada correctamente'})
 
 @app.route('/mis-reservas')
+@login_required
 def mis_reservas():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
     # Obtener reservas futuras y pasadas
     hoy = datetime.now().date()
     reservas_futuras = Reserva.query.filter(
@@ -273,35 +351,117 @@ def mis_reservas():
     return render_template('mis_reservas.html', 
                          reservas_futuras=reservas_futuras,
                          reservas_pasadas=reservas_pasadas,
+                         username=session['username'],
+                         es_admin=session.get('rol') == 'admin')
+
+# ==================== RUTAS DE ADMINISTRACIÓN ====================
+
+@app.route('/admin/usuarios')
+@admin_required
+def admin_usuarios():
+    usuarios = Usuario.query.order_by(Usuario.fecha_creacion.desc()).all()
+    return render_template('admin_usuarios.html', 
+                         usuarios=usuarios,
                          username=session['username'])
 
-@app.route('/api/estadisticas')
-def estadisticas():
-    if 'user_id' not in session:
-        return jsonify({'error': 'No autenticado'}), 401
+@app.route('/admin/usuario/toggle/<int:usuario_id>', methods=['POST'])
+@admin_required
+def toggle_usuario(usuario_id):
+    usuario = Usuario.query.get_or_404(usuario_id)
     
-    # Estadísticas del usuario
-    total_reservas = Reserva.query.filter_by(usuario_id=session['user_id']).count()
+    # No permitir desactivar al propio usuario admin
+    if usuario.id == session['user_id']:
+        return jsonify({'error': 'No puedes desactivar tu propia cuenta'}), 400
     
-    # Reservas por día de la semana
-    reservas_usuario = Reserva.query.filter_by(usuario_id=session['user_id']).all()
-    reservas_por_dia = {}
-    nombres_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+    usuario.activo = not usuario.activo
+    db.session.commit()
     
-    for reserva in reservas_usuario:
-        dia_semana = nombres_dias[reserva.fecha.weekday()]
-        reservas_por_dia[dia_semana] = reservas_por_dia.get(dia_semana, 0) + 1
+    estado = 'activado' if usuario.activo else 'desactivado'
+    return jsonify({
+        'success': True, 
+        'mensaje': f'Usuario {usuario.username} {estado}',
+        'activo': usuario.activo
+    })
+
+@app.route('/admin/usuario/eliminar/<int:usuario_id>', methods=['POST'])
+@admin_required
+def eliminar_usuario(usuario_id):
+    usuario = Usuario.query.get_or_404(usuario_id)
+    
+    # No permitir eliminar al propio usuario admin
+    if usuario.id == session['user_id']:
+        return jsonify({'error': 'No puedes eliminar tu propia cuenta'}), 400
+    
+    # Eliminar todas las reservas del usuario
+    Reserva.query.filter_by(usuario_id=usuario_id).delete()
+    
+    db.session.delete(usuario)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'mensaje': f'Usuario {usuario.username} eliminado correctamente'})
+
+@app.route('/admin/usuario/cambiar-rol/<int:usuario_id>', methods=['POST'])
+@admin_required
+def cambiar_rol_usuario(usuario_id):
+    usuario = Usuario.query.get_or_404(usuario_id)
+    
+    # No permitir cambiar el rol del propio usuario
+    if usuario.id == session['user_id']:
+        return jsonify({'error': 'No puedes cambiar tu propio rol'}), 400
+    
+    nuevo_rol = 'admin' if usuario.rol == 'profesor' else 'profesor'
+    usuario.rol = nuevo_rol
+    db.session.commit()
     
     return jsonify({
-        'total_reservas': total_reservas,
-        'reservas_por_dia': reservas_por_dia
+        'success': True, 
+        'mensaje': f'Rol de {usuario.username} cambiado a {nuevo_rol}',
+        'rol': nuevo_rol
     })
+
+@app.route('/admin/estadisticas')
+@admin_required
+def admin_estadisticas():
+    # Estadísticas generales
+    total_usuarios = Usuario.query.count()
+    total_profesores = Usuario.query.filter_by(rol='profesor').count()
+    total_admins = Usuario.query.filter_by(rol='admin').count()
+    usuarios_activos = Usuario.query.filter_by(activo=True).count()
+    
+    total_reservas = Reserva.query.count()
+    
+    # Reservas por usuario
+    from sqlalchemy import func
+    reservas_por_usuario = db.session.query(
+        Usuario.username,
+        func.count(Reserva.id).label('total')
+    ).join(Reserva).group_by(Usuario.username).order_by(func.count(Reserva.id).desc()).limit(10).all()
+    
+    return render_template('admin_estadisticas.html',
+                         total_usuarios=total_usuarios,
+                         total_profesores=total_profesores,
+                         total_admins=total_admins,
+                         usuarios_activos=usuarios_activos,
+                         total_reservas=total_reservas,
+                         reservas_por_usuario=reservas_por_usuario,
+                         username=session['username'])
 
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        # Actualizar la tabla espacios si existe para añadir el campo color
-        # Esto es una migración simple, en producción usarías Alembic
+        
+        # Crear usuario administrador por defecto si no existe
+        admin = Usuario.query.filter_by(username='admin').first()
+        if not admin:
+            hashed_password = generate_password_hash('admin123')
+            admin = Usuario(
+                username='admin',
+                email='admin@ejemplo.com',
+                password=hashed_password,
+                rol='admin'
+            )
+            db.session.add(admin)
+            print("✓ Usuario administrador creado: admin / admin123")
         
         # Crear espacios (días de la semana) si no existen
         if Espacio.query.count() == 0:
@@ -314,7 +474,8 @@ if __name__ == '__main__':
             ]
             for dia in dias_semana:
                 db.session.add(dia)
-            db.session.commit()
-            print("Días de la semana creados correctamente")
+            print("✓ Días de la semana creados correctamente")
+        
+        db.session.commit()
     
     app.run(debug=True)

@@ -52,6 +52,7 @@
             padding: 8px 16px;
             border-radius: 5px;
             transition: all 0.3s;
+            font-weight: 500;
         }
         
         .nav-links a:hover {
@@ -70,6 +71,16 @@
             background: rgba(255, 255, 255, 0.1);
             border-radius: 20px;
             font-weight: 500;
+        }
+        
+        .badge-rol {
+            padding: 4px 10px;
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         
         .btn-logout {
@@ -104,6 +115,101 @@
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
         
+        .flash-messages {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        
+        .flash {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-weight: 500;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .flash-success {
+            background: #d1fae5;
+            color: #065f46;
+            border-left: 4px solid #10b981;
+        }
+        
+        .flash-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border-left: 4px solid #ef4444;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: white;
+            min-width: 200px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            z-index: 1;
+            right: 0;
+            top: 100%;
+            margin-top: 10px;
+        }
+        
+        .dropdown-content a {
+            color: #333;
+            padding: 12px 16px;
+            text-decoration: none;
+            display: block;
+            border-radius: 0;
+            transition: all 0.3s;
+        }
+        
+        .dropdown-content a:first-child {
+            border-radius: 8px 8px 0 0;
+        }
+        
+        .dropdown-content a:last-child {
+            border-radius: 0 0 8px 8px;
+        }
+        
+        .dropdown-content a:hover {
+            background-color: #F5F5F5;
+            color: #0066B3;
+        }
+        
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+        
+        .dropdown-toggle {
+            cursor: pointer;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .dropdown-toggle:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
         {% block styles %}{% endblock %}
     </style>
 </head>
@@ -113,16 +219,46 @@
             <a href="{{ url_for('index') }}" class="nav-brand">📅 Sistema de Reservas</a>
             <div class="nav-links">
                 {% if session.get('user_id') %}
-                    <a href="{{ url_for('reservas') }}">Reservar</a>
-                    <a href="{{ url_for('mis_reservas') }}">Mis Reservas</a>
+                    <a href="{{ url_for('reservas') }}">📅 Reservar</a>
+                    <a href="{{ url_for('mis_reservas') }}">📋 Mis Reservas</a>
+                    
+                    {% if session.get('rol') == 'admin' %}
+                    <div class="dropdown">
+                        <div class="dropdown-toggle">
+                            ⚙️ Administración ▼
+                        </div>
+                        <div class="dropdown-content">
+                            <a href="{{ url_for('admin_usuarios') }}">👥 Gestión de Usuarios</a>
+                            <a href="{{ url_for('registro') }}">➕ Nuevo Usuario</a>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
                     <div class="nav-user">
-                        <span>👤 {{ session.get('username') }}</span>
+                        <span>
+                            👤 {{ session.get('username') }}
+                            {% if session.get('rol') == 'admin' %}
+                                <span class="badge-rol">Admin</span>
+                            {% endif %}
+                        </span>
                         <a href="{{ url_for('logout') }}" class="btn-logout">Cerrar Sesión</a>
                     </div>
                 {% endif %}
             </div>
         </div>
     </nav>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-messages">
+                {% for category, message in messages %}
+                    <div class="flash flash-{{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
     
     <div class="container">
         {% block content %}{% endblock %}
