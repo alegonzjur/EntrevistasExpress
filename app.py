@@ -163,19 +163,21 @@ def reservas():
     dias_hasta_lunes = fecha_base.weekday()
     lunes = fecha_base - timedelta(days=dias_hasta_lunes)
     
+    # Obtener los espacios (días de la semana) de la base de datos
+    espacios_db = Espacio.query.order_by(Espacio.id).limit(5).all()
+    
     # Generar los 5 días de la semana (Lunes a Viernes)
     dias_semana = []
     nombres_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
-    colores_dias = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b']
     
-    for i in range(5):
+    for i, espacio in enumerate(espacios_db):
         dia = lunes + timedelta(days=i)
         dias_semana.append({
-            'id': i + 1,
-            'nombre': nombres_dias[i],
+            'id': espacio.id,  # Usar el ID real de la base de datos
+            'nombre': nombres_dias[i] if i < len(nombres_dias) else espacio.nombre,
             'fecha': dia.strftime('%Y-%m-%d'),
             'fecha_completa': dia.strftime('%d/%m/%Y'),
-            'color': colores_dias[i]
+            'color': espacio.color if espacio.color else '#667eea'
         })
     
     # Calcular semana anterior y siguiente
