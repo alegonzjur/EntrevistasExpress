@@ -448,6 +448,58 @@ def admin_estadisticas():
                          reservas_por_usuario=reservas_por_usuario,
                          username=session['username'])
 
+@app.route('/admin/todas-reservas')
+@admin_required
+def todas_reservas():
+    # Obtener parámetros de filtro
+    usuario_filtro = request.args.get('usuario', '')
+    dia_filtro = request.args.get('dia', '')
+    fecha_desde = request.args.get('fecha_desde', '')
+    fecha_hasta = request.args.get('fecha_hasta', '')
+    
+    # Construir query base
+    query = Reserva.query
+    
+    # Aplicar filtros
+    if usuario_filtro:
+        query = query.filter(Reserva.usuario_id == int(usuario_filtro))
+    
+    if dia_filtro:
+        query = query.filter(Reserva.espacio_id == int(dia_filtro))
+    
+    if fecha_desde:
+        fecha_desde_obj = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+        query = query.filter(Reserva.fecha >= fecha_desde_obj)
+    
+    if fecha_hasta:
+        fecha_hasta_obj = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+        query = query.filter(Reserva.fecha <= fecha_hasta_obj)
+    
+    # Ordenar y obtener resultados
+    reservas = query.order_by(Reserva.fecha.desc(), Reserva.hora_inicio.desc()).all()
+    
+    # Obtener listas para los filtros
+    usuarios = Usuario.query.filter_by(activo=True).order_by(Usuario.username).all()
+    espacios = Espacio.query.order_by(Espacio.id).all()
+    
+    # Calcular estadísticas
+    total_reservas = len(reservas)
+    usuarios_unicos = len(set(r.usuario_id for r in reservas))
+    dias_con_reservas = len(set(r.espacio_id for r in reservas))
+    
+    return render_template('todas_reservas.html',
+                         reservas=reservas,
+                         usuarios=usuarios,
+                         espacios=espacios,
+                         total_reservas=total_reservas,
+                         usuarios_unicos=usuarios_unicos,
+                         dias_con_reservas=dias_con_reservas,
+                         usuario_filtro=usuario_filtro,
+                         dia_filtro=dia_filtro,
+                         fecha_desde=fecha_desde,
+                         fecha_hasta=fecha_hasta,
+                         username=session['username'])
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()

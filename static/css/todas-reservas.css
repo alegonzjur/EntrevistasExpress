@@ -1,0 +1,387 @@
+/* ====================================================================
+   TODAS LAS RESERVAS (ADMIN) - ESTILOS
+   ==================================================================== */
+
+/* === FILTROS === */
+.filtros-container {
+    background: var(--color-white);
+    padding: 20px;
+    border-radius: var(--border-radius-lg);
+    margin-bottom: 30px;
+    box-shadow: var(--shadow-sm);
+}
+
+.filtros-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    align-items: end;
+}
+
+.filtro-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.filtro-group label {
+    font-weight: 600;
+    color: var(--color-gray-dark);
+    font-size: 14px;
+}
+
+.filtro-group select,
+.filtro-group input {
+    padding: 10px 12px;
+    border: 2px solid var(--color-border);
+    border-radius: var(--border-radius-md);
+    font-size: 14px;
+    transition: var(--transition-normal);
+}
+
+.filtro-group select:focus,
+.filtro-group input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(0, 102, 179, 0.1);
+}
+
+.btn-filtrar {
+    padding: 10px 24px;
+    background: var(--color-primary);
+    color: var(--color-white);
+    border: none;
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    font-weight: 600;
+    transition: var(--transition-normal);
+    height: fit-content;
+}
+
+.btn-filtrar:hover {
+    background: var(--color-primary-dark);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-primary);
+}
+
+.btn-limpiar {
+    padding: 10px 24px;
+    background: #6b7280;
+    color: var(--color-white);
+    border: none;
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    font-weight: 600;
+    transition: var(--transition-normal);
+    height: fit-content;
+}
+
+.btn-limpiar:hover {
+    background: #4b5563;
+}
+
+/* === RESUMEN === */
+.resumen-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.resumen-card {
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+    color: var(--color-white);
+    padding: 20px;
+    border-radius: var(--border-radius-lg);
+    text-align: center;
+    box-shadow: var(--shadow-md);
+}
+
+.resumen-numero {
+    font-size: 32px;
+    font-weight: 700;
+    margin: 8px 0;
+}
+
+.resumen-label {
+    font-size: 13px;
+    opacity: 0.95;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* === TABLA DE RESERVAS === */
+.tabla-container {
+    background: var(--color-white);
+    border-radius: var(--border-radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+
+.tabla-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background: var(--color-gray-light);
+    border-bottom: 2px solid var(--color-border);
+}
+
+.tabla-header h3 {
+    margin: 0;
+    color: var(--color-primary);
+    font-size: 18px;
+}
+
+.btn-exportar {
+    padding: 8px 16px;
+    background: var(--color-primary);
+    color: var(--color-white);
+    border: none;
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: var(--transition-normal);
+}
+
+.btn-exportar:hover {
+    background: var(--color-primary-dark);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+thead {
+    background: var(--color-gray-light);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+th {
+    padding: 12px 15px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--color-primary);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--color-border);
+}
+
+td {
+    padding: 12px 15px;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 14px;
+}
+
+tbody tr {
+    transition: var(--transition-fast);
+}
+
+tbody tr:hover {
+    background: #F9FAFB;
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* === BADGES EN TABLA === */
+.badge-dia {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    display: inline-block;
+}
+
+.badge-lunes {
+    background: #667eea;
+    color: var(--color-white);
+}
+
+.badge-martes {
+    background: #764ba2;
+    color: var(--color-white);
+}
+
+.badge-miercoles {
+    background: #f093fb;
+    color: var(--color-white);
+}
+
+.badge-jueves {
+    background: #4facfe;
+    color: var(--color-white);
+}
+
+.badge-viernes {
+    background: #43e97b;
+    color: var(--color-white);
+}
+
+.badge-usuario {
+    padding: 4px 10px;
+    background: var(--color-gray-light);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-gray-dark);
+}
+
+.usuario-column {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fecha-cell {
+    font-weight: 600;
+    color: var(--color-gray-dark);
+}
+
+.hora-cell {
+    font-family: 'Courier New', monospace;
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+.notas-cell {
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #666;
+    font-style: italic;
+    font-size: 13px;
+}
+
+.notas-cell:hover {
+    white-space: normal;
+    overflow: visible;
+}
+
+/* === ACCIONES EN TABLA === */
+.acciones-cell {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-ver {
+    padding: 5px 12px;
+    background: var(--color-primary);
+    color: var(--color-white);
+    border: none;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: var(--transition-normal);
+}
+
+.btn-ver:hover {
+    background: var(--color-primary-dark);
+}
+
+.btn-eliminar-tabla {
+    padding: 5px 12px;
+    background: var(--color-error);
+    color: var(--color-white);
+    border: none;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: var(--transition-normal);
+}
+
+.btn-eliminar-tabla:hover {
+    background: var(--color-ocupada-dark);
+}
+
+/* === PAGINACIÓN === */
+.paginacion {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    padding: 20px;
+    background: var(--color-white);
+    border-top: 1px solid var(--color-border);
+}
+
+.paginacion button {
+    padding: 8px 16px;
+    background: var(--color-white);
+    border: 2px solid var(--color-border);
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    font-weight: 600;
+    transition: var(--transition-normal);
+}
+
+.paginacion button:hover:not(:disabled) {
+    background: var(--color-primary);
+    color: var(--color-white);
+    border-color: var(--color-primary);
+}
+
+.paginacion button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.paginacion span {
+    font-weight: 600;
+    color: var(--color-gray-dark);
+}
+
+/* === ESTADO VACÍO === */
+.empty-reservas {
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+}
+
+.empty-reservas-icon {
+    font-size: 72px;
+    margin-bottom: 20px;
+}
+
+.empty-reservas h3 {
+    color: var(--color-primary);
+    margin-bottom: 10px;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 1024px) {
+    .tabla-container {
+        overflow-x: auto;
+    }
+    
+    table {
+        min-width: 800px;
+    }
+}
+
+@media (max-width: 768px) {
+    .filtros-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .resumen-container {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .tabla-header {
+        flex-direction: column;
+        gap: 15px;
+        align-items: flex-start;
+    }
+}

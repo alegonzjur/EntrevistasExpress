@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% block title %}Todas las Reservas{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/todas-reservas.css') }}">
+{% endblock %}
+
+{% block content %}
+<h2>📋 Todas las Reservas</h2>
+
+<!-- Resumen -->
+<div class="resumen-container">
+    <div class="resumen-card">
+        <div class="resumen-label">Total Reservas</div>
+        <div class="resumen-numero">{{ total_reservas }}</div>
+    </div>
+    <div class="resumen-card">
+        <div class="resumen-label">Usuarios</div>
+        <div class="resumen-numero">{{ usuarios_unicos }}</div>
+    </div>
+    <div class="resumen-card">
+        <div class="resumen-label">Días Reservados</div>
+        <div class="resumen-numero">{{ dias_con_reservas }}</div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="filtros-container">
+    <form method="GET" action="{{ url_for('todas_reservas') }}">
+        <div class="filtros-grid">
+            <div class="filtro-group">
+                <label for="usuario">👤 Usuario:</label>
+                <select id="usuario" name="usuario">
+                    <option value="">Todos los usuarios</option>
+                    {% for usuario in usuarios %}
+                    <option value="{{ usuario.id }}" {% if usuario_filtro == usuario.id|string %}selected{% endif %}>
+                        {{ usuario.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="filtro-group">
+                <label for="dia">📅 Día:</label>
+                <select id="dia" name="dia">
+                    <option value="">Todos los días</option>
+                    {% for espacio in espacios %}
+                    <option value="{{ espacio.id }}" {% if dia_filtro == espacio.id|string %}selected{% endif %}>
+                        {{ espacio.nombre }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="filtro-group">
+                <label for="fecha_desde">📆 Desde:</label>
+                <input type="date" id="fecha_desde" name="fecha_desde" value="{{ fecha_desde }}">
+            </div>
+            
+            <div class="filtro-group">
+                <label for="fecha_hasta">📆 Hasta:</label>
+                <input type="date" id="fecha_hasta" name="fecha_hasta" value="{{ fecha_hasta }}">
+            </div>
+            
+            <button type="submit" class="btn-filtrar">🔍 Filtrar</button>
+            <a href="{{ url_for('todas_reservas') }}" class="btn-limpiar">🔄 Limpiar</a>
+        </div>
+    </form>
+</div>
+
+<!-- Tabla de Reservas -->
+<div class="tabla-container">
+    <div class="tabla-header">
+        <h3>
+            Mostrando {{ reservas|length }} reserva{{ 's' if reservas|length != 1 else '' }}
+        </h3>
+        <button class="btn-exportar" onclick="exportarCSV()">📥 Exportar CSV</button>
+    </div>
+    
+    {% if reservas %}
+    <table id="tabla-reservas">
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Día</th>
+                <th>Horario</th>
+                <th>Usuario</th>
+                <th>Notas</th>
+                <th>Creada</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for reserva in reservas %}
+            <tr id="reserva-{{ reserva.id }}">
+                <td class="fecha-cell">{{ reserva.fecha.strftime('%d/%m/%Y') }}</td>
+                <td>
+                    <span class="badge-dia badge-{{ reserva.espacio.nombre.lower() }}">
+                        {{ reserva.espacio.nombre }}
+                    </span>
+                </td>
+                <td class="hora-cell">
+                    {{ reserva.hora_inicio.strftime('%H:%M') }} - {{ reserva.hora_fin.strftime('%H:%M') }}
+                </td>
+                <td>
+                    <div class="usuario-column">
+                        <span class="badge-usuario">{{ reserva.usuario.username }}</span>
+                        {% if reserva.creador_admin %}
+                        <span style="font-size: 11px; color: #666;" title="Creada por admin">
+                            (por {{ reserva.creador_admin.username }})
+                        </span>
+                        {% endif %}
+                    </div>
+                </td>
+                <td class="notas-cell" title="{{ reserva.notas if reserva.notas else 'Sin notas' }}">
+                    {{ reserva.notas if reserva.notas else '—' }}
+                </td>
+                <td style="font-size: 12px; color: #999;">
+                    {{ reserva.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}
+                </td>
+                <td class="acciones-cell">
+                    <button class="btn-ver" onclick="verDetalles({{ reserva.id }})">Ver</button>
+                    <button class="btn-eliminar-tabla" onclick="eliminarReserva({{ reserva.id }}, '{{ reserva.usuario.username }}')">
+                        Eliminar
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-reservas">
+        <div class="empty-reservas-icon">📭</div>
+        <h3>No se encontraron reservas</h3>
+        <p>Prueba ajustando los filtros de búsqueda</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Ver detalles de una reserva
+function verDetalles(reservaId) {
+    // Buscar la fila
+    const fila = document.getElementById(`reserva-${reservaId}`);
+    if (!fila) return;
+    
+    // Extraer datos
+    const cells = fila.getElementsByTagName('td');
+    const fecha = cells[0].textContent;
+    const dia = cells[1].textContent.trim();
+    const horario = cells[2].textContent;
+    const usuario = cells[3].querySelector('.badge-usuario').textContent;
+    const notas = cells[4].getAttribute('title');
+    const creada = cells[5].textContent;
+    
+    // Mostrar en alert (puedes mejorar esto con un modal bonito)
+    alert(`
+📋 DETALLES DE LA RESERVA
+
+📅 Fecha: ${fecha}
+📆 Día: ${dia}
+🕐 Horario: ${horario}
+👤 Usuario: ${usuario}
+📝 Notas: ${notas}
+🗓️ Creada: ${creada}
+    `.trim());
+}
+
+// Eliminar reserva
+async function eliminarReserva(reservaId, username) {
+    if (!confirm(`¿Estás seguro de que deseas eliminar la reserva de ${username}?\n\nEsta acción no se puede deshacer.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/cancelar', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                reserva_id: reservaId
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('Reserva eliminada correctamente');
+            // Eliminar la fila de la tabla
+            document.getElementById(`reserva-${reservaId}`).remove();
+            
+            // Actualizar el contador
+            const contador = document.querySelector('.tabla-header h3');
+            const match = contador.textContent.match(/\d+/);
+            if (match) {
+                const nuevoTotal = parseInt(match[0]) - 1;
+                contador.textContent = `Mostrando ${nuevoTotal} reserva${nuevoTotal !== 1 ? 's' : ''}`;
+            }
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error al eliminar la reserva');
+        console.error(error);
+    }
+}
+
+// Exportar a CSV
+function exportarCSV() {
+    const tabla = document.getElementById('tabla-reservas');
+    if (!tabla) {
+        alert('No hay datos para exportar');
+        return;
+    }
+    
+    let csv = [];
+    const filas = tabla.querySelectorAll('tr');
+    
+    // Procesar cada fila
+    filas.forEach(fila => {
+        const celdas = fila.querySelectorAll('th, td');
+        const fila_datos = [];
+        
+        celdas.forEach((celda, index) => {
+            // Saltar la columna de acciones (última)
+            if (index === celdas.length - 1 && celda.tagName === 'TD') return;
+            
+            let texto = celda.textContent.trim();
+            
+            // Limpiar espacios múltiples y saltos de línea
+            texto = texto.replace(/\s+/g, ' ');
+            
+            // Escapar comillas
+            texto = texto.replace(/"/g, '""');
+            
+            // Añadir comillas si contiene comas
+            if (texto.includes(',') || texto.includes('"') || texto.includes('\n')) {
+                texto = `"${texto}"`;
+            }
+            
+            fila_datos.push(texto);
+        });
+        
+        csv.push(fila_datos.join(','));
+    });
+    
+    // Crear archivo y descargar
+    const csv_string = csv.join('\n');
+    const blob = new Blob(['\ufeff' + csv_string], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    const fecha = new Date().toISOString().split('T')[0];
+    link.setAttribute('href', url);
+    link.setAttribute('download', `reservas_${fecha}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    alert('✅ Archivo CSV descargado correctamente');
+}
+
+// Atajos de teclado
+document.addEventListener('keydown', function(e) {
+    // Ctrl/Cmd + F = Focus en filtro de usuario
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        document.getElementById('usuario').focus();
+    }
+    
+    // Ctrl/Cmd + E = Exportar
+    if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+        e.preventDefault();
+        exportarCSV();
+    }
+});
+</script>
+{% endblock %}
