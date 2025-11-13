@@ -12,7 +12,10 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# Modelos de base de datos
+# ====================================================================
+# MODELOS DE BASE DE DATOS
+# ====================================================================
+
 class Usuario(db.Model):
     __tablename__ = 'usuarios'
     id = db.Column(db.Integer, primary_key=True)
@@ -55,7 +58,157 @@ class Reserva(db.Model):
     notas = db.Column(db.Text)
     creado_por_admin = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
 
-# Decoradores para proteger rutas
+
+# ====================================================================
+# NUEVOS MODELOS PARA CANDIDATOS
+# ====================================================================
+
+class Candidato(db.Model):
+    __tablename__ = 'candidatos'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    solicitud = db.Column(db.Integer, nullable=False)
+    apellidos = db.Column(db.String(150), nullable=False)
+    nombre = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), nullable=True)
+    media_estudios = db.Column(db.Numeric(4, 2), nullable=False)
+    primera_opcion = db.Column(db.Text)
+    estado = db.Column(db.String(20), default='pendiente', nullable=False)
+    fecha_carga = db.Column(db.DateTime, default=datetime.utcnow)
+    semana_carga = db.Column(db.String(20))
+    archivo_origen = db.Column(db.String(255))
+    
+    asignacion = db.relationship('Asignacion', backref='candidato', uselist=False, cascade='all, delete-orphan')
+    
+    @property
+    def nombre_completo(self):
+        return f"{self.nombre} {self.apellidos}"
+    
+    @property
+    def tiene_email(self):
+        return self.email is not None and self.email.strip() != ''
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'solicitud': self.solicitud,
+            'nombre_completo': self.nombre_completo,
+            'email': self.email,
+            'media_estudios': float(self.media_estudios) if self.media_estudios else None,
+            'estado': self.estado,
+            'primera_opcion': self.primera_opcion
+        }
+
+
+class Asignacion(db.Model):
+    __tablename__ = 'asignaciones'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    candidato_id = db.Column(db.Integer, db.ForeignKey('candidatos.id', ondelete='CASCADE'), nullable=False, unique=True)
+    reserva_id = db.Column(db.Integer, db.ForeignKey('reservas.id', ondelete='CASCADE'), nullable=False)
+    entrevistador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    posicion = db.Column(db.SmallInteger, nullable=False)
+    minuto_inicio = db.Column(db.SmallInteger, nullable=False)
+    estado = db.Column(db.String(20), default='confirmado', nullable=False)
+    enviado_email = db.Column(db.Boolean, default=False)
+    fecha_email = db.Column(db.DateTime, nullable=True)
+    resultado = db.Column(db.Text, nullable=True)
+    notas_entrevista = db.Column(db.Text, nullable=True)
+    fecha_asignacion = db.Column(db.DateTime, default=datetime.utcnow)
+    asignado_por_admin_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    
+    reserva = db.relationship('Reserva', backref='asignaciones')
+    entrevistador = db.relationship('Usuario', foreign_keys=[entrevistador_id], backref='entrevistas_asignadas')
+    asignado_por = db.relationship('Usuario', foreign_keys=[asignado_por_admin_id], backref='asignaciones_creadas')
+    
+    @property
+    def hora_exacta(self):
+        if self.reserva and self.reserva.hora_inicio:
+            hora_base = datetime.combine(datetime.today(), self.reserva.hora_inicio)
+            hora_exacta = hora_base + timedelta(minutes=self.minuto_inicio)
+            return hora_exacta.time()
+        return None
+
+
+class LogAsignacion(db.Model):
+    __tablename__ = 'logs_asignacion'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    fecha_ejecucion = db.Column(db.DateTime, default=datetime.utcnow)
+    semana_objetivo = db.Column(db.String(20), nullable=False)
+    candidatos_procesados = db.Column(db.Integer, nullable=False)
+    candidatos_filtrados = db.Column(db.Integer, nullable=False)
+    candidatos_asignados = db.Column(db.Integer, nullable=False)
+    candidatos_sin_asignar = db.Column(db.Integer, nullable=False)
+    franjas_utilizadas = db.Column(db.Integer, nullable=False)
+    algoritmo_usado = db.Column(db.String(50), default='balanceado')
+    tiempo_ejecucion_segundos = db.Column(db.Numeric(6, 2))
+    estado = db.Column(db.String(20), nullable=False)
+    mensaje = db.Column(db.Text)
+    ejecutado_por_usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    archivo_origen = db.Column(db.String(255))
+    
+    ejecutado_por = db.relationship('Usuario', backref='logs_asignaciones')
+
+
+class CargaExcel(db.Model):
+    __tablename__ = 'cargas_excel'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    archivo_nombre = db.Column(db.String(255), nullable=False)
+    archivo_hash = db.Column(db.String(64))
+    fecha_carga = db.Column(db.DateTime, default=datetime.utcnow)
+    candidatos_totales = db.Column(db.Integer, nullable=False)
+    candidatos_importados = db.Column(db.Integer, nullable=False)
+    candidatos_duplicados = db.Column(db.Integer, default=0)
+    cargado_por_usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    semana_destino = db.Column(db.String(20))
+    estado = db.Column(db.String(20), default='completado')
+    mensaje = db.Column(db.Text)
+    
+    cargado_por = db.relationship('Usuario', backref='cargas_excel')
+
+
+# ====================================================================
+# FUNCIONES AUXILIARES PARA CANDIDATOS
+# ====================================================================
+
+def obtener_candidatos_pendientes():
+    """Obtiene candidatos pendientes ordenados por nota"""
+    return Candidato.query.filter_by(estado='pendiente')\
+        .order_by(Candidato.media_estudios.asc())\
+        .all()
+
+
+def obtener_candidatos_por_semana(semana):
+    """Obtiene candidatos de una semana específica"""
+    return Candidato.query.filter_by(semana_carga=semana)\
+        .order_by(Candidato.media_estudios.asc())\
+        .all()
+
+
+def obtener_estadisticas_semana_candidatos(semana):
+    """Obtiene estadísticas de candidatos de una semana"""
+    candidatos = Candidato.query.filter_by(semana_carga=semana).all()
+    
+    total = len(candidatos)
+    asignados = len([c for c in candidatos if c.estado == 'asignado'])
+    pendientes = len([c for c in candidatos if c.estado == 'pendiente'])
+    entrevistados = len([c for c in candidatos if c.estado == 'entrevistado'])
+    
+    return {
+        'total_candidatos': total,
+        'candidatos_asignados': asignados,
+        'candidatos_pendientes': pendientes,
+        'candidatos_entrevistados': entrevistados,
+        'tasa_asignacion': round((asignados / total * 100) if total > 0 else 0, 2)
+    }
+
+
+# ====================================================================
+# DECORADORES PARA PROTEGER RUTAS
+# ====================================================================
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -79,7 +232,11 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# Rutas
+
+# ====================================================================
+# RUTAS PRINCIPALES
+# ====================================================================
+
 @app.route('/')
 def index():
     if 'user_id' in session:
@@ -88,7 +245,6 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    # Si ya está logueado, redirigir
     if 'user_id' in session:
         return redirect(url_for('reservas'))
     
@@ -152,39 +308,38 @@ def logout():
     flash('Has cerrado sesión correctamente', 'success')
     return redirect(url_for('login'))
 
+
+# ====================================================================
+# RUTAS DE RESERVAS
+# ====================================================================
+
 @app.route('/reservas')
 @login_required
 def reservas():
-    # Obtener la semana actual o la semana seleccionada
     fecha_str = request.args.get('fecha', datetime.now().strftime('%Y-%m-%d'))
     fecha_base = datetime.strptime(fecha_str, '%Y-%m-%d')
     
-    # Calcular el lunes de esa semana
     dias_hasta_lunes = fecha_base.weekday()
     lunes = fecha_base - timedelta(days=dias_hasta_lunes)
     
-    # Obtener los espacios (días de la semana) de la base de datos
     espacios_db = Espacio.query.order_by(Espacio.id).limit(5).all()
     
-    # Generar los 5 días de la semana (Lunes a Viernes)
     dias_semana = []
     nombres_dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     
     for i, espacio in enumerate(espacios_db):
         dia = lunes + timedelta(days=i)
         dias_semana.append({
-            'id': espacio.id,  # Usar el ID real de la base de datos
+            'id': espacio.id,
             'nombre': nombres_dias[i] if i < len(nombres_dias) else espacio.nombre,
             'fecha': dia.strftime('%Y-%m-%d'),
             'fecha_completa': dia.strftime('%d/%m/%Y'),
             'color': espacio.color if espacio.color else '#667eea'
         })
     
-    # Calcular semana anterior y siguiente
     semana_anterior = (lunes - timedelta(days=7)).strftime('%Y-%m-%d')
     semana_siguiente = (lunes + timedelta(days=7)).strftime('%Y-%m-%d')
     
-    # Si es admin, obtener lista de todos los usuarios para el selector
     usuarios_lista = []
     if session.get('rol') == 'admin':
         usuarios_lista = Usuario.query.filter_by(activo=True).order_by(Usuario.username).all()
@@ -210,7 +365,6 @@ def obtener_franjas(dia_id):
     
     fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
     
-    # Generar franjas horarias de media hora (de 9:00 a 19:30)
     franjas = []
     hora_inicio = 9
     hora_fin = 20
@@ -227,7 +381,6 @@ def obtener_franjas(dia_id):
                 else:
                     franja_fin = f"{hora + 1:02d}:00"
             
-            # Verificar si está reservada
             reserva = Reserva.query.filter_by(
                 espacio_id=dia_id,
                 fecha=fecha,
@@ -257,10 +410,8 @@ def hacer_reserva():
     hora_fin_str = data['hora_fin']
     notas = data.get('notas', '')
     
-    # NUEVO: Permitir al admin reservar para otro usuario
     usuario_id_destino = data.get('usuario_id', session['user_id'])
     
-    # Solo admins pueden reservar para otros usuarios
     if usuario_id_destino != session['user_id'] and session.get('rol') != 'admin':
         return jsonify({'error': 'No tienes permiso para reservar en nombre de otros usuarios'}), 403
     
@@ -268,7 +419,6 @@ def hacer_reserva():
     hora_inicio = datetime.strptime(hora_inicio_str, '%H:%M').time()
     hora_fin = datetime.strptime(hora_fin_str, '%H:%M').time()
     
-    # Verificar si ya está reservada
     reserva_existente = Reserva.query.filter_by(
         espacio_id=espacio_id,
         fecha=fecha,
@@ -278,7 +428,6 @@ def hacer_reserva():
     if reserva_existente:
         return jsonify({'error': 'Esta franja ya está reservada'}), 400
     
-    # Crear nueva reserva
     nueva_reserva = Reserva(
         usuario_id=usuario_id_destino,
         espacio_id=espacio_id,
@@ -292,7 +441,6 @@ def hacer_reserva():
     db.session.add(nueva_reserva)
     db.session.commit()
     
-    # Mensaje diferente si es admin reservando para otro
     if usuario_id_destino != session['user_id']:
         usuario_destino = Usuario.query.get(usuario_id_destino)
         mensaje = f'Reserva creada correctamente para {usuario_destino.username}'
@@ -326,7 +474,6 @@ def cancelar_reserva():
     if not reserva:
         return jsonify({'error': 'Reserva no encontrada'}), 404
     
-    # Los admins pueden cancelar cualquier reserva, los profesores solo las suyas
     if reserva.usuario_id != session['user_id'] and session.get('rol') != 'admin':
         return jsonify({'error': 'No tienes permiso para cancelar esta reserva'}), 403
     
@@ -338,7 +485,6 @@ def cancelar_reserva():
 @app.route('/mis-reservas')
 @login_required
 def mis_reservas():
-    # Obtener reservas futuras y pasadas
     hoy = datetime.now().date()
     reservas_futuras = Reserva.query.filter(
         Reserva.usuario_id == session['user_id'],
@@ -356,7 +502,10 @@ def mis_reservas():
                          username=session['username'],
                          es_admin=session.get('rol') == 'admin')
 
-# ==================== RUTAS DE ADMINISTRACIÓN ====================
+
+# ====================================================================
+# RUTAS DE ADMINISTRACIÓN
+# ====================================================================
 
 @app.route('/admin/usuarios')
 @admin_required
@@ -371,7 +520,6 @@ def admin_usuarios():
 def toggle_usuario(usuario_id):
     usuario = Usuario.query.get_or_404(usuario_id)
     
-    # No permitir desactivar al propio usuario admin
     if usuario.id == session['user_id']:
         return jsonify({'error': 'No puedes desactivar tu propia cuenta'}), 400
     
@@ -390,11 +538,9 @@ def toggle_usuario(usuario_id):
 def eliminar_usuario(usuario_id):
     usuario = Usuario.query.get_or_404(usuario_id)
     
-    # No permitir eliminar al propio usuario admin
     if usuario.id == session['user_id']:
         return jsonify({'error': 'No puedes eliminar tu propia cuenta'}), 400
     
-    # Eliminar todas las reservas del usuario
     Reserva.query.filter_by(usuario_id=usuario_id).delete()
     
     db.session.delete(usuario)
@@ -407,7 +553,6 @@ def eliminar_usuario(usuario_id):
 def cambiar_rol_usuario(usuario_id):
     usuario = Usuario.query.get_or_404(usuario_id)
     
-    # No permitir cambiar el rol del propio usuario
     if usuario.id == session['user_id']:
         return jsonify({'error': 'No puedes cambiar tu propio rol'}), 400
     
@@ -424,7 +569,6 @@ def cambiar_rol_usuario(usuario_id):
 @app.route('/admin/estadisticas')
 @admin_required
 def admin_estadisticas():
-    # Estadísticas generales
     total_usuarios = Usuario.query.count()
     total_profesores = Usuario.query.filter_by(rol='profesor').count()
     total_admins = Usuario.query.filter_by(rol='admin').count()
@@ -432,7 +576,6 @@ def admin_estadisticas():
     
     total_reservas = Reserva.query.count()
     
-    # Reservas por usuario
     from sqlalchemy import func
     reservas_por_usuario = db.session.query(
         Usuario.username,
@@ -451,16 +594,13 @@ def admin_estadisticas():
 @app.route('/admin/todas-reservas')
 @admin_required
 def todas_reservas():
-    # Obtener parámetros de filtro
     usuario_filtro = request.args.get('usuario', '')
     dia_filtro = request.args.get('dia', '')
     fecha_desde = request.args.get('fecha_desde', '')
     fecha_hasta = request.args.get('fecha_hasta', '')
     
-    # Construir query base
     query = Reserva.query
     
-    # Aplicar filtros
     if usuario_filtro:
         query = query.filter(Reserva.usuario_id == int(usuario_filtro))
     
@@ -475,14 +615,11 @@ def todas_reservas():
         fecha_hasta_obj = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
         query = query.filter(Reserva.fecha <= fecha_hasta_obj)
     
-    # Ordenar y obtener resultados
     reservas = query.order_by(Reserva.fecha.desc(), Reserva.hora_inicio.desc()).all()
     
-    # Obtener listas para los filtros
     usuarios = Usuario.query.filter_by(activo=True).order_by(Usuario.username).all()
     espacios = Espacio.query.order_by(Espacio.id).all()
     
-    # Calcular estadísticas
     total_reservas = len(reservas)
     usuarios_unicos = len(set(r.usuario_id for r in reservas))
     dias_con_reservas = len(set(r.espacio_id for r in reservas))
@@ -500,11 +637,15 @@ def todas_reservas():
                          fecha_hasta=fecha_hasta,
                          username=session['username'])
 
+
+# ====================================================================
+# INICIALIZACIÓN
+# ====================================================================
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         
-        # Crear usuario administrador por defecto si no existe
         admin = Usuario.query.filter_by(username='admin').first()
         if not admin:
             hashed_password = generate_password_hash('admin123')
@@ -517,7 +658,6 @@ if __name__ == '__main__':
             db.session.add(admin)
             print("✓ Usuario administrador creado: admin / admin123")
         
-        # Crear espacios (días de la semana) si no existen
         if Espacio.query.count() == 0:
             dias_semana = [
                 Espacio(nombre='Lunes', descripcion='Primer día de la semana', color='#667eea'),
