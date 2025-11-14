@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Candidatos{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>
+        <i class="fas fa-users"></i> Gestión de Candidatos
+    </h2>
+    
+    <!-- Estadísticas Generales -->
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Candidatos</h5>
+                    <h2>{{ total_candidatos }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Pendientes</h5>
+                    <h2>{{ candidatos_pendientes }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Asignados</h5>
+                    <h2>{{ candidatos_asignados }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Entrevistados</h5>
+                    <h2>{{ candidatos_entrevistados }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Acciones Principales -->
+    <div class="row mt-4">
+        <!-- Cargar Excel -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5><i class="fas fa-file-excel"></i> Cargar Archivo Excel</h5>
+                </div>
+                <div class="card-body">
+                    <form id="formCargarExcel" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="archivoExcel" class="form-label">Archivo Excel:</label>
+                            <input type="file" class="form-control" id="archivoExcel" name="archivo" accept=".xlsx,.xls" required>
+                            <small class="form-text text-muted">Solo archivos .xlsx o .xls</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="semanaCarga" class="form-label">Semana de Carga:</label>
+                            <select class="form-select" id="semanaCarga" name="semana" required>
+                                {% for semana in semanas_disponibles %}
+                                <option value="{{ semana.iso }}" {% if semana.es_actual %}selected{% endif %}>
+                                    {{ semana.label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="form-text text-muted">Semana en que se cargan los candidatos</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="umbralNota" class="form-label">Umbral de Nota:</label>
+                            <input type="number" class="form-control" id="umbralNota" name="umbral" value="7.0" step="0.1" min="0" max="10" required>
+                            <small class="form-text text-muted">Solo candidatos con nota menor a este valor</small>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary" id="btnCargar">
+                            <i class="fas fa-upload"></i> Cargar y Procesar
+                        </button>
+                    </form>
+                    
+                    <div id="resultadoCarga" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Ejecutar Asignación -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5><i class="fas fa-calendar-check"></i> Asignación Automática</h5>
+                </div>
+                <div class="card-body">
+                    <form id="formAsignacion">
+                        <div class="mb-3">
+                            <label for="semanaCargaAsignacion" class="form-label">Semana de Carga (Candidatos):</label>
+                            <select class="form-select" id="semanaCargaAsignacion" name="semana_carga" required>
+                                {% for semana in semanas_disponibles %}
+                                <option value="{{ semana.iso }}">
+                                    {{ semana.label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="form-text text-muted">Los candidatos de esta semana se asignarán a entrevistas de la <strong>semana siguiente</strong></small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="maxPorProfesor" class="form-label">Máximo por Profesor (opcional):</label>
+                            <input type="number" class="form-control" id="maxPorProfesor" name="max_por_profesor" min="1" placeholder="Sin límite">
+                            <small class="form-text text-muted">Deja vacío para sin límite</small>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i> 
+                            <strong>Ejemplo:</strong> Si seleccionas semana 45, los candidatos de W45 se asignarán a reservas de W46.
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success" id="btnAsignar">
+                            <i class="fas fa-magic"></i> Ejecutar Asignación
+                        </button>
+                    </form>
+                    
+                    <div id="resultadoAsignacion" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Semanas con Candidatos -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-calendar"></i> Candidatos por Semana</h5>
+                </div>
+                <div class="card-body">
+                    {% if semanas_con_candidatos %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Semana</th>
+                                    <th>Total Candidatos</th>
+                                    <th>Pendientes</th>
+                                    <th>Asignados</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for semana in semanas_con_candidatos %}
+                                <tr>
+                                    <td><strong>{{ semana.semana_carga }}</strong></td>
+                                    <td>{{ semana.total }}</td>
+                                    <td>
+                                        <span class="badge bg-warning">{{ semana.pendientes }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success">{{ semana.asignados }}</span>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('ver_candidatos_semana', semana=semana.semana_carga) }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-eye"></i> Ver Candidatos
+                                        </a>
+                                        <a href="{{ url_for('ver_asignaciones_semana', semana=semana.semana_carga) }}" class="btn btn-sm btn-info">
+                                            <i class="fas fa-calendar-check"></i> Ver Asignaciones
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No hay candidatos cargados aún.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Historial de Cargas -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-history"></i> Últimas Cargas de Excel</h5>
+                </div>
+                <div class="card-body">
+                    {% if ultimas_cargas %}
+                    <div class="list-group">
+                        {% for carga in ultimas_cargas %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ carga.archivo_nombre }}</h6>
+                                <small>{{ carga.fecha_carga.strftime('%d/%m/%Y %H:%M') }}</small>
+                            </div>
+                            <p class="mb-1">
+                                <span class="badge bg-primary">{{ carga.candidatos_importados }} importados</span>
+                                <span class="badge bg-secondary">Semana {{ carga.semana_destino }}</span>
+                            </p>
+                            <small>{{ carga.mensaje }}</small>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No hay cargas recientes.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Historial de Asignaciones -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-history"></i> Últimas Asignaciones</h5>
+                </div>
+                <div class="card-body">
+                    {% if ultimos_logs %}
+                    <div class="list-group">
+                        {% for log in ultimos_logs %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">Semana {{ log.semana_objetivo }}</h6>
+                                <small>{{ log.fecha_ejecucion.strftime('%d/%m/%Y %H:%M') }}</small>
+                            </div>
+                            <p class="mb-1">
+                                <span class="badge bg-success">{{ log.candidatos_asignados }} asignados</span>
+                                {% if log.candidatos_sin_asignar > 0 %}
+                                <span class="badge bg-warning">{{ log.candidatos_sin_asignar }} sin asignar</span>
+                                {% endif %}
+                                <span class="badge bg-info">{{ log.franjas_utilizadas }} franjas</span>
+                            </p>
+                            <small>{{ log.mensaje }}</small>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No hay asignaciones recientes.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Cargar Excel
+document.getElementById('formCargarExcel').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const btnCargar = document.getElementById('btnCargar');
+    const resultadoDiv = document.getElementById('resultadoCarga');
+    
+    btnCargar.disabled = true;
+    btnCargar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
+    resultadoDiv.innerHTML = '';
+    
+    const formData = new FormData(this);
+    
+    try {
+        const response = await fetch('/admin/candidatos/cargar-excel', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            resultadoDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle"></i> ¡Éxito!</h5>
+                    <p>${data.mensaje}</p>
+                    <ul>
+                        <li>Total leídos: ${data.total_leidos}</li>
+                        <li>Válidos: ${data.total_validos}</li>
+                        <li>Importados (nota < ${data.umbral}): ${data.candidatos_finales}</li>
+                        <li>Semana: ${data.semana}</li>
+                    </ul>
+                </div>
+            `;
+            
+            // Recargar página después de 2 segundos
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            resultadoDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-circle"></i> Error</h5>
+                    <p>${data.error}</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        resultadoDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-circle"></i> Error</h5>
+                <p>Error de conexión: ${error.message}</p>
+            </div>
+        `;
+    } finally {
+        btnCargar.disabled = false;
+        btnCargar.innerHTML = '<i class="fas fa-upload"></i> Cargar y Procesar';
+    }
+});
+
+// Ejecutar Asignación
+document.getElementById('formAsignacion').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const btnAsignar = document.getElementById('btnAsignar');
+    const resultadoDiv = document.getElementById('resultadoAsignacion');
+    
+    if (!confirm('¿Estás seguro de ejecutar la asignación automática?')) {
+        return;
+    }
+    
+    btnAsignar.disabled = true;
+    btnAsignar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ejecutando...';
+    resultadoDiv.innerHTML = '';
+    
+    const formData = {
+        semana_carga: document.getElementById('semanaCargaAsignacion').value,
+        max_por_profesor: document.getElementById('maxPorProfesor').value || null
+    };
+    
+    try {
+        const response = await fetch('/admin/candidatos/ejecutar-asignacion', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            resultadoDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle"></i> ¡Asignación Completada!</h5>
+                    <p>${data.mensaje}</p>
+                    <ul>
+                        <li>Candidatos asignados: ${data.candidatos_asignados}</li>
+                        ${data.candidatos_sin_asignar > 0 ? `<li>Sin asignar: ${data.candidatos_sin_asignar}</li>` : ''}
+                        <li>Franjas utilizadas: ${data.franjas_utilizadas}</li>
+                        <li>Semana carga: ${data.semana_carga}</li>
+                        <li>Semana entrevistas: ${data.semana_entrevistas}</li>
+                        <li>Tiempo: ${data.tiempo_segundos}s</li>
+                    </ul>
+                </div>
+            `;
+            
+            // Recargar página después de 2 segundos
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            resultadoDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-circle"></i> Error</h5>
+                    <p>${data.error}</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        resultadoDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-circle"></i> Error</h5>
+                <p>Error de conexión: ${error.message}</p>
+            </div>
+        `;
+    } finally {
+        btnAsignar.disabled = false;
+        btnAsignar.innerHTML = '<i class="fas fa-magic"></i> Ejecutar Asignación';
+    }
+});
+</script>
+{% endblock %}

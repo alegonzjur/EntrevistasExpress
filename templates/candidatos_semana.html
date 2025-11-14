@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+
+{% block title %}Candidatos Semana {{ semana }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-users"></i> Candidatos - Semana {{ semana }}</h2>
+        <a href="{{ url_for('admin_candidatos') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Volver
+        </a>
+    </div>
+    
+    <!-- Estadísticas de la Semana -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body text-center">
+                    <h6 class="card-title">Total Candidatos</h6>
+                    <h2>{{ stats.total_candidatos }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body text-center">
+                    <h6 class="card-title">Pendientes</h6>
+                    <h2>{{ stats.candidatos_pendientes }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body text-center">
+                    <h6 class="card-title">Asignados</h6>
+                    <h2>{{ stats.candidatos_asignados }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body text-center">
+                    <h6 class="card-title">Entrevistados</h6>
+                    <h2>{{ stats.candidatos_entrevistados }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Barra de Progreso -->
+    {% if stats.total_candidatos > 0 %}
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5>Progreso de Asignación: {{ stats.tasa_asignacion }}%</h5>
+            <div class="progress" style="height: 30px;">
+                <div class="progress-bar bg-success" role="progressbar" 
+                     style="width: {{ stats.tasa_asignacion }}%"
+                     aria-valuenow="{{ stats.tasa_asignacion }}" 
+                     aria-valuemin="0" 
+                     aria-valuemax="100">
+                    {{ stats.candidatos_asignados }} / {{ stats.total_candidatos }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Tabla de Candidatos -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5><i class="fas fa-list"></i> Lista de Candidatos ({{ candidatos|length }})</h5>
+            <div>
+                <button class="btn btn-sm btn-outline-primary" onclick="exportarTabla()">
+                    <i class="fas fa-download"></i> Exportar
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="imprimirTabla()">
+                    <i class="fas fa-print"></i> Imprimir
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if candidatos %}
+            <!-- Filtros -->
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <input type="text" class="form-control" id="filtroNombre" 
+                           placeholder="🔍 Buscar por nombre o apellidos..." 
+                           onkeyup="filtrarTabla()">
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="filtroEstado" onchange="filtrarTabla()">
+                        <option value="">Todos los estados</option>
+                        <option value="pendiente">Pendiente</option>
+                        <option value="asignado">Asignado</option>
+                        <option value="entrevistado">Entrevistado</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <input type="number" class="form-control" id="filtroNotaMin" 
+                           placeholder="Nota mín" step="0.1" onchange="filtrarTabla()">
+                </div>
+                <div class="col-md-2">
+                    <input type="number" class="form-control" id="filtroNotaMax" 
+                           placeholder="Nota máx" step="0.1" onchange="filtrarTabla()">
+                </div>
+                <div class="col-md-1">
+                    <button class="btn btn-secondary w-100" onclick="limpiarFiltros()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-striped table-hover" id="tablaCandidatos">
+                    <thead class="table-dark">
+                        <tr>
+                            <th onclick="ordenarTabla(0)" style="cursor: pointer;">
+                                Solicitud <i class="fas fa-sort"></i>
+                            </th>
+                            <th onclick="ordenarTabla(1)" style="cursor: pointer;">
+                                Apellidos <i class="fas fa-sort"></i>
+                            </th>
+                            <th onclick="ordenarTabla(2)" style="cursor: pointer;">
+                                Nombre <i class="fas fa-sort"></i>
+                            </th>
+                            <th onclick="ordenarTabla(3)" style="cursor: pointer;">
+                                Nota <i class="fas fa-sort"></i>
+                            </th>
+                            <th>Email</th>
+                            <th onclick="ordenarTabla(5)" style="cursor: pointer;">
+                                Estado <i class="fas fa-sort"></i>
+                            </th>
+                            <th>Primera Opción</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for candidato in candidatos %}
+                        <tr data-estado="{{ candidato.estado }}" 
+                            data-nota="{{ candidato.media_estudios }}"
+                            data-nombre="{{ candidato.nombre|lower }} {{ candidato.apellidos|lower }}">
+                            <td><strong>{{ candidato.solicitud }}</strong></td>
+                            <td>{{ candidato.apellidos }}</td>
+                            <td>{{ candidato.nombre }}</td>
+                            <td>
+                                <span class="badge {% if candidato.media_estudios < 5.5 %}bg-danger{% elif candidato.media_estudios < 6.5 %}bg-warning{% else %}bg-info{% endif %}">
+                                    {{ "%.2f"|format(candidato.media_estudios) }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if candidato.email %}
+                                <a href="mailto:{{ candidato.email }}">
+                                    <i class="fas fa-envelope"></i> {{ candidato.email[:20] }}...
+                                </a>
+                                {% else %}
+                                <span class="text-muted">Sin email</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if candidato.estado == 'pendiente' %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="fas fa-clock"></i> Pendiente
+                                </span>
+                                {% elif candidato.estado == 'asignado' %}
+                                <span class="badge bg-success">
+                                    <i class="fas fa-check"></i> Asignado
+                                </span>
+                                {% elif candidato.estado == 'entrevistado' %}
+                                <span class="badge bg-info">
+                                    <i class="fas fa-user-check"></i> Entrevistado
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="text-truncate d-inline-block" style="max-width: 300px;" 
+                                      title="{{ candidato.primera_opcion }}">
+                                    {{ candidato.primera_opcion[:50] }}{% if candidato.primera_opcion|length > 50 %}...{% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-info" 
+                                        onclick="verDetalle({{ candidato.id }})"
+                                        title="Ver detalles">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                {% if candidato.estado == 'asignado' %}
+                                <button class="btn btn-sm btn-success" 
+                                        onclick="verAsignacion({{ candidato.id }})"
+                                        title="Ver asignación">
+                                    <i class="fas fa-calendar-check"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="mt-3">
+                <small class="text-muted">
+                    <strong>Total:</strong> <span id="totalMostrados">{{ candidatos|length }}</span> candidatos
+                </small>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> No hay candidatos para esta semana.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal Detalle Candidato -->
+<div class="modal fade" id="modalDetalle" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Detalle del Candidato</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="contenidoDetalle">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Filtrar tabla
+function filtrarTabla() {
+    const filtroNombre = document.getElementById('filtroNombre').value.toLowerCase();
+    const filtroEstado = document.getElementById('filtroEstado').value;
+    const filtroNotaMin = parseFloat(document.getElementById('filtroNotaMin').value) || 0;
+    const filtroNotaMax = parseFloat(document.getElementById('filtroNotaMax').value) || 10;
+    
+    const filas = document.querySelectorAll('#tablaCandidatos tbody tr');
+    let contador = 0;
+    
+    filas.forEach(fila => {
+        const nombre = fila.getAttribute('data-nombre');
+        const estado = fila.getAttribute('data-estado');
+        const nota = parseFloat(fila.getAttribute('data-nota'));
+        
+        const coincideNombre = nombre.includes(filtroNombre);
+        const coincideEstado = !filtroEstado || estado === filtroEstado;
+        const coincideNota = nota >= filtroNotaMin && nota <= filtroNotaMax;
+        
+        if (coincideNombre && coincideEstado && coincideNota) {
+            fila.style.display = '';
+            contador++;
+        } else {
+            fila.style.display = 'none';
+        }
+    });
+    
+    document.getElementById('totalMostrados').textContent = contador;
+}
+
+// Limpiar filtros
+function limpiarFiltros() {
+    document.getElementById('filtroNombre').value = '';
+    document.getElementById('filtroEstado').value = '';
+    document.getElementById('filtroNotaMin').value = '';
+    document.getElementById('filtroNotaMax').value = '';
+    filtrarTabla();
+}
+
+// Ordenar tabla
+let ordenAscendente = true;
+function ordenarTabla(columna) {
+    const tabla = document.getElementById('tablaCandidatos');
+    const filas = Array.from(tabla.querySelectorAll('tbody tr'));
+    
+    filas.sort((a, b) => {
+        const valorA = a.cells[columna].textContent.trim();
+        const valorB = b.cells[columna].textContent.trim();
+        
+        // Si es número, comparar como número
+        if (!isNaN(valorA) && !isNaN(valorB)) {
+            return ordenAscendente ? valorA - valorB : valorB - valorA;
+        }
+        
+        // Si es texto, comparar como texto
+        return ordenAscendente ? 
+            valorA.localeCompare(valorB) : 
+            valorB.localeCompare(valorA);
+    });
+    
+    // Reordenar filas en la tabla
+    const tbody = tabla.querySelector('tbody');
+    filas.forEach(fila => tbody.appendChild(fila));
+    
+    ordenAscendente = !ordenAscendente;
+}
+
+// Ver detalle (placeholder - puedes implementar una ruta específica)
+function verDetalle(candidatoId) {
+    alert('Función de detalle para candidato ' + candidatoId + ' - A implementar');
+}
+
+// Ver asignación (placeholder)
+function verAsignacion(candidatoId) {
+    alert('Función de ver asignación para candidato ' + candidatoId + ' - A implementar');
+}
+
+// Exportar tabla
+function exportarTabla() {
+    // Implementación simple de exportación a CSV
+    const tabla = document.getElementById('tablaCandidatos');
+    let csv = [];
+    const filas = tabla.querySelectorAll('tr');
+    
+    filas.forEach(fila => {
+        const celdas = fila.querySelectorAll('td, th');
+        const fila_data = Array.from(celdas).map(celda => 
+            '"' + celda.textContent.trim().replace(/"/g, '""') + '"'
+        );
+        csv.push(fila_data.join(','));
+    });
+    
+    const csvString = csv.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'candidatos_{{ semana }}.csv';
+    a.click();
+}
+
+// Imprimir tabla
+function imprimirTabla() {
+    window.print();
+}
+</script>
+
+<style>
+@media print {
+    .btn, .card-header button, nav, footer {
+        display: none !important;
+    }
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+    cursor: pointer;
+}
+
+.text-truncate {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+</style>
+{% endblock %}
