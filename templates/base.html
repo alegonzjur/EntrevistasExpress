@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Sistema de Reservas{% endblock %}</title>
     
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <!-- CSS Base -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
     
@@ -13,6 +19,138 @@
     
     <!-- Estilos adicionales en línea (si es necesario) -->
     <style>
+        /* Estilos base mejorados */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+        }
+        
+        .navbar {
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+        }
+        
+        .dropdown-divider {
+            height: 0;
+            margin: 0.5rem 0;
+            overflow: hidden;
+            border-top: 1px solid rgba(0,0,0,.1);
+        }
+        
+        .menu-destacado {
+            background-color: #e3f2fd !important;
+            font-weight: 600;
+            border-left: 3px solid #2196F3;
+            padding-left: 12px !important;
+        }
+        
+        .menu-destacado:hover {
+            background-color: #bbdefb !important;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Estilos para cards (compatibilidad con templates de candidatos) */
+        .card {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: none;
+        }
+        
+        .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 2px solid #dee2e6;
+            font-weight: 600;
+            padding: 15px 20px;
+        }
+        
+        .card-body {
+            padding: 20px;
+        }
+        
+        /* Badges */
+        .badge {
+            padding: 0.35em 0.65em;
+            font-size: 0.875em;
+            font-weight: 600;
+        }
+        
+        /* Botones */
+        .btn {
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        /* Tablas */
+        .table {
+            background-color: white;
+        }
+        
+        .table-striped tbody tr:nth-of-type(odd) {
+            background-color: rgba(0,0,0,.02);
+        }
+        
+        .table thead {
+            background-color: #343a40;
+            color: white;
+        }
+        
+        /* Alertas */
+        .alert {
+            border-radius: 8px;
+            border-left: 4px solid;
+            margin-bottom: 20px;
+        }
+        
+        .alert-success {
+            border-left-color: #28a745;
+        }
+        
+        .alert-danger {
+            border-left-color: #dc3545;
+        }
+        
+        .alert-warning {
+            border-left-color: #ffc107;
+        }
+        
+        .alert-info {
+            border-left-color: #17a2b8;
+        }
+        
+        /* Forms */
+        .form-control, .form-select {
+            border-radius: 6px;
+            border: 1px solid #ced4da;
+            padding: 10px 15px;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: #80bdff;
+            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+        }
+        
+        /* Progress bars */
+        .progress {
+            border-radius: 10px;
+            height: 25px;
+        }
+        
+        .progress-bar {
+            border-radius: 10px;
+        }
+        
         {% block styles %}{% endblock %}
     </style>
 </head>
@@ -34,6 +172,10 @@
                             <a href="{{ url_for('admin_usuarios') }}">👥 Gestión de Usuarios</a>
                             <a href="{{ url_for('todas_reservas') }}">📋 Todas las Reservas</a>
                             <a href="{{ url_for('registro') }}">➕ Nuevo Usuario</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="{{ url_for('admin_candidatos') }}" class="menu-destacado">
+                                <i class="fas fa-user-graduate"></i> Gestión de Candidatos
+                            </a>
                         </div>
                     </div>
                     {% endif %}
@@ -67,6 +209,9 @@
     <div class="container">
         {% block content %}{% endblock %}
     </div>
+    
+    <!-- Bootstrap 5 JS Bundle (incluye Popper) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     {% block scripts %}{% endblock %}
 </body>

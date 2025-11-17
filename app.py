@@ -914,47 +914,46 @@ def ejecutar_asignacion():
                 'candidatos_pendientes': 0
             }), 400
         
-        # Verificar reservas disponibles
-        lunes_entrevistas, viernes_entrevistas = parsear_semana_iso(semana_entrevistas)
+        # Calcular rango de fechas para semana de entrevistas
+        año_ent, semana_num_ent = semana_entrevistas.split('-W')
+        primer_dia_ent = datetime.strptime(f'{año_ent}-W{semana_num_ent}-1', '%Y-W%W-%w').date()
+        viernes_ent = primer_dia_ent + timedelta(days=4)
         
+        # Verificar reservas disponibles
         reservas = Reserva.query\
-            .filter(Reserva.fecha >= lunes_entrevistas)\
-            .filter(Reserva.fecha <= viernes_entrevistas)\
+            .filter(Reserva.fecha >= primer_dia_ent)\
+            .filter(Reserva.fecha <= viernes_ent)\
             .count()
         
         if reservas == 0:
             return jsonify({
-                'error': f'No hay reservas para la semana de entrevistas {semana_entrevistas} ({lunes_entrevistas.strftime("%d/%m")} - {viernes_entrevistas.strftime("%d/%m")})',
+                'error': f'No hay reservas para la semana de entrevistas {semana_entrevistas} ({primer_dia_ent.strftime("%d/%m")} - {viernes_ent.strftime("%d/%m")})',
                 'reservas_disponibles': 0
             }), 400
         
-        # Importar y ejecutar asignador (inline para evitar subprocess)
-        from sqlalchemy.orm import sessionmaker
-        
-        Session = sessionmaker(bind=db.engine)
-        session_asignacion = Session()
-        
+        # SOLUCIÓN: Usar la sesión de db directamente, no crear una nueva
         inicio = datetime.now()
         
-        # Obtener candidatos ordenados por nota
-        candidatos = session_asignacion.query(Candidato)\
+        # Obtener candidatos ordenados por nota (usando query de Flask-SQLAlchemy)
+        candidatos = Candidato.query\
             .filter_by(semana_carga=semana_carga, estado='pendiente')\
             .order_by(Candidato.media_estudios.asc())\
             .all()
         
         # Obtener reservas con espacios
-        reservas_obj = session_asignacion.query(Reserva)\
-            .filter(Reserva.fecha >= lunes_entrevistas)\
-            .filter(Reserva.fecha <= viernes_entrevistas)\
+        reservas_obj = Reserva.query\
+            .filter(Reserva.fecha >= primer_dia_ent)\
+            .filter(Reserva.fecha <= viernes_ent)\
             .order_by(Reserva.fecha, Reserva.hora_inicio)\
             .all()
         
         franjas_disponibles = []
         for reserva in reservas_obj:
-            asignaciones_existentes = session_asignacion.query(Asignacion)\
+            asignaciones_existentes = Asignacion.query\
                 .filter_by(reserva_id=reserva.id)\
                 .count()
             
+            # Máximo 2 candidatos por franja
             espacios_libres = 2 - asignaciones_existentes
             if espacios_libres > 0:
                 franjas_disponibles.append({
@@ -963,7 +962,7 @@ def ejecutar_asignacion():
                     'asignaciones_actuales': asignaciones_existentes
                 })
         
-        # Asignar
+        # Asignar candidatos
         asignaciones_creadas = []
         idx_candidato = 0
         idx_franja = 0
@@ -979,17 +978,21 @@ def ejecutar_asignacion():
             # Verificar límite por profesor
             if max_por_profesor:
                 actual = asignaciones_por_profesor.get(entrevistador_id, 0)
-                if actual >= max_por_profesor:
+                if actual >= int(max_por_profesor):
                     idx_franja += 1
                     continue
             
-            # Determinar posición
+            # Determinar posición y minuto de inicio
             if franja['asignaciones_actuales'] == 0:
                 posicion = 1
                 minuto_inicio = 0
             else:
                 posicion = 2
                 minuto_inicio = 15
+            
+            # Calcular hora exacta
+            hora_base = datetime.combine(reserva.fecha, reserva.hora_inicio)
+            hora_exacta = hora_base + timedelta(minutes=minuto_inicio)
             
             # Crear asignación
             asignacion = Asignacion(
@@ -998,13 +1001,20 @@ def ejecutar_asignacion():
                 entrevistador_id=entrevistador_id,
                 posicion=posicion,
                 minuto_inicio=minuto_inicio,
+                hora_exacta=hora_exacta.time(),
                 estado='confirmado',
                 fecha_asignacion=datetime.now(),
                 asignado_por_admin_id=session['user_id']
             )
             
-            session_asignacion.add(asignacion)
-            asignaciones_creadas.append(asignacion)
+            db.session.add(asignacion)
+            asignaciones_creadas.append({
+                'candidato_id': candidato.id,
+                'reserva_id': reserva.id
+            })
+            
+            # Actualizar estado del candidato
+            candidato.estado = 'asignado'
             
             # Actualizar contadores
             asignaciones_por_profesor[entrevistador_id] = asignaciones_por_profesor.get(entrevistador_id, 0) + 1
@@ -1016,8 +1026,8 @@ def ejecutar_asignacion():
             if franja['espacios_libres'] == 0:
                 idx_franja += 1
         
-        # Guardar
-        session_asignacion.commit()
+        # Guardar todo en una sola transacción
+        db.session.flush()
         
         # Crear log
         tiempo_total = (datetime.now() - inicio).total_seconds()
@@ -1029,7 +1039,7 @@ def ejecutar_asignacion():
             candidatos_filtrados=0,
             candidatos_asignados=len(asignaciones_creadas),
             candidatos_sin_asignar=len(candidatos) - len(asignaciones_creadas),
-            franjas_utilizadas=len(set([a.reserva_id for a in asignaciones_creadas])),
+            franjas_utilizadas=len(set([a['reserva_id'] for a in asignaciones_creadas])),
             algoritmo_usado='balanceado',
             tiempo_ejecucion_segundos=round(tiempo_total, 2),
             estado='exito' if len(asignaciones_creadas) == len(candidatos) else 'parcial',
@@ -1037,22 +1047,24 @@ def ejecutar_asignacion():
             ejecutado_por_usuario_id=session['user_id']
         )
         
-        session_asignacion.add(log)
-        session_asignacion.commit()
-        session_asignacion.close()
+        db.session.add(log)
+        db.session.commit()
         
         return jsonify({
             'success': True,
             'mensaje': f'{len(asignaciones_creadas)} candidatos asignados correctamente',
             'candidatos_asignados': len(asignaciones_creadas),
             'candidatos_sin_asignar': len(candidatos) - len(asignaciones_creadas),
-            'franjas_utilizadas': len(set([a.reserva_id for a in asignaciones_creadas])),
+            'franjas_utilizadas': len(set([a['reserva_id'] for a in asignaciones_creadas])),
             'semana_carga': semana_carga,
             'semana_entrevistas': semana_entrevistas,
             'tiempo_segundos': round(tiempo_total, 2)
         })
         
     except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': f'Error al ejecutar asignación: {str(e)}'}), 500
 
 
