@@ -931,10 +931,9 @@ def ejecutar_asignacion():
                 'reservas_disponibles': 0
             }), 400
         
-        # SOLUCIÓN: Usar la sesión de db directamente, no crear una nueva
         inicio = datetime.now()
         
-        # Obtener candidatos ordenados por nota (usando query de Flask-SQLAlchemy)
+        # Obtener candidatos ordenados por nota
         candidatos = Candidato.query\
             .filter_by(semana_carga=semana_carga, estado='pendiente')\
             .order_by(Candidato.media_estudios.asc())\
@@ -953,7 +952,6 @@ def ejecutar_asignacion():
                 .filter_by(reserva_id=reserva.id)\
                 .count()
             
-            # Máximo 2 candidatos por franja
             espacios_libres = 2 - asignaciones_existentes
             if espacios_libres > 0:
                 franjas_disponibles.append({
@@ -994,20 +992,33 @@ def ejecutar_asignacion():
             hora_base = datetime.combine(reserva.fecha, reserva.hora_inicio)
             hora_exacta = hora_base + timedelta(minutes=minuto_inicio)
             
-            # Crear asignación
+            # ✅ CREAR ASIGNACIÓN SIN hora_exacta EN EL CONSTRUCTOR
             asignacion = Asignacion(
                 candidato_id=candidato.id,
                 reserva_id=reserva.id,
                 entrevistador_id=entrevistador_id,
                 posicion=posicion,
                 minuto_inicio=minuto_inicio,
-                hora_exacta=hora_exacta.time(),
+                # NO incluir hora_exacta aquí
                 estado='confirmado',
                 fecha_asignacion=datetime.now(),
                 asignado_por_admin_id=session['user_id']
             )
             
             db.session.add(asignacion)
+            
+        
+            try:
+                # Verificar si hora_exacta es una columna o una propiedad
+                if hasattr(type(asignacion), 'hora_exacta'):
+                    attr = getattr(type(asignacion), 'hora_exacta')
+                    # Si NO es una propiedad calculada, asignarla
+                    if not isinstance(attr, property):
+                        asignacion.hora_exacta = hora_exacta.time()
+            except Exception as e:
+                # Si hay error al asignar, continuar sin ella
+                print(f"Advertencia: No se pudo asignar hora_exacta: {e}")
+            
             asignaciones_creadas.append({
                 'candidato_id': candidato.id,
                 'reserva_id': reserva.id
@@ -1026,7 +1037,7 @@ def ejecutar_asignacion():
             if franja['espacios_libres'] == 0:
                 idx_franja += 1
         
-        # Guardar todo en una sola transacción
+        # Guardar cambios
         db.session.flush()
         
         # Crear log
