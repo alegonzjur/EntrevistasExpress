@@ -87,6 +87,9 @@
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5><i class="fas fa-filter"></i> Opciones de Visualización</h5>
             <div>
+                <button class="btn btn-success me-2" onclick="mostrarModalEnviarEmails()">
+                    <i class="fas fa-envelope"></i> Enviar Emails
+                </button>
                 <button class="btn btn-sm btn-outline-primary" onclick="exportarAsignaciones()">
                     <i class="fas fa-download"></i> Exportar
                 </button>
@@ -414,4 +417,234 @@ function imprimirAsignaciones() {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 </style>
+
+<!-- Modal para enviar emails -->
+<div class="modal fade" id="modalEnviarEmails" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-envelope"></i> Enviar Emails
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿A quién desea enviar los emails?</p>
+                
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="radio" name="tipoEnvio" id="envioAmbos" value="ambos" checked>
+                    <label class="form-check-label" for="envioAmbos">
+                        <strong>👥 Candidatos y Entrevistadores</strong>
+                        <br>
+                        <small class="text-muted">Envía confirmación a candidatos y resumen a entrevistadores</small>
+                    </label>
+                </div>
+                
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="radio" name="tipoEnvio" id="envioCandidatos" value="candidatos">
+                    <label class="form-check-label" for="envioCandidatos">
+                        <strong>📧 Solo Candidatos</strong>
+                        <br>
+                        <small class="text-muted">Envía confirmación individual a cada candidato</small>
+                    </label>
+                </div>
+                
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="radio" name="tipoEnvio" id="envioEntrevistadores" value="entrevistadores">
+                    <label class="form-check-label" for="envioEntrevistadores">
+                        <strong>👨‍🏫 Solo Entrevistadores</strong>
+                        <br>
+                        <small class="text-muted">Envía resumen de calendario a cada entrevistador</small>
+                    </label>
+                </div>
+                
+                <hr>
+                
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="reenviar">
+                    <label class="form-check-label" for="reenviar">
+                        <strong>🔄 Reenviar emails ya enviados</strong>
+                        <br>
+                        <small class="text-muted">
+                            Marque esta opción solo si desea reenviar emails a candidatos 
+                            que ya los recibieron anteriormente
+                        </small>
+                    </label>
+                </div>
+                
+                <div class="alert alert-info mt-3 mb-0">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Nota:</strong> Los emails se enviarán desde tu cuenta de Office 365 configurada.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Cancelar
+                </button>
+                <button type="button" class="btn btn-success" onclick="enviarEmails()">
+                    <i class="fas fa-paper-plane"></i> Enviar Emails
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de progreso -->
+<div class="modal fade" id="modalProgresoEmails" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-spinner fa-spin"></i> Enviando Emails
+                </h5>
+            </div>
+            <div class="modal-body text-center py-5">
+                <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+                    <span class="visually-hidden">Enviando...</span>
+                </div>
+                <h5>Por favor, espere...</h5>
+                <p class="text-muted mb-0">Los emails se están enviando. Esto puede tardar unos momentos.</p>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
+{% block scripts %}
+<!-- Código existente... -->
+
+<script>
+// Mostrar modal de enviar emails
+function mostrarModalEnviarEmails() {
+    const modal = new bootstrap.Modal(document.getElementById('modalEnviarEmails'));
+    modal.show();
+}
+
+// Enviar emails
+function enviarEmails() {
+    // Obtener opciones
+    const tipoEnvio = document.querySelector('input[name="tipoEnvio"]:checked').value;
+    const reenviar = document.getElementById('reenviar').checked;
+    const semana = '{{ semana }}';
+    
+    // Confirmar
+    let mensaje = '';
+    if (tipoEnvio === 'ambos') {
+        mensaje = '¿Enviar emails a candidatos Y entrevistadores?';
+    } else if (tipoEnvio === 'candidatos') {
+        mensaje = '¿Enviar emails solo a candidatos?';
+    } else {
+        mensaje = '¿Enviar emails solo a entrevistadores?';
+    }
+    
+    if (reenviar) {
+        mensaje += '\n\n⚠️ Se reenviarán emails incluso a quienes ya los recibieron.';
+    }
+    
+    if (!confirm(mensaje)) {
+        return;
+    }
+    
+    // Cerrar modal de opciones
+    const modalOpciones = bootstrap.Modal.getInstance(document.getElementById('modalEnviarEmails'));
+    modalOpciones.hide();
+    
+    // Mostrar modal de progreso
+    const modalProgreso = new bootstrap.Modal(document.getElementById('modalProgresoEmails'));
+    modalProgreso.show();
+    
+    // Enviar request
+    fetch(`/admin/candidatos/enviar-emails/${semana}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            tipo: tipoEnvio,
+            reenviar: reenviar
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Cerrar modal de progreso
+        modalProgreso.hide();
+        
+        if (data.success) {
+            // Mostrar resultados
+            let mensaje = `✅ Emails enviados correctamente\n\n`;
+            
+            if (tipoEnvio === 'candidatos' || tipoEnvio === 'ambos') {
+                mensaje += `📧 Candidatos:\n`;
+                mensaje += `  • Enviados: ${data.candidatos_enviados}\n`;
+                if (data.candidatos_error > 0) {
+                    mensaje += `  • Errores: ${data.candidatos_error}\n`;
+                }
+                mensaje += `\n`;
+            }
+            
+            if (tipoEnvio === 'entrevistadores' || tipoEnvio === 'ambos') {
+                mensaje += `👨‍🏫 Entrevistadores:\n`;
+                mensaje += `  • Enviados: ${data.entrevistadores_enviados}\n`;
+                if (data.entrevistadores_error > 0) {
+                    mensaje += `  • Errores: ${data.entrevistadores_error}\n`;
+                }
+            }
+            
+            mensaje += `\n📊 Total: ${data.total_enviados} emails enviados`;
+            
+            alert(mensaje);
+            
+            // Si hay errores, mostrarlos
+            if (data.errores && data.errores.length > 0) {
+                console.error('Errores al enviar emails:', data.errores);
+                let errorMsg = 'Errores encontrados:\n\n';
+                data.errores.forEach(err => {
+                    errorMsg += `• ${err.candidato || err.entrevistador}: ${err.error}\n`;
+                });
+                alert(errorMsg);
+            }
+            
+            // Recargar página para actualizar estados
+            setTimeout(() => location.reload(), 1000);
+            
+        } else {
+            alert('❌ Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        modalProgreso.hide();
+        console.error('Error:', error);
+        alert('❌ Error al enviar emails: ' + error.message);
+    });
+}
+
+// Función de prueba de email (opcional, para testing)
+function testEmail() {
+    const email = prompt('Introduce tu email para recibir un email de prueba:');
+    if (!email) return;
+    
+    fetch('/admin/candidatos/test-email', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email: email })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ ' + data.mensaje);
+        } else {
+            alert('❌ Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('❌ Error al enviar email de prueba: ' + error.message);
+    });
+}
+</script>
+
+{% endblock %}
+
+
+
