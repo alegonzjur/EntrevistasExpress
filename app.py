@@ -1799,6 +1799,276 @@ def test_email():
             'error': f'Error al enviar email de prueba: {str(e)}'
         }), 500
 
+# ====================================================================
+# RUTAS DE GESTIÓN MANUAL DE ASIGNACIONES
+# ====================================================================
+
+@app.route('/admin/candidatos/gestion-manual/<semana>')
+@admin_required
+def gestion_manual_candidatos(semana):
+    """Vista de gestión manual de candidatos y asignaciones"""
+    
+    # Obtener candidatos de la semana
+    candidatos = Candidato.query.filter_by(semana_carga=semana)\
+        .order_by(Candidato.media_estudios.asc())\
+        .all()
+    
+    # Calcular semana de entrevistas (siguiente semana)
+    año, semana_num = semana.split('-W')
+    primer_dia = datetime.strptime(f'{año}-W{semana_num}-1', '%Y-W%W-%w').date()
+    siguiente_lunes = primer_dia + timedelta(days=7)
+    viernes = siguiente_lunes + timedelta(days=4)
+    semana_entrevistas = siguiente_lunes.strftime('%Y-W%W')
+    
+    # Obtener reservas de la semana de entrevistas
+    reservas = Reserva.query\
+        .filter(Reserva.fecha >= siguiente_lunes)\
+        .filter(Reserva.fecha <= viernes)\
+        .order_by(Reserva.fecha, Reserva.hora_inicio)\
+        .all()
+    
+    # Preparar datos de reservas con ocupación
+    reservas_info = []
+    for reserva in reservas:
+        asignaciones = Asignacion.query.filter_by(reserva_id=reserva.id).all()
+        num_asignaciones = len(asignaciones)
+        
+        reservas_info.append({
+            'reserva': reserva,
+            'num_asignaciones': num_asignaciones,
+            'espacios_libres': 2 - num_asignaciones,
+            'asignaciones': asignaciones,
+            'color_estado': 'success' if num_asignaciones == 0 else 'warning' if num_asignaciones == 1 else 'danger'
+        })
+    
+    # Estadísticas
+    stats = obtener_estadisticas_semana_candidatos(semana)
+    
+    # Obtener lista de entrevistadores
+    entrevistadores = Usuario.query.filter_by(activo=True).order_by(Usuario.username).all()
+    
+    return render_template('gestion_manual.html',
+                         candidatos=candidatos,
+                         reservas_info=reservas_info,
+                         semana=semana,
+                         semana_entrevistas=semana_entrevistas,
+                         stats=stats,
+                         entrevistadores=entrevistadores,
+                         lunes=siguiente_lunes,
+                         viernes=viernes,
+                         username=session['username'])
+
+
+@app.route('/admin/candidatos/asignar-manual', methods=['POST'])
+@admin_required
+def asignar_candidato_manual():
+    """Asigna un candidato a una reserva manualmente"""
+    
+    try:
+        data = request.json
+        candidato_id = data.get('candidato_id')
+        reserva_id = data.get('reserva_id')
+        posicion = data.get('posicion')  # 1 o 2
+        
+        if not all([candidato_id, reserva_id, posicion]):
+            return jsonify({'error': 'Faltan datos requeridos'}), 400
+        
+        # Validar candidato
+        candidato = Candidato.query.get(candidato_id)
+        if not candidato:
+            return jsonify({'error': 'Candidato no encontrado'}), 404
+        
+        # Validar reserva
+        reserva = Reserva.query.get(reserva_id)
+        if not reserva:
+            return jsonify({'error': 'Reserva no encontrada'}), 404
+        
+        # Verificar que el candidato no tenga ya una asignación
+        asignacion_existente = Asignacion.query.filter_by(candidato_id=candidato_id).first()
+        if asignacion_existente:
+            return jsonify({
+                'error': f'El candidato ya tiene una asignación en {asignacion_existente.reserva.fecha.strftime("%d/%m/%Y")} a las {asignacion_existente.hora_exacta.strftime("%H:%M") if asignacion_existente.hora_exacta else "N/A"}'
+            }), 400
+        
+        # Verificar espacios disponibles
+        asignaciones_actuales = Asignacion.query.filter_by(reserva_id=reserva_id).count()
+        if asignaciones_actuales >= 2:
+            return jsonify({'error': 'Esta reserva ya tiene 2 asignaciones'}), 400
+        
+        # Verificar que la posición no esté ocupada
+        posicion_ocupada = Asignacion.query.filter_by(reserva_id=reserva_id, posicion=posicion).first()
+        if posicion_ocupada:
+            return jsonify({'error': f'La posición {posicion} ya está ocupada'}), 400
+        
+        # Calcular minuto de inicio según posición
+        minuto_inicio = 0 if posicion == 1 else 15
+        
+        # Crear asignación
+        asignacion = Asignacion(
+            candidato_id=candidato_id,
+            reserva_id=reserva_id,
+            entrevistador_id=reserva.usuario_id,
+            posicion=posicion,
+            minuto_inicio=minuto_inicio,
+            estado='confirmado',
+            fecha_asignacion=datetime.now(),
+            asignado_por_admin_id=session['user_id']
+        )
+        
+        db.session.add(asignacion)
+        
+        # Actualizar estado del candidato
+        candidato.estado = 'asignado'
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'mensaje': f'Candidato {candidato.nombre} {candidato.apellidos} asignado correctamente',
+            'asignacion_id': asignacion.id,
+            'hora_exacta': asignacion.hora_exacta.strftime('%H:%M') if asignacion.hora_exacta else None
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error al asignar candidato: {str(e)}'}), 500
+
+
+@app.route('/admin/candidatos/desasignar-manual', methods=['POST'])
+@admin_required
+def desasignar_candidato_manual():
+    """Desasigna un candidato de una entrevista"""
+    
+    try:
+        data = request.json
+        asignacion_id = data.get('asignacion_id')
+        
+        if not asignacion_id:
+            return jsonify({'error': 'ID de asignación no proporcionado'}), 400
+        
+        # Buscar asignación
+        asignacion = Asignacion.query.get(asignacion_id)
+        if not asignacion:
+            return jsonify({'error': 'Asignación no encontrada'}), 404
+        
+        # Guardar datos del candidato antes de eliminar
+        candidato = asignacion.candidato
+        candidato_nombre = f"{candidato.nombre} {candidato.apellidos}"
+        
+        # Actualizar estado del candidato
+        candidato.estado = 'pendiente'
+        
+        # Eliminar asignación
+        db.session.delete(asignacion)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'mensaje': f'Asignación de {candidato_nombre} eliminada correctamente',
+            'candidato_id': candidato.id
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error al desasignar candidato: {str(e)}'}), 500
+
+
+@app.route('/admin/candidatos/reasignar-manual', methods=['POST'])
+@admin_required
+def reasignar_candidato_manual():
+    """Reasigna un candidato a otra reserva"""
+    
+    try:
+        data = request.json
+        asignacion_id = data.get('asignacion_id')
+        nueva_reserva_id = data.get('nueva_reserva_id')
+        nueva_posicion = data.get('nueva_posicion')
+        
+        if not all([asignacion_id, nueva_reserva_id, nueva_posicion]):
+            return jsonify({'error': 'Faltan datos requeridos'}), 400
+        
+        # Buscar asignación actual
+        asignacion = Asignacion.query.get(asignacion_id)
+        if not asignacion:
+            return jsonify({'error': 'Asignación no encontrada'}), 404
+        
+        # Validar nueva reserva
+        nueva_reserva = Reserva.query.get(nueva_reserva_id)
+        if not nueva_reserva:
+            return jsonify({'error': 'Nueva reserva no encontrada'}), 404
+        
+        # Verificar espacios disponibles en nueva reserva
+        asignaciones_nuevas = Asignacion.query.filter_by(reserva_id=nueva_reserva_id).count()
+        if asignaciones_nuevas >= 2:
+            return jsonify({'error': 'La nueva reserva ya tiene 2 asignaciones'}), 400
+        
+        # Verificar que la posición no esté ocupada
+        posicion_ocupada = Asignacion.query.filter_by(
+            reserva_id=nueva_reserva_id, 
+            posicion=nueva_posicion
+        ).first()
+        if posicion_ocupada:
+            return jsonify({'error': f'La posición {nueva_posicion} ya está ocupada'}), 400
+        
+        # Actualizar asignación
+        asignacion.reserva_id = nueva_reserva_id
+        asignacion.entrevistador_id = nueva_reserva.usuario_id
+        asignacion.posicion = nueva_posicion
+        asignacion.minuto_inicio = 0 if nueva_posicion == 1 else 15
+        asignacion.fecha_asignacion = datetime.now()
+        asignacion.asignado_por_admin_id = session['user_id']
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'mensaje': f'Candidato reasignado correctamente',
+            'nueva_hora': asignacion.hora_exacta.strftime('%H:%M') if asignacion.hora_exacta else None
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error al reasignar candidato: {str(e)}'}), 500
+
+
+@app.route('/admin/candidatos/info-reserva/<int:reserva_id>')
+@admin_required
+def info_reserva(reserva_id):
+    """Obtiene información detallada de una reserva"""
+    
+    reserva = Reserva.query.get_or_404(reserva_id)
+    asignaciones = Asignacion.query.filter_by(reserva_id=reserva_id).all()
+    
+    asignaciones_data = []
+    for asig in asignaciones:
+        asignaciones_data.append({
+            'id': asig.id,
+            'candidato_id': asig.candidato_id,
+            'candidato_nombre': f"{asig.candidato.nombre} {asig.candidato.apellidos}",
+            'candidato_nota': float(asig.candidato.media_estudios) if asig.candidato.media_estudios else None,
+            'posicion': asig.posicion,
+            'hora_exacta': asig.hora_exacta.strftime('%H:%M') if asig.hora_exacta else None,
+            'estado': asig.estado
+        })
+    
+    return jsonify({
+        'reserva_id': reserva.id,
+        'fecha': reserva.fecha.strftime('%d/%m/%Y'),
+        'dia_semana': reserva.fecha.strftime('%A'),
+        'hora_inicio': reserva.hora_inicio.strftime('%H:%M'),
+        'hora_fin': reserva.hora_fin.strftime('%H:%M'),
+        'entrevistador': reserva.usuario.username,
+        'espacio': reserva.espacio.nombre if reserva.espacio else 'N/A',
+        'num_asignaciones': len(asignaciones),
+        'espacios_libres': 2 - len(asignaciones),
+        'asignaciones': asignaciones_data
+    })
 
 # ====================================================================
 # INICIALIZACIÓN

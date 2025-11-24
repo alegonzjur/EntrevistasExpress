@@ -1,0 +1,582 @@
+{% extends "base.html" %}
+{% block title %}Gestión Manual de Candidatos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .gestion-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-top: 20px;
+    }
+    
+    .panel {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        max-height: 700px;
+        overflow-y: auto;
+    }
+    
+    .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #e0e0e0;
+    }
+    
+    .panel-header h3 {
+        margin: 0;
+        color: #0066B3;
+        font-size: 20px;
+    }
+    
+    .candidato-item, .reserva-item {
+        padding: 15px;
+        margin-bottom: 10px;
+        border-radius: 8px;
+        border: 2px solid #e0e0e0;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .candidato-item:hover, .reserva-item:hover {
+        border-color: #0066B3;
+        transform: translateX(5px);
+        box-shadow: 0 2px 8px rgba(0,102,179,0.2);
+    }
+    
+    .candidato-item.pendiente {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+    }
+    
+    .candidato-item.asignado {
+        background: #d1ecf1;
+        border-left: 4px solid #17a2b8;
+    }
+    
+    .candidato-item.seleccionado {
+        background: #d4edda;
+        border-left: 4px solid #28a745;
+        border-color: #28a745;
+    }
+    
+    .reserva-item.libre {
+        background: #d4edda;
+        border-left: 4px solid #28a745;
+    }
+    
+    .reserva-item.parcial {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+    }
+    
+    .reserva-item.completa {
+        background: #f8d7da;
+        border-left: 4px solid #dc3545;
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    
+    .candidato-nombre {
+        font-weight: 600;
+        font-size: 16px;
+        color: #333;
+        margin-bottom: 5px;
+    }
+    
+    .candidato-info {
+        font-size: 13px;
+        color: #666;
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+    }
+    
+    .nota-badge {
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 12px;
+    }
+    
+    .nota-baja { background: #ffc7ce; color: #c00; }
+    .nota-media { background: #ffeb9c; color: #856404; }
+    .nota-alta { background: #c6efce; color: #155724; }
+    
+    .reserva-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    
+    .reserva-fecha {
+        font-weight: 600;
+        font-size: 15px;
+        color: #333;
+    }
+    
+    .reserva-ocupacion {
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    
+    .ocupacion-0 { background: #c6efce; color: #155724; }
+    .ocupacion-1 { background: #ffeb9c; color: #856404; }
+    .ocupacion-2 { background: #ffc7ce; color: #c00; }
+    
+    .asignaciones-list {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #ddd;
+    }
+    
+    .asignacion-mini {
+        padding: 8px;
+        margin: 5px 0;
+        background: #f8f9fa;
+        border-radius: 5px;
+        font-size: 13px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .btn-desasignar {
+        padding: 3px 8px;
+        background: #dc3545;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .btn-desasignar:hover {
+        background: #c82333;
+    }
+    
+    .stats-mini {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    
+    .stat-card-mini {
+        flex: 1;
+        min-width: 150px;
+        padding: 15px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 8px;
+        text-align: center;
+    }
+    
+    .stat-card-mini .number {
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+    
+    .stat-card-mini .label {
+        font-size: 12px;
+        opacity: 0.9;
+    }
+    
+    .filtros {
+        margin-bottom: 15px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    
+    .filtro-btn {
+        padding: 8px 15px;
+        border: 2px solid #e0e0e0;
+        background: white;
+        border-radius: 20px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 13px;
+    }
+    
+    .filtro-btn:hover {
+        border-color: #0066B3;
+        color: #0066B3;
+    }
+    
+    .filtro-btn.activo {
+        background: #0066B3;
+        color: white;
+        border-color: #0066B3;
+    }
+    
+    @media (max-width: 1024px) {
+        .gestion-container {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2>🎯 Gestión Manual de Candidatos</h2>
+    <a href="{{ url_for('admin_candidatos') }}" class="btn btn-secondary">← Volver</a>
+</div>
+
+<div class="card" style="margin-bottom: 20px;">
+    <h4 style="margin-bottom: 15px;">📊 Resumen de Semana {{ semana.split('-W')[1] }}</h4>
+    <div class="stats-mini">
+        <div class="stat-card-mini">
+            <div class="number">{{ stats.total_candidatos }}</div>
+            <div class="label">Total Candidatos</div>
+        </div>
+        <div class="stat-card-mini" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+            <div class="number">{{ stats.candidatos_pendientes }}</div>
+            <div class="label">Pendientes</div>
+        </div>
+        <div class="stat-card-mini" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+            <div class="number">{{ stats.candidatos_asignados }}</div>
+            <div class="label">Asignados</div>
+        </div>
+        <div class="stat-card-mini" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+            <div class="number">{{ reservas_info|length }}</div>
+            <div class="label">Reservas Disponibles</div>
+        </div>
+    </div>
+    <p style="margin: 0; color: #666;">
+        <strong>Período de entrevistas:</strong> {{ lunes.strftime('%d/%m/%Y') }} - {{ viernes.strftime('%d/%m/%Y') }}
+    </p>
+</div>
+
+<div class="gestion-container">
+    <!-- Panel Izquierdo: Candidatos -->
+    <div class="panel">
+        <div class="panel-header">
+            <h3>👥 Candidatos</h3>
+            <span class="badge bg-warning">{{ stats.candidatos_pendientes }} pendientes</span>
+        </div>
+        
+        <div class="filtros">
+            <button class="filtro-btn activo" onclick="filtrarCandidatos('todos')">Todos</button>
+            <button class="filtro-btn" onclick="filtrarCandidatos('pendiente')">Pendientes</button>
+            <button class="filtro-btn" onclick="filtrarCandidatos('asignado')">Asignados</button>
+        </div>
+        
+        <div id="lista-candidatos">
+            {% for candidato in candidatos %}
+            <div class="candidato-item {{ candidato.estado }}" 
+                 data-candidato-id="{{ candidato.id }}"
+                 data-estado="{{ candidato.estado }}"
+                 onclick="seleccionarCandidato({{ candidato.id }}, '{{ candidato.nombre }} {{ candidato.apellidos }}', {{ candidato.media_estudios }}, '{{ candidato.estado }}')">
+                <div class="candidato-nombre">
+                    {{ candidato.nombre }} {{ candidato.apellidos }}
+                    {% if candidato.estado == 'asignado' %}
+                        <span class="badge bg-info" style="font-size: 10px; margin-left: 5px;">✓ ASIGNADO</span>
+                    {% endif %}
+                </div>
+                <div class="candidato-info">
+                    <span class="nota-badge {% if candidato.media_estudios < 5.5 %}nota-baja{% elif candidato.media_estudios < 6.5 %}nota-media{% else %}nota-alta{% endif %}">
+                        📊 {{ "%.2f"|format(candidato.media_estudios) }}
+                    </span>
+                    <span>📧 {{ candidato.email or 'Sin email' }}</span>
+                </div>
+                {% if candidato.primera_opcion %}
+                <div style="margin-top: 5px; font-size: 12px; color: #666;">
+                    🎓 {{ candidato.primera_opcion[:50] }}...
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Panel Derecho: Reservas -->
+    <div class="panel">
+        <div class="panel-header">
+            <h3>📅 Reservas Disponibles</h3>
+            <span class="badge bg-primary">{{ reservas_info|length }} franjas</span>
+        </div>
+        
+        <div class="filtros">
+            <button class="filtro-btn activo" onclick="filtrarReservas('todas')">Todas</button>
+            <button class="filtro-btn" onclick="filtrarReservas('libres')">Libres</button>
+            <button class="filtro-btn" onclick="filtrarReservas('parciales')">Parciales</button>
+        </div>
+        
+        <div id="lista-reservas">
+            {% for info in reservas_info %}
+            <div class="reserva-item {% if info.num_asignaciones == 0 %}libre{% elif info.num_asignaciones == 1 %}parcial{% else %}completa{% endif %}"
+                 data-reserva-id="{{ info.reserva.id }}"
+                 data-num-asignaciones="{{ info.num_asignaciones }}"
+                 onclick="{% if info.espacios_libres > 0 %}seleccionarReserva({{ info.reserva.id }}, '{{ info.reserva.fecha.strftime('%d/%m/%Y') }}', '{{ info.reserva.hora_inicio.strftime('%H:%M') }}', {{ info.espacios_libres }}){% endif %}">
+                
+                <div class="reserva-header">
+                    <div class="reserva-fecha">
+                        📅 {{ info.reserva.fecha.strftime('%A %d/%m') }} - {{ info.reserva.hora_inicio.strftime('%H:%M') }}
+                    </div>
+                    <span class="reserva-ocupacion ocupacion-{{ info.num_asignaciones }}">
+                        {{ info.num_asignaciones }}/2
+                    </span>
+                </div>
+                
+                <div style="font-size: 13px; color: #666;">
+                    👤 {{ info.reserva.usuario.username }}
+                    {% if info.reserva.espacio %}
+                    | 📍 {{ info.reserva.espacio.nombre }}
+                    {% endif %}
+                </div>
+                
+                {% if info.asignaciones %}
+                <div class="asignaciones-list">
+                    <strong style="font-size: 12px; color: #333;">Asignaciones actuales:</strong>
+                    {% for asig in info.asignaciones %}
+                    <div class="asignacion-mini">
+                        <span>
+                            <strong>Pos.{{ asig.posicion }}</strong> - 
+                            {{ asig.candidato.nombre }} {{ asig.candidato.apellidos }}
+                            ({{ "%.2f"|format(asig.candidato.media_estudios) }})
+                        </span>
+                        <button class="btn-desasignar" 
+                                onclick="event.stopPropagation(); desasignarCandidato({{ asig.id }}, '{{ asig.candidato.nombre }} {{ asig.candidato.apellidos }}')">
+                            ✖ Quitar
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Panel de acción flotante -->
+<div id="panel-accion" style="display: none; position: fixed; bottom: 20px; right: 20px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 1000; max-width: 400px;">
+    <h4 style="margin: 0 0 15px 0; color: #0066B3;">⚡ Asignación Rápida</h4>
+    <div id="info-seleccion" style="margin-bottom: 15px; padding: 15px; background: #f8f9fa; border-radius: 5px; font-size: 14px;"></div>
+    <div style="display: flex; gap: 10px;">
+        <button class="btn btn-success" onclick="confirmarAsignacion()" id="btn-confirmar-asignacion" disabled>
+            ✓ Asignar
+        </button>
+        <button class="btn btn-secondary" onclick="cancelarSeleccion()">
+            ✖ Cancelar
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let candidatoSeleccionado = null;
+let reservaSeleccionada = null;
+
+function seleccionarCandidato(id, nombre, nota, estado) {
+    if (estado === 'asignado') {
+        if (!confirm(`${nombre} ya está asignado. ¿Deseas reasignarlo?`)) {
+            return;
+        }
+    }
+    
+    // Quitar selección anterior
+    document.querySelectorAll('.candidato-item').forEach(el => {
+        el.classList.remove('seleccionado');
+    });
+    
+    // Seleccionar nuevo
+    event.currentTarget.classList.add('seleccionado');
+    
+    candidatoSeleccionado = { id, nombre, nota, estado };
+    actualizarPanelAccion();
+}
+
+function seleccionarReserva(id, fecha, hora, espacios_libres) {
+    if (espacios_libres === 0) {
+        alert('Esta reserva ya está completa (2/2)');
+        return;
+    }
+    
+    // Quitar selección anterior
+    document.querySelectorAll('.reserva-item').forEach(el => {
+        el.style.outline = 'none';
+    });
+    
+    // Seleccionar nueva
+    event.currentTarget.style.outline = '3px solid #28a745';
+    
+    reservaSeleccionada = { id, fecha, hora, espacios_libres };
+    actualizarPanelAccion();
+}
+
+function actualizarPanelAccion() {
+    const panel = document.getElementById('panel-accion');
+    const info = document.getElementById('info-seleccion');
+    const btnConfirmar = document.getElementById('btn-confirmar-asignacion');
+    
+    if (candidatoSeleccionado && reservaSeleccionada) {
+        panel.style.display = 'block';
+        info.innerHTML = `
+            <strong>Candidato:</strong> ${candidatoSeleccionado.nombre}<br>
+            <strong>Nota:</strong> ${candidatoSeleccionado.nota.toFixed(2)}<br>
+            <hr style="margin: 10px 0;">
+            <strong>Reserva:</strong> ${reservaSeleccionada.fecha} a las ${reservaSeleccionada.hora}<br>
+            <strong>Espacios libres:</strong> ${reservaSeleccionada.espacios_libres}/2
+        `;
+        btnConfirmar.disabled = false;
+    } else if (candidatoSeleccionado) {
+        panel.style.display = 'block';
+        info.innerHTML = `
+            <strong>Candidato seleccionado:</strong><br>
+            ${candidatoSeleccionado.nombre} (${candidatoSeleccionado.nota.toFixed(2)})<br>
+            <br>
+            <em style="color: #666;">Ahora selecciona una reserva →</em>
+        `;
+        btnConfirmar.disabled = true;
+    } else if (reservaSeleccionada) {
+        panel.style.display = 'block';
+        info.innerHTML = `
+            <strong>Reserva seleccionada:</strong><br>
+            ${reservaSeleccionada.fecha} a las ${reservaSeleccionada.hora}<br>
+            <br>
+            <em style="color: #666;">Ahora selecciona un candidato ←</em>
+        `;
+        btnConfirmar.disabled = true;
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function cancelarSeleccion() {
+    candidatoSeleccionado = null;
+    reservaSeleccionada = null;
+    
+    document.querySelectorAll('.candidato-item').forEach(el => {
+        el.classList.remove('seleccionado');
+    });
+    
+    document.querySelectorAll('.reserva-item').forEach(el => {
+        el.style.outline = 'none';
+    });
+    
+    actualizarPanelAccion();
+}
+
+async function confirmarAsignacion() {
+    if (!candidatoSeleccionado || !reservaSeleccionada) {
+        alert('Debes seleccionar un candidato y una reserva');
+        return;
+    }
+    
+    const posicion = reservaSeleccionada.espacios_libres === 2 ? 1 : 2;
+    
+    try {
+        const response = await fetch('/admin/candidatos/asignar-manual', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                candidato_id: candidatoSeleccionado.id,
+                reserva_id: reservaSeleccionada.id,
+                posicion: posicion
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert(data.mensaje);
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error al asignar candidato');
+        console.error(error);
+    }
+}
+
+async function desasignarCandidato(asignacionId, nombreCandidato) {
+    if (!confirm(`¿Estás seguro de que deseas desasignar a ${nombreCandidato}?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/candidatos/desasignar-manual', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                asignacion_id: asignacionId
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert(data.mensaje);
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error al desasignar candidato');
+        console.error(error);
+    }
+}
+
+function filtrarCandidatos(filtro) {
+    // Actualizar botones
+    document.querySelectorAll('.filtros .filtro-btn').forEach(btn => {
+        btn.classList.remove('activo');
+    });
+    event.currentTarget.classList.add('activo');
+    
+    // Filtrar candidatos
+    document.querySelectorAll('.candidato-item').forEach(item => {
+        const estado = item.dataset.estado;
+        if (filtro === 'todos' || estado === filtro) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+function filtrarReservas(filtro) {
+    // Actualizar botones
+    const filtrosContainer = document.querySelectorAll('.filtros')[1];
+    filtrosContainer.querySelectorAll('.filtro-btn').forEach(btn => {
+        btn.classList.remove('activo');
+    });
+    event.currentTarget.classList.add('activo');
+    
+    // Filtrar reservas
+    document.querySelectorAll('.reserva-item').forEach(item => {
+        const numAsignaciones = parseInt(item.dataset.numAsignaciones);
+        let mostrar = false;
+        
+        if (filtro === 'todas') {
+            mostrar = true;
+        } else if (filtro === 'libres' && numAsignaciones === 0) {
+            mostrar = true;
+        } else if (filtro === 'parciales' && numAsignaciones === 1) {
+            mostrar = true;
+        }
+        
+        item.style.display = mostrar ? 'block' : 'none';
+    });
+}
+</script>
+{% endblock %}

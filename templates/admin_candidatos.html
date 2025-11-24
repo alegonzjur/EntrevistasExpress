@@ -168,6 +168,10 @@
                                         <a href="{{ url_for('ver_asignaciones_semana', semana=semana.semana_carga) }}" class="btn btn-sm btn-info">
                                             <i class="fas fa-calendar-check"></i> Ver Asignaciones
                                         </a>
+                                            
+                                        <a href="{{ url_for('gestion_manual_candidatos', semana=semana.semana_carga) }}" class="btn btn-primary">
+                                             Gestión Manual
+                                        </a>
                                     </td>
                                 </tr>
                                 {% endfor %}
