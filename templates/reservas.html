@@ -44,15 +44,19 @@
 <div class="leyenda">
     <div class="leyenda-item">
         <div class="leyenda-color disponible"></div>
-        <span>Disponible</span>
+        <span>🟢 Libre (0/2)</span>
     </div>
     <div class="leyenda-item">
-        <div class="leyenda-color ocupada"></div>
-        <span>Ocupada</span>
+        <div class="leyenda-color parcial"></div>
+        <span>🟡 Parcial (1/2)</span>
+    </div>
+    <div class="leyenda-item">
+        <div class="leyenda-color completa"></div>
+        <span>🔴 Completa (2/2)</span>
     </div>
     <div class="leyenda-item">
         <div class="leyenda-color mi-reserva"></div>
-        <span>Mis Reservas ⭐</span>
+        <span>⭐ Mis Reservas</span>
     </div>
 </div>
 
@@ -115,47 +119,138 @@ async function cargarFranjas() {
             
             const espacioCard = document.createElement('div');
             espacioCard.className = 'espacio-card';
-            espacioCard.innerHTML = `
-                <div class="espacio-header">
-                    <h3>${espacio.nombre}</h3>
-                    <span class="fecha">${espacio.fecha_completa}</span>
-                </div>
-                <div class="franjas-grid" id="franjas-${espacio.id}">
-                    ${franjas.map(franja => {
-                        let claseExtra = franja.disponible ? 'disponible' : (franja.es_mia ? 'mi-reserva' : 'ocupada');
-                        let textoEstado = franja.disponible ? '✓ Libre' : (franja.es_mia ? '★ Mía' : '✗ Ocupada');
-                        return `
-                        <div class="franja ${claseExtra}" 
-                             onclick="handleFranjaClick(${espacio.id}, '${espacio.fecha}', '${espacio.nombre}', '${franja.hora_inicio}', '${franja.hora_fin}', ${franja.disponible}, '${franja.reservada_por || ''}', ${franja.es_mia}, ${franja.reserva_id}, '${franja.notas || ''}')">
-                            <span class="franja-hora">${franja.hora_inicio}</span>
-                            <span class="franja-estado">${textoEstado}</span>
-                        </div>
-                        `;
-                    }).join('')}
-                </div>
+            
+            // Crear el header
+            const header = document.createElement('div');
+            header.className = 'espacio-header';
+            header.innerHTML = `
+                <h3>${espacio.nombre}</h3>
+                <span class="fecha">${espacio.fecha_completa}</span>
             `;
+            espacioCard.appendChild(header);
+            
+            // Crear el grid de franjas
+            const grid = document.createElement('div');
+            grid.className = 'franjas-grid';
+            grid.id = `franjas-${espacio.id}`;
+            
+            franjas.forEach(franja => {
+                let claseExtra = '';
+                let textoEstado = '';
+                let icono = '';
+                
+                // Determinar clase y estado según número de reservas
+                if (franja.tiene_mi_reserva) {
+                    claseExtra = 'mi-reserva';
+                    textoEstado = '★ Mía';
+                    icono = '⭐';
+                } else if (franja.disponible) {
+                    claseExtra = 'disponible';
+                    textoEstado = '✓ Libre (0/2)';
+                    icono = '🟢';
+                } else if (franja.parcial) {
+                    claseExtra = 'parcial';
+                    textoEstado = '⚠ Parcial (1/2)';
+                    icono = '🟡';
+                } else if (franja.completa) {
+                    claseExtra = 'completa';
+                    textoEstado = '✗ Completa (2/2)';
+                    icono = '🔴';
+                }
+                
+                const franjaDiv = document.createElement('div');
+                franjaDiv.className = `franja ${claseExtra}`;
+                franjaDiv.innerHTML = `
+                    <span class="franja-icono">${icono}</span>
+                    <span class="franja-hora">${franja.hora_inicio}</span>
+                    <span class="franja-estado">${textoEstado}</span>
+                `;
+                
+                // Guardar datos en el elemento
+                franjaDiv.dataset.franjaData = JSON.stringify(franja);
+                franjaDiv.dataset.espacioId = espacio.id;
+                franjaDiv.dataset.fecha = espacio.fecha;
+                franjaDiv.dataset.nombreDia = espacio.nombre;
+                franjaDiv.dataset.horaInicio = franja.hora_inicio;
+                franjaDiv.dataset.horaFin = franja.hora_fin;
+                
+                // Añadir evento click
+                franjaDiv.addEventListener('click', function() {
+                    const franjaData = JSON.parse(this.dataset.franjaData);
+                    handleFranjaClick(
+                        parseInt(this.dataset.espacioId),
+                        this.dataset.fecha,
+                        this.dataset.nombreDia,
+                        this.dataset.horaInicio,
+                        this.dataset.horaFin,
+                        franjaData
+                    );
+                });
+                
+                grid.appendChild(franjaDiv);
+            });
+            
+            espacioCard.appendChild(grid);
             
             if (container.querySelector('.loading')) {
                 container.innerHTML = '';
             }
             container.appendChild(espacioCard);
+            
         } catch (error) {
             console.error('Error al cargar franjas:', error);
         }
     }
 }
 
-function handleFranjaClick(espacioId, fecha, nombreDia, horaInicio, horaFin, disponible, reservadaPor, esMia, reservaId, notas) {
-    if (esMia) {
-        mostrarModalCancelar(espacioId, fecha, nombreDia, horaInicio, horaFin, reservaId, notas);
-    } else if (!disponible) {
-        alert(`Esta franja está ocupada por: ${reservadaPor}`);
-    } else {
-        mostrarModalReserva(espacioId, fecha, nombreDia, horaInicio, horaFin);
+function handleFranjaClick(espacioId, fecha, nombreDia, horaInicio, horaFin, franja) {
+    if (franja.tiene_mi_reserva) {
+        // Si tengo una reserva, mostrar opciones
+        mostrarModalMisReservas(espacioId, fecha, nombreDia, horaInicio, horaFin, franja);
+    } else if (franja.completa) {
+        // Si está completa, mostrar información
+        mostrarInfoCompleta(franja);
+    } else if (franja.disponible || franja.parcial) {
+        // Si está disponible o parcial, permitir reservar
+        mostrarModalReserva(espacioId, fecha, nombreDia, horaInicio, horaFin, franja);
     }
 }
 
-function mostrarModalReserva(espacioId, fecha, nombreDia, horaInicio, horaFin) {
+function mostrarInfoCompleta(franja) {
+    let usuarios = franja.reservas.map(r => r.usuario).join(', ');
+    alert(`Esta franja está completa (2/2).\n\nReservada por: ${usuarios}`);
+}
+
+function mostrarModalMisReservas(espacioId, fecha, nombreDia, horaInicio, horaFin, franja) {
+    reservaActual = { espacioId, fecha, horaInicio, horaFin };
+    
+    // Buscar mi reserva
+    let miReserva = franja.reservas.find(r => r.es_mia);
+    
+    let otrasReservas = '';
+    if (franja.num_reservas > 1) {
+        let otros = franja.reservas.filter(r => !r.es_mia).map(r => r.usuario).join(', ');
+        otrasReservas = `<p style="margin-top: 10px;"><strong>Compartida con:</strong> ${otros}</p>`;
+    }
+    
+    let notasHtml = miReserva.notas ? `<p><strong>Notas:</strong> ${miReserva.notas}</p>` : '';
+    
+    document.getElementById('modal-cancelar-info').innerHTML = `
+        <p><strong>Día:</strong> ${nombreDia}</p>
+        <p><strong>Horario:</strong> ${horaInicio} - ${horaFin}</p>
+        <p><strong>Ocupación:</strong> ${franja.num_reservas}/2 reservas</p>
+        ${notasHtml}
+        ${otrasReservas}
+        <p style="color: #ef4444; margin-top: 15px;">¿Deseas cancelar tu reserva?</p>
+    `;
+    
+    // Guardar el ID de la reserva
+    reservaActual.reservaId = miReserva.id;
+    
+    document.getElementById('modalCancelar').style.display = 'block';
+}
+
+function mostrarModalReserva(espacioId, fecha, nombreDia, horaInicio, horaFin, franja) {
     reservaActual = { espacioId, fecha, horaInicio, horaFin };
     
     // Obtener información del usuario seleccionado (si es admin)
@@ -172,29 +267,25 @@ function mostrarModalReserva(espacioId, fecha, nombreDia, horaInicio, horaFin) {
         }
     }
     
+    let estadoFranja = '';
+    if (franja.parcial) {
+        let otroUsuario = franja.reservas[0].usuario;
+        estadoFranja = `<p style="background: #FEF3C7; padding: 10px; border-radius: 5px; border-left: 3px solid #F59E0B;">
+            <strong>⚠️ Atención:</strong> Esta franja ya tiene 1 reserva de <strong>${otroUsuario}</strong>. 
+            Aún queda 1 espacio disponible.
+        </p>`;
+    }
+    
     document.getElementById('modal-info').innerHTML = `
         ${infoUsuario}
         <p><strong>Día:</strong> ${nombreDia}</p>
         <p><strong>Horario:</strong> ${horaInicio} - ${horaFin}</p>
+        <p><strong>Disponibilidad:</strong> ${franja.num_reservas}/2 reservas</p>
+        ${estadoFranja}
     `;
     
     document.getElementById('notas-reserva').value = '';
     document.getElementById('modalReserva').style.display = 'block';
-}
-
-function mostrarModalCancelar(espacioId, fecha, nombreDia, horaInicio, horaFin, reservaId, notas) {
-    reservaActual = { espacioId, fecha, horaInicio, horaFin, reservaId };
-    
-    let notasHtml = notas ? `<p><strong>Notas:</strong> ${notas}</p>` : '';
-    
-    document.getElementById('modal-cancelar-info').innerHTML = `
-        <p><strong>Día:</strong> ${nombreDia}</p>
-        <p><strong>Horario:</strong> ${horaInicio} - ${horaFin}</p>
-        ${notasHtml}
-        <p style="color: #ef4444; margin-top: 15px;">¿Estás seguro de que deseas cancelar esta reserva?</p>
-    `;
-    
-    document.getElementById('modalCancelar').style.display = 'block';
 }
 
 function cerrarModal() {

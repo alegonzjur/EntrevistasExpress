@@ -854,37 +854,67 @@ def obtener_franjas(dia_id):
     fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
     
     franjas = []
-    hora_inicio = 9
-    hora_fin = 20
     
-    for hora in range(hora_inicio, hora_fin):
-        for minuto in [0, 30]:
-            if hora == 19 and minuto == 30:
-                franja_inicio = f"{hora:02d}:30"
-                franja_fin = "20:00"
-            else:
-                franja_inicio = f"{hora:02d}:{minuto:02d}"
-                if minuto == 0:
-                    franja_fin = f"{hora:02d}:30"
-                else:
-                    franja_fin = f"{hora + 1:02d}:00"
-            
-            reserva = Reserva.query.filter_by(
-                espacio_id=dia_id,
-                fecha=fecha,
-                hora_inicio=datetime.strptime(franja_inicio, '%H:%M').time()
-            ).first()
-            
-            franjas.append({
-                'hora_inicio': franja_inicio,
-                'hora_fin': franja_fin,
-                'disponible': reserva is None,
-                'reservada_por': reserva.usuario.username if reserva else None,
-                'reserva_id': reserva.id if reserva else None,
-                'notas': reserva.notas if reserva else None,
-                'es_mia': reserva.usuario_id == session.get('user_id') if reserva else False,
-                'puede_cancelar': (reserva.usuario_id == session.get('user_id') or session.get('rol') == 'admin') if reserva else False
+    # Franjas de mañana: 10:00 - 13:00
+    franjas_manana = [
+        ('10:00', '10:30'),
+        ('10:30', '11:00'),
+        ('11:00', '11:30'),
+        ('11:30', '12:00'),
+        ('12:00', '12:30'),
+        ('12:30', '13:00')
+    ]
+    
+    # Franjas de tarde: 15:00 - 19:00
+    franjas_tarde = [
+        ('15:00', '15:30'),
+        ('15:30', '16:00'),
+        ('16:00', '16:30'),
+        ('16:30', '17:00'),
+        ('17:00', '17:30'),
+        ('17:30', '18:00'),
+        ('18:00', '18:30'),
+        ('18:30', '19:00')
+    ]
+    
+    # Combinar todas las franjas
+    todas_franjas = franjas_manana + franjas_tarde
+    
+    for franja_inicio, franja_fin in todas_franjas:
+        # Obtener TODAS las reservas para esta franja horaria
+        reservas = Reserva.query.filter_by(
+            espacio_id=dia_id,
+            fecha=fecha,
+            hora_inicio=datetime.strptime(franja_inicio, '%H:%M').time()
+        ).all()
+        
+        num_reservas = len(reservas)
+        
+        # Verificar si alguna de las reservas es del usuario actual
+        mis_reservas = [r for r in reservas if r.usuario_id == session.get('user_id')]
+        tiene_mi_reserva = len(mis_reservas) > 0
+        
+        # Obtener información de las reservas
+        reservas_info = []
+        for r in reservas:
+            reservas_info.append({
+                'id': r.id,
+                'usuario': r.usuario.username,
+                'notas': r.notas,
+                'es_mia': r.usuario_id == session.get('user_id')
             })
+        
+        franjas.append({
+            'hora_inicio': franja_inicio,
+            'hora_fin': franja_fin,
+            'num_reservas': num_reservas,
+            'disponible': num_reservas == 0,
+            'parcial': num_reservas == 1,
+            'completa': num_reservas >= 2,
+            'tiene_mi_reserva': tiene_mi_reserva,
+            'reservas': reservas_info,
+            'puede_reservar': num_reservas < 2
+        })
     
     return jsonify(franjas)
 
@@ -907,14 +937,26 @@ def hacer_reserva():
     hora_inicio = datetime.strptime(hora_inicio_str, '%H:%M').time()
     hora_fin = datetime.strptime(hora_fin_str, '%H:%M').time()
     
-    reserva_existente = Reserva.query.filter_by(
+    # ✅ NUEVA VALIDACIÓN: Verificar que no existan más de 2 reservas
+    reservas_existentes = Reserva.query.filter_by(
+        espacio_id=espacio_id,
+        fecha=fecha,
+        hora_inicio=hora_inicio
+    ).all()
+    
+    if len(reservas_existentes) >= 2:
+        return jsonify({'error': 'Esta franja ya tiene el máximo de 2 reservas'}), 400
+    
+    # ✅ Verificar que el usuario no tenga ya una reserva en esta franja
+    reserva_usuario = Reserva.query.filter_by(
+        usuario_id=usuario_id_destino,
         espacio_id=espacio_id,
         fecha=fecha,
         hora_inicio=hora_inicio
     ).first()
     
-    if reserva_existente:
-        return jsonify({'error': 'Esta franja ya está reservada'}), 400
+    if reserva_usuario:
+        return jsonify({'error': 'Ya tienes una reserva en esta franja'}), 400
     
     nueva_reserva = Reserva(
         usuario_id=usuario_id_destino,

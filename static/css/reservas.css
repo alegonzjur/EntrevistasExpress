@@ -153,6 +153,16 @@
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
 }
 
+.leyenda-color.parcial {
+    background: #FCD34D;
+    border: 2px solid #F59E0B;
+}
+
+.leyenda-color.completa {
+    background: #F87171;
+    border: 2px solid #DC2626;
+}
+
 .leyenda-color.disponible {
     background: var(--color-disponible);
     border: 2px solid var(--color-disponible-hover);
@@ -164,8 +174,8 @@
 }
 
 .leyenda-color.mi-reserva {
-    background: var(--color-mi-reserva);
-    border: 2px solid var(--color-mi-reserva-dark);
+    background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+    border: 2px solid #1D4ED8;
 }
 
 /* === CONTENEDOR DE ESPACIOS === */
@@ -234,16 +244,49 @@
     position: relative;
 }
 
+/* Icono de estado en franja */
+.franja-icono {
+    font-size: 16px;
+    display: block;
+    margin-bottom: 2px;
+}
+
 .franja.disponible {
-    background: var(--color-disponible);
+    background: #4ADE80;
     color: var(--color-white);
-    border-color: var(--color-disponible-hover);
+    border-color: #22C55E;
 }
 
 .franja.disponible:hover {
-    background: var(--color-disponible-hover);
+    background: #22C55E;
     transform: translateY(-3px);
     box-shadow: 0 6px 15px rgba(74, 222, 128, 0.4);
+}
+
+.franja.parcial {
+    background: #FCD34D;
+    color: #78350F;
+    border: 2px solid #F59E0B;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.franja.parcial:hover {
+    background: #FBBF24;
+    transform: translateY(-3px);
+    box-shadow: 0 6px 15px rgba(252, 211, 77, 0.5);
+}
+
+.franja.completa {
+    background: #F87171;
+    color: var(--color-white);
+    border: 2px solid #DC2626;
+    cursor: not-allowed;
+    font-weight: 600;
+}
+
+.franja.completa:hover {
+    background: #EF4444;
 }
 
 .franja.ocupada {
@@ -258,16 +301,17 @@
 }
 
 .franja.mi-reserva {
-    background: var(--color-mi-reserva);
+    background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
     color: var(--color-white);
     cursor: pointer;
-    border-color: var(--color-mi-reserva-dark);
+    border: 2px solid #1D4ED8;
+    font-weight: 600;
 }
 
 .franja.mi-reserva:hover {
-    background: var(--color-mi-reserva-dark);
+    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
     transform: translateY(-3px);
-    box-shadow: 0 6px 15px rgba(245, 158, 11, 0.4);
+    box-shadow: 0 6px 15px rgba(59, 130, 246, 0.5);
 }
 
 .franja.mi-reserva::after {
