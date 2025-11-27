@@ -78,6 +78,20 @@
                 </button>
             </div>
         </div>
+        <div class="export-buttons" style="display: flex; gap: 10px; margin: 20px 0;">
+            <a href="{{ url_for('exportar_candidatos', semana=semana, formato='xlsx') }}" 
+            class="btn btn-success">
+                📊 Exportar Excel
+            </a>
+            <a href="{{ url_for('exportar_candidatos', semana=semana, formato='pdf') }}" 
+            class="btn btn-danger">
+                📄 Exportar PDF
+            </a>
+            <a href="{{ url_for('exportar_candidatos', semana=semana, formato='csv') }}" 
+            class="btn btn-secondary">
+                📋 Exportar CSV
+            </a>
+        </div>
         <div class="card-body">
             {% if candidatos %}
             <!-- Filtros -->

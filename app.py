@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -13,6 +13,12 @@ from threading import Thread
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from io import BytesIO
 
 
 
@@ -94,6 +100,7 @@ class Reserva(db.Model):
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     notas = db.Column(db.Text)
     creado_por_admin = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    prioridad = db.Column(db.String(20), default='normal', nullable=False)
 
 
 # ====================================================================
@@ -877,11 +884,9 @@ def obtener_franjas(dia_id):
         ('18:30', '19:00')
     ]
     
-    # Combinar todas las franjas
     todas_franjas = franjas_manana + franjas_tarde
     
     for franja_inicio, franja_fin in todas_franjas:
-        # Obtener TODAS las reservas para esta franja horaria
         reservas = Reserva.query.filter_by(
             espacio_id=dia_id,
             fecha=fecha,
@@ -890,18 +895,21 @@ def obtener_franjas(dia_id):
         
         num_reservas = len(reservas)
         
-        # Verificar si alguna de las reservas es del usuario actual
+        # ✅ NUEVO: Detectar si alguna es secundaria
+        tiene_secundaria = any(r.prioridad == 'secundaria' for r in reservas)
+        solo_secundarias = all(r.prioridad == 'secundaria' for r in reservas) if num_reservas > 0 else False
+        
         mis_reservas = [r for r in reservas if r.usuario_id == session.get('user_id')]
         tiene_mi_reserva = len(mis_reservas) > 0
         
-        # Obtener información de las reservas
         reservas_info = []
         for r in reservas:
             reservas_info.append({
                 'id': r.id,
                 'usuario': r.usuario.username,
                 'notas': r.notas,
-                'es_mia': r.usuario_id == session.get('user_id')
+                'es_mia': r.usuario_id == session.get('user_id'),
+                'prioridad': r.prioridad  # ✅ NUEVO
             })
         
         franjas.append({
@@ -912,6 +920,8 @@ def obtener_franjas(dia_id):
             'parcial': num_reservas == 1,
             'completa': num_reservas >= 2,
             'tiene_mi_reserva': tiene_mi_reserva,
+            'tiene_secundaria': tiene_secundaria,  # ✅ NUEVO
+            'solo_secundarias': solo_secundarias,  # ✅ NUEVO
             'reservas': reservas_info,
             'puede_reservar': num_reservas < 2
         })
@@ -927,6 +937,7 @@ def hacer_reserva():
     hora_inicio_str = data['hora_inicio']
     hora_fin_str = data['hora_fin']
     notas = data.get('notas', '')
+    prioridad = data.get('prioridad', 'normal')  # ✅ NUEVO
     
     usuario_id_destino = data.get('usuario_id', session['user_id'])
     
@@ -937,7 +948,7 @@ def hacer_reserva():
     hora_inicio = datetime.strptime(hora_inicio_str, '%H:%M').time()
     hora_fin = datetime.strptime(hora_fin_str, '%H:%M').time()
     
-    # ✅ NUEVA VALIDACIÓN: Verificar que no existan más de 2 reservas
+    # Verificar que no existan más de 2 reservas
     reservas_existentes = Reserva.query.filter_by(
         espacio_id=espacio_id,
         fecha=fecha,
@@ -947,7 +958,7 @@ def hacer_reserva():
     if len(reservas_existentes) >= 2:
         return jsonify({'error': 'Esta franja ya tiene el máximo de 2 reservas'}), 400
     
-    # ✅ Verificar que el usuario no tenga ya una reserva en esta franja
+    # Verificar que el usuario no tenga ya una reserva en esta franja
     reserva_usuario = Reserva.query.filter_by(
         usuario_id=usuario_id_destino,
         espacio_id=espacio_id,
@@ -965,6 +976,7 @@ def hacer_reserva():
         hora_inicio=hora_inicio,
         hora_fin=hora_fin,
         notas=notas,
+        prioridad=prioridad,  # ✅ NUEVO
         creado_por_admin=session['user_id'] if usuario_id_destino != session['user_id'] else None
     )
     
@@ -975,7 +987,8 @@ def hacer_reserva():
         usuario_destino = Usuario.query.get(usuario_id_destino)
         mensaje = f'Reserva creada correctamente para {usuario_destino.username}'
     else:
-        mensaje = 'Reserva realizada correctamente'
+        prioridad_texto = "secundaria" if prioridad == 'secundaria' else "normal"
+        mensaje = f'Reserva {prioridad_texto} realizada correctamente'
     
     return jsonify({'success': True, 'mensaje': mensaje})
 
@@ -2069,6 +2082,382 @@ def info_reserva(reserva_id):
         'espacios_libres': 2 - len(asignaciones),
         'asignaciones': asignaciones_data
     })
+
+# ====================================================================
+# RUTAS DE EXPORTACIÓN
+# ====================================================================
+
+@app.route('/admin/exportar/candidatos/<semana>/<formato>')
+@admin_required
+def exportar_candidatos(semana, formato):
+    """Exporta candidatos de una semana en diferentes formatos"""
+    
+    candidatos = Candidato.query.filter_by(semana_carga=semana)\
+        .order_by(Candidato.media_estudios.asc())\
+        .all()
+    
+    if formato == 'xlsx':
+        return exportar_candidatos_xlsx(candidatos, semana)
+    elif formato == 'pdf':
+        return exportar_candidatos_pdf(candidatos, semana)
+    elif formato == 'csv':
+        return exportar_candidatos_csv(candidatos, semana)
+    else:
+        return jsonify({'error': 'Formato no soportado'}), 400
+
+
+def exportar_candidatos_xlsx(candidatos, semana):
+    """Exporta candidatos a Excel con formato"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from io import BytesIO
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Candidatos S{semana.split('-W')[1]}"
+    
+    # Estilos
+    header_font = Font(bold=True, color="FFFFFF", size=12)
+    header_fill = PatternFill(start_color="0066B3", end_color="0066B3", fill_type="solid")
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Encabezados
+    headers = ['#', 'Solicitud', 'Apellidos', 'Nombre', 'Email', 'Nota Media', 'Primera Opción', 'Estado', 'Fecha Carga']
+    ws.append(headers)
+    
+    # Aplicar estilos a encabezados
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = border
+    
+    # Datos
+    for idx, candidato in enumerate(candidatos, start=1):
+        row = [
+            idx,
+            candidato.solicitud,
+            candidato.apellidos,
+            candidato.nombre,
+            candidato.email or 'N/A',
+            float(candidato.media_estudios) if candidato.media_estudios else 0,
+            candidato.primera_opcion or '',
+            candidato.estado.upper(),
+            candidato.fecha_carga.strftime('%d/%m/%Y %H:%M')
+        ]
+        ws.append(row)
+        
+        # Colorear según nota
+        nota = float(candidato.media_estudios) if candidato.media_estudios else 0
+        color = "FFC7CE" if nota < 5.5 else "FFEB9C" if nota < 6.5 else "C6EFCE"
+        ws.cell(row=idx+1, column=6).fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+        
+        # Colorear según estado
+        if candidato.estado == 'asignado':
+            ws.cell(row=idx+1, column=8).fill = PatternFill(start_color="D1ECF1", end_color="D1ECF1", fill_type="solid")
+            ws.cell(row=idx+1, column=8).font = Font(bold=True, color="0C5460")
+        elif candidato.estado == 'pendiente':
+            ws.cell(row=idx+1, column=8).fill = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
+            ws.cell(row=idx+1, column=8).font = Font(bold=True, color="856404")
+        
+        # Aplicar bordes
+        for cell in ws[idx+1]:
+            cell.border = border
+            cell.alignment = Alignment(vertical='center')
+    
+    # Ajustar anchos de columna
+    ws.column_dimensions['A'].width = 5
+    ws.column_dimensions['B'].width = 10
+    ws.column_dimensions['C'].width = 20
+    ws.column_dimensions['D'].width = 15
+    ws.column_dimensions['E'].width = 25
+    ws.column_dimensions['F'].width = 12
+    ws.column_dimensions['G'].width = 40
+    ws.column_dimensions['H'].width = 12
+    ws.column_dimensions['I'].width = 18
+    
+    # Guardar en memoria
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'candidatos_semana_{semana.split("-W")[1]}.xlsx'
+    )
+
+
+def exportar_candidatos_csv(candidatos, semana):
+    """Exporta candidatos a CSV"""
+    from io import StringIO
+    import csv
+    
+    output = StringIO()
+    writer = csv.writer(output)
+    
+    # Encabezados
+    writer.writerow(['Solicitud', 'Apellidos', 'Nombre', 'Email', 'Nota Media', 'Primera Opción', 'Estado', 'Fecha Carga'])
+    
+    # Datos
+    for candidato in candidatos:
+        writer.writerow([
+            candidato.solicitud,
+            candidato.apellidos,
+            candidato.nombre,
+            candidato.email or 'N/A',
+            float(candidato.media_estudios) if candidato.media_estudios else 0,
+            candidato.primera_opcion or '',
+            candidato.estado.upper(),
+            candidato.fecha_carga.strftime('%d/%m/%Y %H:%M')
+        ])
+    
+    output.seek(0)
+    
+    return send_file(
+        BytesIO(output.getvalue().encode('utf-8-sig')),  # UTF-8 con BOM para Excel
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f'candidatos_semana_{semana.split("-W")[1]}.csv'
+    )
+
+
+def exportar_candidatos_pdf(candidatos, semana):
+    """Exporta candidatos a PDF"""
+    
+    output = BytesIO()
+    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=1*cm, bottomMargin=1*cm)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Título
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.HexColor('#0066B3'),
+        spaceAfter=30,
+        alignment=1  # Centrado
+    )
+    
+    elements.append(Paragraph(f"Candidatos - Semana {semana.split('-W')[1]}", title_style))
+    elements.append(Spacer(1, 0.5*cm))
+    
+    # Tabla
+    data = [['#', 'Solicitud', 'Apellidos', 'Nombre', 'Email', 'Nota', 'Estado']]
+    
+    for idx, candidato in enumerate(candidatos, start=1):
+        data.append([
+            str(idx),
+            str(candidato.solicitud),
+            candidato.apellidos[:15],
+            candidato.nombre[:12],
+            (candidato.email or 'N/A')[:20],
+            f"{candidato.media_estudios:.2f}" if candidato.media_estudios else 'N/A',
+            candidato.estado.upper()
+        ])
+    
+    table = Table(data, colWidths=[1*cm, 2*cm, 4*cm, 3*cm, 5*cm, 2*cm, 2.5*cm])
+    
+    # Estilos de tabla
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066B3')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+    ]))
+    
+    elements.append(table)
+    
+    # Construir PDF
+    doc.build(elements)
+    output.seek(0)
+    
+    return send_file(
+        output,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'candidatos_semana_{semana.split("-W")[1]}.pdf'
+    )
+
+
+@app.route('/admin/exportar/reservas/<semana>/<formato>')
+@admin_required
+def exportar_reservas_semana(semana, formato):
+    """Exporta reservas de una semana"""
+    
+    # Calcular fechas
+    año, semana_num = semana.split('-W')
+    primer_dia = datetime.strptime(f'{año}-W{semana_num}-1', '%Y-W%W-%w').date()
+    viernes = primer_dia + timedelta(days=4)
+    
+    reservas = Reserva.query\
+        .filter(Reserva.fecha >= primer_dia)\
+        .filter(Reserva.fecha <= viernes)\
+        .order_by(Reserva.fecha, Reserva.hora_inicio)\
+        .all()
+    
+    if formato == 'xlsx':
+        return exportar_reservas_xlsx(reservas, semana)
+    elif formato == 'pdf':
+        return exportar_reservas_pdf(reservas, semana)
+    else:
+        return jsonify({'error': 'Formato no soportado'}), 400
+
+
+def exportar_reservas_xlsx(reservas, semana):
+    """Exporta reservas a Excel"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from io import BytesIO
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Reservas S{semana.split('-W')[1]}"
+    
+    # Estilos
+    header_font = Font(bold=True, color="FFFFFF", size=12)
+    header_fill = PatternFill(start_color="0066B3", end_color="0066B3", fill_type="solid")
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Encabezados
+    headers = ['Fecha', 'Día', 'Hora Inicio', 'Hora Fin', 'Entrevistador', 'Espacio', 'Asignaciones', 'Notas']
+    ws.append(headers)
+    
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = border
+    
+    # Datos
+    for idx, reserva in enumerate(reservas, start=2):
+        asignaciones = Asignacion.query.filter_by(reserva_id=reserva.id).all()
+        num_asignaciones = len(asignaciones)
+        
+        candidatos_nombres = ', '.join([f"{a.candidato.nombre} {a.candidato.apellidos}" for a in asignaciones])
+        
+        row = [
+            reserva.fecha.strftime('%d/%m/%Y'),
+            reserva.fecha.strftime('%A'),
+            reserva.hora_inicio.strftime('%H:%M'),
+            reserva.hora_fin.strftime('%H:%M'),
+            reserva.usuario.username,
+            reserva.espacio.nombre if reserva.espacio else 'N/A',
+            f"{num_asignaciones}/2 - {candidatos_nombres}" if num_asignaciones > 0 else "0/2",
+            reserva.notas or ''
+        ]
+        ws.append(row)
+        
+        # Colorear según ocupación
+        color = "C6EFCE" if num_asignaciones == 0 else "FFEB9C" if num_asignaciones == 1 else "FFC7CE"
+        for col in range(1, 9):
+            cell = ws.cell(row=idx, column=col)
+            cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+            cell.border = border
+            cell.alignment = Alignment(vertical='center')
+    
+    # Ajustar anchos
+    ws.column_dimensions['A'].width = 12
+    ws.column_dimensions['B'].width = 12
+    ws.column_dimensions['C'].width = 10
+    ws.column_dimensions['D'].width = 10
+    ws.column_dimensions['E'].width = 18
+    ws.column_dimensions['F'].width = 15
+    ws.column_dimensions['G'].width = 40
+    ws.column_dimensions['H'].width = 25
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'reservas_semana_{semana.split("-W")[1]}.xlsx'
+    )
+
+
+def exportar_reservas_pdf(reservas, semana):
+    """Exporta reservas a PDF"""
+
+    
+    output = BytesIO()
+    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=1*cm, bottomMargin=1*cm)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.HexColor('#0066B3'),
+        spaceAfter=30,
+        alignment=1
+    )
+    
+    elements.append(Paragraph(f"Calendario de Reservas - Semana {semana.split('-W')[1]}", title_style))
+    elements.append(Spacer(1, 0.5*cm))
+    
+    data = [['Fecha', 'Día', 'Hora', 'Entrevistador', 'Espacio', 'Ocupación']]
+    
+    for reserva in reservas:
+        asignaciones = Asignacion.query.filter_by(reserva_id=reserva.id).count()
+        
+        data.append([
+            reserva.fecha.strftime('%d/%m'),
+            reserva.fecha.strftime('%A')[:3],
+            reserva.hora_inicio.strftime('%H:%M'),
+            reserva.usuario.username[:15],
+            (reserva.espacio.nombre if reserva.espacio else 'N/A')[:12],
+            f"{asignaciones}/2"
+        ])
+    
+    table = Table(data, colWidths=[2.5*cm, 2*cm, 2*cm, 4*cm, 3.5*cm, 2*cm])
+    
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066B3')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+    ]))
+    
+    elements.append(table)
+    doc.build(elements)
+    output.seek(0)
+    
+    return send_file(
+        output,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'reservas_semana_{semana.split("-W")[1]}.pdf'
+    )
 
 # ====================================================================
 # INICIALIZACIÓN

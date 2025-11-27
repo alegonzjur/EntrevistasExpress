@@ -54,6 +54,11 @@
         <div class="leyenda-color completa"></div>
         <span>🔴 Completa (2/2)</span>
     </div>
+    <!-- ✅ NUEVO -->
+    <div class="leyenda-item">
+        <div class="leyenda-color secundaria"></div>
+        <span>🟪 Secundaria (baja prioridad)</span>
+    </div>
     <div class="leyenda-item">
         <div class="leyenda-color mi-reserva"></div>
         <span>⭐ Mis Reservas</span>
@@ -72,6 +77,19 @@
             <span class="close" onclick="cerrarModal()">&times;</span>
         </div>
         <div id="modal-info"></div>
+        
+        <!-- ✅ NUEVO: Selector de prioridad -->
+        <div class="form-group">
+            <label>Prioridad de la reserva:</label>
+            <select id="prioridad-reserva" class="form-select">
+                <option value="normal" selected>🟦 Normal (prioridad alta)</option>
+                <option value="secundaria">🟪 Secundaria (solo si es necesario)</option>
+            </select>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                Las reservas secundarias solo se usan cuando las normales están completas
+            </small>
+        </div>
+        
         <div class="form-group">
             <label>Notas (opcional):</label>
             <textarea id="notas-reserva" placeholder="Añade notas sobre tu reserva..."></textarea>
@@ -120,7 +138,6 @@ async function cargarFranjas() {
             const espacioCard = document.createElement('div');
             espacioCard.className = 'espacio-card';
             
-            // Crear el header
             const header = document.createElement('div');
             header.className = 'espacio-header';
             header.innerHTML = `
@@ -129,7 +146,6 @@ async function cargarFranjas() {
             `;
             espacioCard.appendChild(header);
             
-            // Crear el grid de franjas
             const grid = document.createElement('div');
             grid.className = 'franjas-grid';
             grid.id = `franjas-${espacio.id}`;
@@ -139,11 +155,16 @@ async function cargarFranjas() {
                 let textoEstado = '';
                 let icono = '';
                 
-                // Determinar clase y estado según número de reservas
+                // ✅ NUEVO: Lógica para prioridad secundaria
                 if (franja.tiene_mi_reserva) {
                     claseExtra = 'mi-reserva';
                     textoEstado = '★ Mía';
                     icono = '⭐';
+                } else if (franja.solo_secundarias && franja.num_reservas > 0) {
+                    // Solo tiene reservas secundarias
+                    claseExtra = franja.num_reservas == 1 ? 'secundaria-parcial' : 'secundaria-completa';
+                    textoEstado = franja.num_reservas == 1 ? '🟪 Sec. (1/2)' : '🟪 Sec. (2/2)';
+                    icono = '🟪';
                 } else if (franja.disponible) {
                     claseExtra = 'disponible';
                     textoEstado = '✓ Libre (0/2)';
@@ -166,7 +187,6 @@ async function cargarFranjas() {
                     <span class="franja-estado">${textoEstado}</span>
                 `;
                 
-                // Guardar datos en el elemento
                 franjaDiv.dataset.franjaData = JSON.stringify(franja);
                 franjaDiv.dataset.espacioId = espacio.id;
                 franjaDiv.dataset.fecha = espacio.fecha;
@@ -174,7 +194,6 @@ async function cargarFranjas() {
                 franjaDiv.dataset.horaInicio = franja.hora_inicio;
                 franjaDiv.dataset.horaFin = franja.hora_fin;
                 
-                // Añadir evento click
                 franjaDiv.addEventListener('click', function() {
                     const franjaData = JSON.parse(this.dataset.franjaData);
                     handleFranjaClick(
@@ -302,8 +321,8 @@ async function confirmarReserva() {
     if (!reservaActual) return;
     
     const notas = document.getElementById('notas-reserva').value;
+    const prioridad = document.getElementById('prioridad-reserva').value;  // ✅ NUEVO
     
-    // Obtener el usuario seleccionado (si es admin)
     const usuarioSelector = document.getElementById('usuario-selector');
     const usuarioId = usuarioSelector ? usuarioSelector.value : null;
     
@@ -312,10 +331,10 @@ async function confirmarReserva() {
         fecha: reservaActual.fecha,
         hora_inicio: reservaActual.horaInicio,
         hora_fin: reservaActual.horaFin,
-        notas: notas
+        notas: notas,
+        prioridad: prioridad  // ✅ NUEVO
     };
     
-    // Si es admin y está reservando para otro usuario, incluir el usuario_id
     if (usuarioId) {
         requestBody.usuario_id = parseInt(usuarioId);
     }
