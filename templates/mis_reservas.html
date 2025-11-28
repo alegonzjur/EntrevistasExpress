@@ -1,320 +1,392 @@
 {% extends "base.html" %}
 {% block title %}Mis Reservas{% endblock %}
 
-{% block styles %}
-h2 {
-    color: #0066B3;
-    margin-bottom: 20px;
-}
-.tabs {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 30px;
-    border-bottom: 2px solid #E0E0E0;
-}
-.tab {
-    padding: 15px 30px;
-    background: transparent;
-    border: none;
-    border-bottom: 3px solid transparent;
-    cursor: pointer;
-    font-size: 16px;
-    font-weight: 600;
-    color: #666;
-    transition: all 0.3s;
-}
-.tab.active {
-    color: #0066B3;
-    border-bottom-color: #0066B3;
-}
-.tab:hover {
-    color: #0066B3;
-    background: rgba(0, 102, 179, 0.05);
-}
-.reservas-section {
-    display: none;
-}
-.reservas-section.active {
-    display: block;
-}
-.reservas-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px;
-}
-.reserva-card {
-    background: white;
-    border: 2px solid #E0E0E0;
-    border-radius: 12px;
-    padding: 22px;
-    transition: all 0.3s;
-    position: relative;
-}
-.reserva-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 6px 25px rgba(0, 102, 179, 0.15);
-}
-.reserva-card.futura {
-    border-left: 5px solid #4ade80;
-}
-.reserva-card.pasada {
-    border-left: 5px solid #94a3b8;
-    opacity: 0.85;
-}
-.reserva-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: start;
-    margin-bottom: 15px;
-}
-.reserva-dia {
-    font-size: 19px;
-    font-weight: 700;
-    color: #0066B3;
-}
-.reserva-fecha {
-    font-size: 14px;
-    color: #666;
-    margin-top: 5px;
-    font-weight: 500;
-}
-.reserva-horario {
-    font-size: 26px;
-    font-weight: 700;
-    color: #003D7A;
-    margin: 15px 0;
-}
-.reserva-notas {
-    background: #F5F5F5;
-    padding: 12px;
-    border-radius: 8px;
-    font-size: 14px;
-    color: #666;
-    margin: 12px 0;
-    font-style: italic;
-    border-left: 3px solid #0066B3;
-}
-.reserva-actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 18px;
-}
-.btn-cancelar {
-    flex: 1;
-    padding: 12px;
-    background: #ef4444;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s;
-}
-.btn-cancelar:hover {
-    background: #dc2626;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-}
-.empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    color: #666;
-}
-.empty-state-icon {
-    font-size: 72px;
-    margin-bottom: 20px;
-}
-.empty-state h3 {
-    color: #0066B3;
-    margin-bottom: 10px;
-}
-.btn-volver {
-    padding: 14px 32px;
-    background: #0066B3;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    margin-top: 20px;
-    transition: all 0.3s;
-    font-size: 15px;
-}
-.btn-volver:hover {
-    background: #003D7A;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 102, 179, 0.3);
-}
-.estadisticas {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 20px;
-    margin-bottom: 35px;
-}
-.stat-card {
-    background: linear-gradient(135deg, #0066B3 0%, #003D7A 100%);
-    color: white;
-    padding: 25px;
-    border-radius: 12px;
-    text-align: center;
-    box-shadow: 0 4px 15px rgba(0, 102, 179, 0.25);
-    transition: all 0.3s;
-}
-.stat-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 6px 20px rgba(0, 102, 179, 0.35);
-}
-.stat-number {
-    font-size: 42px;
-    font-weight: 700;
-    margin: 12px 0;
-}
-.stat-label {
-    font-size: 14px;
-    opacity: 0.95;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
+{% block extra_css %}
+<style>
+    .reserva-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+    
+    .reserva-card:hover {
+        box-shadow: 0 4px 12px rgba(0,102,179,0.2);
+        transform: translateY(-2px);
+    }
+    
+    .reserva-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #e0e0e0;
+    }
+    
+    .reserva-fecha {
+        font-size: 18px;
+        font-weight: 600;
+        color: #0066B3;
+    }
+    
+    .reserva-estado {
+        padding: 5px 12px;
+        border-radius: 15px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    
+    .estado-futura {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .estado-pasada {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    
+    .reserva-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 15px;
+    }
+    
+    .info-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        color: #666;
+    }
+    
+    .info-item strong {
+        color: #333;
+    }
+    
+    .enlace-section {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 15px;
+        border-left: 4px solid #0066B3;
+    }
+    
+    .enlace-form {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-top: 10px;
+    }
+    
+    .enlace-form input {
+        flex: 1;
+        padding: 10px;
+        border: 2px solid #e0e0e0;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+    
+    .enlace-form input:focus {
+        outline: none;
+        border-color: #0066B3;
+    }
+    
+    .enlace-actual {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        background: white;
+        border-radius: 6px;
+        margin-top: 10px;
+    }
+    
+    .enlace-actual a {
+        color: #0066B3;
+        text-decoration: none;
+        word-break: break-all;
+        flex: 1;
+    }
+    
+    .enlace-actual a:hover {
+        text-decoration: underline;
+    }
+    
+    .btn-small {
+        padding: 6px 12px;
+        font-size: 13px;
+        border-radius: 5px;
+    }
+    
+    .asignaciones-info {
+        background: #e3f2fd;
+        padding: 12px;
+        border-radius: 6px;
+        margin-top: 10px;
+        border-left: 4px solid #2196F3;
+    }
+    
+    .candidato-mini {
+        padding: 8px;
+        margin: 5px 0;
+        background: white;
+        border-radius: 4px;
+        font-size: 13px;
+    }
+    
+    .section-title {
+        font-size: 24px;
+        color: #0066B3;
+        margin: 30px 0 20px 0;
+        padding-bottom: 10px;
+        border-bottom: 3px solid #0066B3;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 40px;
+        color: #999;
+        font-size: 16px;
+    }
+    
+    .empty-state i {
+        font-size: 48px;
+        margin-bottom: 15px;
+        display: block;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
-<h2>📋 Mis Reservas</h2>
-
-<div class="estadisticas">
-    <div class="stat-card">
-        <div class="stat-label">Total de Reservas</div>
-        <div class="stat-number" id="total-reservas">{{ reservas_futuras|length + reservas_pasadas|length }}</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-label">Reservas Activas</div>
-        <div class="stat-number">{{ reservas_futuras|length }}</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-label">Historial</div>
-        <div class="stat-number">{{ reservas_pasadas|length }}</div>
-    </div>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2>📋 Mis Reservas</h2>
+    <a href="{{ url_for('reservas') }}" class="btn btn-primary">← Volver al Calendario</a>
 </div>
 
-<div class="tabs">
-    <button class="tab active" onclick="cambiarTab('futuras')">Próximas Reservas</button>
-    <button class="tab" onclick="cambiarTab('pasadas')">Historial</button>
-</div>
+<!-- Reservas Futuras -->
+<h3 class="section-title">🔜 Próximas Entrevistas</h3>
 
-<div id="futuras" class="reservas-section active">
-    {% if reservas_futuras %}
-        <div class="reservas-grid">
-            {% for reserva in reservas_futuras %}
-            <div class="reserva-card futura">
-                <div class="reserva-header">
-                    <div>
-                        <div class="reserva-dia">{{ reserva.espacio.nombre }}</div>
-                        <div class="reserva-fecha">{{ reserva.fecha.strftime('%d/%m/%Y') }}</div>
-                    </div>
-                </div>
-                <div class="reserva-horario">
-                    {{ reserva.hora_inicio.strftime('%H:%M') }} - {{ reserva.hora_fin.strftime('%H:%M') }}
-                </div>
-                {% if reserva.notas %}
-                <div class="reserva-notas">
-                    📝 {{ reserva.notas }}
-                </div>
-                {% endif %}
-                <div class="reserva-actions">
-                    <button class="btn-cancelar" onclick="cancelarReserva({{ reserva.id }})">Cancelar Reserva</button>
-                </div>
+{% if reservas_futuras %}
+    {% for reserva in reservas_futuras %}
+    <div class="reserva-card">
+        <div class="reserva-header">
+            <div class="reserva-fecha">
+                📅 {{ reserva.fecha.strftime('%A %d de %B de %Y') }} - {{ reserva.hora_inicio.strftime('%H:%M') }}
             </div>
-            {% endfor %}
+            <span class="reserva-estado estado-futura">✓ Programada</span>
         </div>
-    {% else %}
-        <div class="empty-state">
-            <div class="empty-state-icon">📅</div>
-            <h3>No tienes reservas programadas</h3>
-            <p>¡Empieza a reservar tus franjas horarias!</p>
-            <button class="btn-volver" onclick="window.location.href='{{ url_for('reservas') }}'">Ir a Reservar</button>
+        
+        <div class="reserva-info">
+            <div class="info-item">
+                <strong>🕐 Horario:</strong> {{ reserva.hora_inicio.strftime('%H:%M') }} - {{ reserva.hora_fin.strftime('%H:%M') }}
+            </div>
+            <div class="info-item">
+                <strong>📍 Espacio:</strong> {{ reserva.espacio.nombre if reserva.espacio else 'N/A' }}
+            </div>
+            <div class="info-item">
+                <strong>⚡ Prioridad:</strong> 
+                {% if reserva.prioridad == 'secundaria' %}
+                    <span style="color: #9333EA;">🟪 Secundaria</span>
+                {% else %}
+                    <span style="color: #0066B3;">🟦 Normal</span>
+                {% endif %}
+            </div>
         </div>
-    {% endif %}
-</div>
-
-<div id="pasadas" class="reservas-section">
-    {% if reservas_pasadas %}
-        <div class="reservas-grid">
-            {% for reserva in reservas_pasadas %}
-            <div class="reserva-card pasada">
-                <div class="reserva-header">
-                    <div>
-                        <div class="reserva-dia">{{ reserva.espacio.nombre }}</div>
-                        <div class="reserva-fecha">{{ reserva.fecha.strftime('%d/%m/%Y') }}</div>
-                    </div>
-                </div>
-                <div class="reserva-horario">
-                    {{ reserva.hora_inicio.strftime('%H:%M') }} - {{ reserva.hora_fin.strftime('%H:%M') }}
-                </div>
-                {% if reserva.notas %}
-                <div class="reserva-notas">
-                    📝 {{ reserva.notas }}
-                </div>
+        
+        {% if reserva.notas %}
+        <div class="info-item" style="margin-top: 10px;">
+            <strong>📝 Notas:</strong> {{ reserva.notas }}
+        </div>
+        {% endif %}
+        
+        <!-- Sección de Asignaciones -->
+        {% set asignaciones = reserva.asignaciones %}
+        {% if asignaciones %}
+        <div class="asignaciones-info">
+            <strong style="font-size: 14px;">👥 Candidatos Asignados ({{ asignaciones|length }}/2):</strong>
+            {% for asig in asignaciones %}
+            <div class="candidato-mini">
+                <strong>Pos. {{ asig.posicion }}</strong> - 
+                {{ asig.candidato.nombre }} {{ asig.candidato.apellidos }}
+                (📊 {{ "%.2f"|format(asig.candidato.media_estudios) }})
+                - ⏰ {{ asig.hora_exacta.strftime('%H:%M') if asig.hora_exacta else 'N/A' }}
+                {% if asig.candidato.email %}
+                <br><small>📧 {{ asig.candidato.email }}</small>
                 {% endif %}
             </div>
             {% endfor %}
         </div>
-    {% else %}
-        <div class="empty-state">
-            <div class="empty-state-icon">🕐</div>
-            <h3>No hay historial de reservas</h3>
-            <p>Tus reservas pasadas aparecerán aquí</p>
+        {% else %}
+        <div style="padding: 10px; background: #fff3cd; border-radius: 6px; margin-top: 10px; font-size: 13px;">
+            ⚠️ Aún no hay candidatos asignados a esta reserva
         </div>
+        {% endif %}
+        
+        <!-- ✅ NUEVA SECCIÓN: Enlace de Videollamada -->
+        <div class="enlace-section">
+            <strong style="font-size: 14px; color: #0066B3;">🎥 Enlace de Videollamada</strong>
+            
+        {% if session.user_id %}
+            {% set usuario_actual = namespace() %}
+            {% set usuario_actual.enlace = none %}
+            {% for u in [reserva.usuario] %}
+                {% set usuario_actual.enlace = u.enlace_videollamada_personal %}
+            {% endfor %}
+            
+            {% if usuario_actual.enlace %}
+            <div class="enlace-section" style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-top: 15px; border-left: 4px solid #2196F3;">
+                <strong style="font-size: 14px; color: #0066B3;">🎥 Enlace de Videollamada</strong>
+                <div style="margin-top: 10px;">
+                    <a href="{{ usuario_actual.enlace }}" target="_blank" style="color: #1976D2; text-decoration: none; font-weight: 500;">
+                        {{ usuario_actual.enlace }}
+                    </a>
+                </div>
+                <small style="color: #666; display: block; margin-top: 8px;">
+                    💡 Este es tu enlace personal. 
+                    <a href="{{ url_for('mi_perfil') }}" style="color: #0066B3;">Modificarlo en Mi Perfil</a>
+                </small>
+            </div>
+            {% else %}
+            <div style="padding: 10px; background: #fff3cd; border-radius: 6px; margin-top: 10px; font-size: 13px;">
+                ⚠️ No has configurado tu enlace de videollamada. 
+                <a href="{{ url_for('mi_perfil') }}" style="color: #0066B3; font-weight: 600;">Configurarlo ahora</a>
+            </div>
+            {% endif %}
     {% endif %}
-</div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="empty-state">
+        <i class="fas fa-calendar-times"></i>
+        <p>No tienes reservas futuras programadas</p>
+        <a href="{{ url_for('reservas') }}" class="btn btn-primary" style="margin-top: 15px;">
+            Hacer una Reserva
+        </a>
+    </div>
+{% endif %}
 
-<button class="btn-volver" onclick="window.location.href='{{ url_for('reservas') }}'" style="margin-top: 30px;">
-    ← Volver a Reservar
-</button>
+<!-- Reservas Pasadas -->
+<h3 class="section-title">📜 Historial de Entrevistas</h3>
+
+{% if reservas_pasadas %}
+    {% for reserva in reservas_pasadas %}
+    <div class="reserva-card" style="opacity: 0.8;">
+        <div class="reserva-header">
+            <div class="reserva-fecha">
+                📅 {{ reserva.fecha.strftime('%A %d de %B de %Y') }} - {{ reserva.hora_inicio.strftime('%H:%M') }}
+            </div>
+            <span class="reserva-estado estado-pasada">✓ Completada</span>
+        </div>
+        
+        <div class="reserva-info">
+            <div class="info-item">
+                <strong>🕐 Horario:</strong> {{ reserva.hora_inicio.strftime('%H:%M') }} - {{ reserva.hora_fin.strftime('%H:%M') }}
+            </div>
+            <div class="info-item">
+                <strong>📍 Espacio:</strong> {{ reserva.espacio.nombre if reserva.espacio else 'N/A' }}
+            </div>
+        </div>
+        
+        {% if reserva.enlace_videollamada %}
+        <div class="info-item" style="margin-top: 10px;">
+            <strong>🎥 Enlace usado:</strong> 
+            <a href="{{ reserva.enlace_videollamada }}" target="_blank">{{ reserva.enlace_videollamada }}</a>
+        </div>
+        {% endif %}
+        
+        {% set asignaciones = reserva.asignaciones %}
+        {% if asignaciones %}
+        <div class="asignaciones-info">
+            <strong style="font-size: 14px;">👥 Candidatos Entrevistados ({{ asignaciones|length }}):</strong>
+            {% for asig in asignaciones %}
+            <div class="candidato-mini">
+                {{ asig.candidato.nombre }} {{ asig.candidato.apellidos }}
+                (📊 {{ "%.2f"|format(asig.candidato.media_estudios) }})
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="empty-state">
+        <i class="fas fa-history"></i>
+        <p>No tienes entrevistas completadas aún</p>
+    </div>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-function cambiarTab(tab) {
-    document.querySelectorAll('.reservas-section').forEach(section => {
-        section.classList.remove('active');
-    });
+async function guardarEnlace(reservaId) {
+    const input = document.getElementById(`enlace-${reservaId}`);
+    const enlace = input.value.trim();
     
-    document.querySelectorAll('.tab').forEach(t => {
-        t.classList.remove('active');
-    });
-    
-    document.getElementById(tab).classList.add('active');
-    event.target.classList.add('active');
-}
-
-async function cancelarReserva(reservaId) {
-    if (!confirm('¿Estás seguro de que deseas cancelar esta reserva?')) {
+    if (!enlace) {
+        alert('Por favor, introduce un enlace válido');
         return;
     }
     
     try {
-        const response = await fetch('/api/cancelar', {
+        const response = await fetch('/api/actualizar-enlace', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                reserva_id: reservaId
+                reserva_id: reservaId,
+                enlace: enlace
             })
         });
         
         const data = await response.json();
         
         if (response.ok) {
-            alert('Reserva cancelada correctamente');
-            window.location.reload();
+            alert(data.mensaje);
+            location.reload();
         } else {
             alert('Error: ' + data.error);
         }
     } catch (error) {
-        alert('Error al cancelar la reserva');
+        alert('Error al guardar el enlace');
         console.error(error);
     }
+}
+
+function editarEnlace(reservaId, enlaceActual) {
+    const nuevoEnlace = prompt('Editar enlace de videollamada:', enlaceActual);
+    
+    if (nuevoEnlace === null) return; // Usuario canceló
+    
+    fetch('/api/actualizar-enlace', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            reserva_id: reservaId,
+            enlace: nuevoEnlace.trim()
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.mensaje);
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Error al actualizar el enlace');
+        console.error(error);
+    });
 }
 </script>
 {% endblock %}

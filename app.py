@@ -68,6 +68,7 @@ class Usuario(db.Model):
     rol = db.Column(db.String(20), default='profesor')  # 'admin' o 'profesor'
     activo = db.Column(db.Boolean, default=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    enlace_videollamada_personal = db.Column(db.String(500), nullable=True)
     
     # Relación con reservas (especificando foreign_keys para evitar ambigüedad)
     reservas = db.relationship('Reserva', 
@@ -359,6 +360,25 @@ def generar_email_candidato(asignacion):
     
     subject = f"Confirmación de Entrevista - {candidato.nombre} {candidato.apellidos}"
     
+    # ✅ MODIFICADO: Obtener enlace del entrevistador
+    enlace_videollamada = entrevistador.enlace_videollamada_personal if entrevistador else None
+    
+    seccion_videollamada = ""
+    if enlace_videollamada:
+        seccion_videollamada = f"""
+                                        <p style="margin: 0 0 15px 0; font-size: 16px; color: #333333;">
+                                            <span style="font-size: 20px;">🎥</span> 
+                                            <strong>Enlace de Videollamada:</strong><br>
+                                            <span style="margin-left: 30px;">
+                                                <a href="{enlace_videollamada}" 
+                                                   style="color: #0066B3; text-decoration: none; font-weight: 600;"
+                                                   target="_blank">
+                                                    Unirse a la entrevista virtual
+                                                </a>
+                                            </span>
+                                        </p>
+        """
+    
     html = f"""
 <!DOCTYPE html>
 <html lang="es">
@@ -419,6 +439,8 @@ def generar_email_candidato(asignacion):
                                             <span style="color: #666666; margin-left: 30px;">{reserva.espacio.nombre if reserva.espacio else 'A confirmar'}</span>
                                         </p>
                                         
+                                        {seccion_videollamada}
+                                        
                                         <p style="margin: 0; font-size: 16px; color: #333333;">
                                             <span style="font-size: 20px;">👤</span> 
                                             <strong>Entrevistador:</strong><br>
@@ -434,7 +456,7 @@ def generar_email_candidato(asignacion):
                                     ⚠️ Instrucciones importantes:
                                 </p>
                                 <ul style="margin: 0; padding-left: 20px; color: #856404;">
-                                    <li style="margin: 5px 0;">Por favor, llegue <strong>10 minutos antes</strong> de la hora indicada.</li>
+                                    {"<li style='margin: 5px 0;'>Accede al enlace de videollamada <strong>5 minutos antes</strong> de la hora indicada.</li>" if enlace_videollamada else "<li style='margin: 5px 0;'>Por favor, llegue <strong>10 minutos antes</strong> de la hora indicada.</li>"}
                                     <li style="margin: 5px 0;">Traiga consigo su <strong>DNI o NIE</strong> original.</li>
                                     <li style="margin: 5px 0;">Se recomienda llevar su <strong>expediente académico</strong>.</li>
                                 </ul>
@@ -895,7 +917,6 @@ def obtener_franjas(dia_id):
         
         num_reservas = len(reservas)
         
-        # ✅ NUEVO: Detectar si alguna es secundaria
         tiene_secundaria = any(r.prioridad == 'secundaria' for r in reservas)
         solo_secundarias = all(r.prioridad == 'secundaria' for r in reservas) if num_reservas > 0 else False
         
@@ -909,7 +930,7 @@ def obtener_franjas(dia_id):
                 'usuario': r.usuario.username,
                 'notas': r.notas,
                 'es_mia': r.usuario_id == session.get('user_id'),
-                'prioridad': r.prioridad  # ✅ NUEVO
+                'prioridad': r.prioridad
             })
         
         franjas.append({
@@ -920,8 +941,8 @@ def obtener_franjas(dia_id):
             'parcial': num_reservas == 1,
             'completa': num_reservas >= 2,
             'tiene_mi_reserva': tiene_mi_reserva,
-            'tiene_secundaria': tiene_secundaria,  # ✅ NUEVO
-            'solo_secundarias': solo_secundarias,  # ✅ NUEVO
+            'tiene_secundaria': tiene_secundaria,
+            'solo_secundarias': solo_secundarias,
             'reservas': reservas_info,
             'puede_reservar': num_reservas < 2
         })
@@ -991,6 +1012,70 @@ def hacer_reserva():
         mensaje = f'Reserva {prioridad_texto} realizada correctamente'
     
     return jsonify({'success': True, 'mensaje': mensaje})
+
+@app.route('/api/actualizar-enlace-personal', methods=['POST'])
+@login_required
+def actualizar_enlace_personal():
+    """Actualiza el enlace personal de videollamada del usuario"""
+    
+    try:
+        data = request.json
+        enlace = data.get('enlace', '').strip()
+        
+        # Obtener usuario actual
+        usuario = Usuario.query.get(session['user_id'])
+        if not usuario:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+        
+        # Validar formato de URL
+        if enlace and not (enlace.startswith('http://') or enlace.startswith('https://')):
+            enlace = 'https://' + enlace
+        
+        # Actualizar enlace
+        usuario.enlace_videollamada_personal = enlace if enlace else None
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'mensaje': 'Enlace personal actualizado correctamente',
+            'enlace': usuario.enlace_videollamada_personal
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error al actualizar enlace: {str(e)}'}), 500
+
+
+@app.route('/perfil')
+@login_required
+def mi_perfil():
+    """Página de perfil del usuario"""
+    usuario = Usuario.query.get(session['user_id'])
+    
+    # Estadísticas del usuario
+    total_reservas = Reserva.query.filter_by(usuario_id=session['user_id']).count()
+    
+    hoy = datetime.now().date()
+    reservas_futuras = Reserva.query.filter(
+        Reserva.usuario_id == session['user_id'],
+        Reserva.fecha >= hoy
+    ).count()
+    
+    # Contar asignaciones
+    total_entrevistas = db.session.query(Asignacion)\
+        .join(Reserva)\
+        .filter(Reserva.usuario_id == session['user_id'])\
+        .count()
+    
+    return render_template('perfil.html',
+                         usuario=usuario,
+                         total_reservas=total_reservas,
+                         reservas_futuras=reservas_futuras,
+                         total_entrevistas=total_entrevistas,
+                         username=session['username'],
+                         es_admin=session.get('rol') == 'admin')
 
 @app.route('/api/cancelar', methods=['POST'])
 @login_required
