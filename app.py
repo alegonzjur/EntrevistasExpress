@@ -18,8 +18,10 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
-from io import BytesIO
-
+from io import BytesIO, StringIO
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side    
+import csv
 
 
 app = Flask(__name__)
@@ -105,7 +107,7 @@ class Reserva(db.Model):
 
 
 # ====================================================================
-# NUEVOS MODELOS PARA CANDIDATOS
+# MODELOS PARA CANDIDATOS
 # ====================================================================
 
 class Candidato(db.Model):
@@ -116,6 +118,7 @@ class Candidato(db.Model):
     apellidos = db.Column(db.String(150), nullable=False)
     nombre = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), nullable=True)
+    telefono = db.Column(db.String(20), nullable=True)
     media_estudios = db.Column(db.Numeric(4, 2), nullable=False)
     primera_opcion = db.Column(db.Text)
     estado = db.Column(db.String(20), default='pendiente', nullable=False)
@@ -132,6 +135,10 @@ class Candidato(db.Model):
     @property
     def tiene_email(self):
         return self.email is not None and self.email.strip() != ''
+
+    @property
+    def tiene_telefono(self): 
+        return self.telefono is not None and self.telefono.strip() != ''
     
     def to_dict(self):
         return {
@@ -139,6 +146,7 @@ class Candidato(db.Model):
             'solicitud': self.solicitud,
             'nombre_completo': self.nombre_completo,
             'email': self.email,
+            'telefono': self.telefono,
             'media_estudios': float(self.media_estudios) if self.media_estudios else None,
             'estado': self.estado,
             'primera_opcion': self.primera_opcion
@@ -413,7 +421,10 @@ def generar_email_candidato(asignacion):
                             </p>
                             
                             <p style="font-size: 16px; color: #666666; line-height: 1.6; margin: 0 0 30px 0;">
-                                Le confirmamos su entrevista personal para el proceso de selección:
+                                Como ya le hemos informado por teléfono, para poder valorar su admisión en los estudios de GRADO EN ENFERMERÍA, además de su expediente académico tendrá que realizar una entrevista personal y una prueba de nivel de inglés. De no realizar alguna de estas pruebas su solicitud no podrá ser valorada.
+                            <br>
+                                A continuación le indicamos día, hora y el enlace para realizar la entrevista personal online. La plataforma a través de la cual se realiza es por Comillas Class. Es recomendable que utilice <strong>CHROME</strong> como navegador y lo haga desde un ordenador.
+
                             </p>
                             
                             <!-- Caja de información -->
@@ -431,13 +442,7 @@ def generar_email_candidato(asignacion):
                                             <span style="font-size: 20px;">🕐</span> 
                                             <strong>Hora:</strong><br>
                                             <span style="color: #666666; margin-left: 30px; font-size: 20px; font-weight: 600;">{hora_str}h</span>
-                                        </p>
-                                        
-                                        <p style="margin: 0 0 15px 0; font-size: 16px; color: #333333;">
-                                            <span style="font-size: 20px;">📍</span> 
-                                            <strong>Lugar:</strong><br>
-                                            <span style="color: #666666; margin-left: 30px;">{reserva.espacio.nombre if reserva.espacio else 'A confirmar'}</span>
-                                        </p>
+                                        </p>                                      
                                         
                                         {seccion_videollamada}
                                         
@@ -457,15 +462,14 @@ def generar_email_candidato(asignacion):
                                 </p>
                                 <ul style="margin: 0; padding-left: 20px; color: #856404;">
                                     {"<li style='margin: 5px 0;'>Accede al enlace de videollamada <strong>5 minutos antes</strong> de la hora indicada.</li>" if enlace_videollamada else "<li style='margin: 5px 0;'>Por favor, llegue <strong>10 minutos antes</strong> de la hora indicada.</li>"}
-                                    <li style="margin: 5px 0;">Traiga consigo su <strong>DNI o NIE</strong> original.</li>
-                                    <li style="margin: 5px 0;">Se recomienda llevar su <strong>expediente académico</strong>.</li>
+                                    <li style="margin: 5px 0;">Para realizar la prueba de nivel de inglés online deberá acceder a través del siguiente enlace:  http://www.comillas.edu/ingleseuef indicando su usuario seguido de @alu.comillas.edu (ejemplo: 202300000@alu.comillas.edu).</li>
                                 </ul>
                             </div>
                             
                             <!-- Nota adicional -->
                             <p style="font-size: 14px; color: #999999; line-height: 1.6; margin: 0 0 20px 0;">
-                                Si no puede asistir a la entrevista, por favor responda a este correo 
-                                con la mayor brevedad posible para poder reasignar la cita.
+                                Si no puede asistir a la entrevista, por favor envíe un correo a entrevistas@comillas.edu
+                                o llame al 987654321 con la mayor brevedad posible para poder reasignar la cita.
                             </p>
                             
                             <!-- Firma -->
@@ -475,7 +479,7 @@ def generar_email_candidato(asignacion):
                                 </p>
                                 <p style="margin: 0; font-size: 14px; color: #666666;">
                                     Sistema de Gestión de Entrevistas<br>
-                                    {entrevistador.email if entrevistador and entrevistador.email else 'entrevistas@universidad.edu'}
+                                    {entrevistador.email if entrevistador and entrevistador.email else 'entrevistas@comillas.edu'}
                                 </p>
                             </div>
                             
@@ -555,6 +559,10 @@ def generar_email_entrevistador(entrevistador, asignaciones):
         # Primera fila del día (con rowspan)
         primera_asig = asigs_dia[0]
         hora = primera_asig.hora_exacta.strftime('%H:%M') if primera_asig.hora_exacta else primera_asig.reserva.hora_inicio.strftime('%H:%M')
+
+        candidato = primera_asig.candidato
+        email_candidato = candidato.email or 'No disponible'
+        telefono_candidato = candidato.telefono or 'No disponible'
         
         filas_html += f"""
         <tr style="border-bottom: 1px solid #e0e0e0;">
@@ -563,7 +571,11 @@ def generar_email_entrevistador(entrevistador, asignaciones):
                 <span style="font-size: 12px; color: #666; font-weight: normal;">{fecha_str}</span>
             </td>
             <td style="padding: 15px; font-weight: 600; color: #4472C4;">{hora}</td>
-            <td style="padding: 15px;">{primera_asig.candidato.nombre} {primera_asig.candidato.apellidos}</td>
+            <td style="padding: 15px;">
+                <strong>{candidato.nombre} {candidato.apellidos}</strong><br>
+                <small style="color: #666;">📧 {email_candidato}</small><br>
+                <small style="color: #666;">📞 {telefono_candidato}</small>
+            </td>
             <td style="padding: 15px; text-align: center;">
                 <span style="background-color: {'#ffc7ce' if primera_asig.candidato.media_estudios < 5.5 else '#ffeb9c' if primera_asig.candidato.media_estudios < 6.5 else '#c6efce'}; 
                              padding: 4px 8px; border-radius: 4px; font-weight: 600;">
@@ -579,10 +591,18 @@ def generar_email_entrevistador(entrevistador, asignaciones):
         # Filas adicionales del mismo día
         for asig in asigs_dia[1:]:
             hora = asig.hora_exacta.strftime('%H:%M') if asig.hora_exacta else asig.reserva.hora_inicio.strftime('%H:%M')
+            candidato = asig.candidato
+            email_candidato = candidato.email or 'No disponible'
+            telefono_candidato = candidato.telefono or 'No disponible'
             filas_html += f"""
         <tr style="border-bottom: 1px solid #e0e0e0;">
             <td style="padding: 15px; font-weight: 600; color: #4472C4;">{hora}</td>
             <td style="padding: 15px;">{asig.candidato.nombre} {asig.candidato.apellidos}</td>
+            <td style="padding: 15px;">
+                <strong>{candidato.nombre} {candidato.apellidos}</strong><br>
+                <small style="color: #666;">📧 {email_candidato}</small><br>
+                <small style="color: #666;">📞 {telefono_candidato}</small>
+            </td>
             <td style="padding: 15px; text-align: center;">
                 <span style="background-color: {'#ffc7ce' if asig.candidato.media_estudios < 5.5 else '#ffeb9c' if asig.candidato.media_estudios < 6.5 else '#c6efce'}; 
                              padding: 4px 8px; border-radius: 4px; font-weight: 600;">
@@ -1365,7 +1385,7 @@ def cargar_excel_candidatos():
         df = pd.read_excel(filepath, header=23)  # Fila 24 = índice 23
         
         # Verificar columnas necesarias
-        columnas_necesarias = ['Solicitud', 'Apellidos', 'Nombre', 'Media estudios realizados', 'Primera opción','Email']
+        columnas_necesarias = ['Solicitud', 'Apellidos', 'Nombre', 'Media estudios realizados', 'Primera opción','Email','Telefono']
         columnas_faltantes = [col for col in columnas_necesarias if col not in df.columns]
         
         if columnas_faltantes:
@@ -1380,7 +1400,8 @@ def cargar_excel_candidatos():
             'Nombre': 'nombre',
             'Media estudios realizados': 'media_estudios',
             'Primera opción': 'primera_opcion',
-            'Email': 'email'
+            'Email': 'email',
+            'Telefono': 'telefono'
         }, inplace=True)
         
         # Limpiar datos
@@ -1414,7 +1435,7 @@ def cargar_excel_candidatos():
             }), 400
         
         # Guardar en base de datos
-        for col in ['apellidos', 'nombre', 'primera_opcion', 'archivo_origen']:
+        for col in ['apellidos', 'nombre', 'primera_opcion', 'archivo_origen', 'email', 'telefono']:
             if col in df_filtrado.columns:
                 df_filtrado[col] = df_filtrado[col].apply(
                     lambda x: str(x).encode('utf-8', 'ignore').decode('utf-8') if x is not None and str(x) != 'nan' else x
@@ -2212,7 +2233,7 @@ def exportar_candidatos_xlsx(candidatos, semana):
     )
     
     # Encabezados
-    headers = ['#', 'Solicitud', 'Apellidos', 'Nombre', 'Email', 'Nota Media', 'Primera Opción', 'Estado', 'Fecha Carga']
+    headers = ['#', 'Solicitud', 'Apellidos', 'Nombre', 'Email','Telefono', 'Nota Media', 'Primera Opción', 'Estado', 'Fecha Carga']
     ws.append(headers)
     
     # Aplicar estilos a encabezados
@@ -2230,6 +2251,7 @@ def exportar_candidatos_xlsx(candidatos, semana):
             candidato.apellidos,
             candidato.nombre,
             candidato.email or 'N/A',
+            candidato.telefono or 'N/A',
             float(candidato.media_estudios) if candidato.media_estudios else 0,
             candidato.primera_opcion or '',
             candidato.estado.upper(),
@@ -2261,10 +2283,11 @@ def exportar_candidatos_xlsx(candidatos, semana):
     ws.column_dimensions['C'].width = 20
     ws.column_dimensions['D'].width = 15
     ws.column_dimensions['E'].width = 25
-    ws.column_dimensions['F'].width = 12
-    ws.column_dimensions['G'].width = 40
-    ws.column_dimensions['H'].width = 12
-    ws.column_dimensions['I'].width = 18
+    ws.column_dimensions['F'].width = 15
+    ws.column_dimensions['G'].width = 12
+    ws.column_dimensions['H'].width = 40
+    ws.column_dimensions['I'].width = 12
+    ws.column_dimensions['J'].width = 18
     
     # Guardar en memoria
     output = BytesIO()
@@ -2378,6 +2401,293 @@ def exportar_candidatos_pdf(candidatos, semana):
         download_name=f'candidatos_semana_{semana.split("-W")[1]}.pdf'
     )
 
+# Ruta de exportación de asignaciones.
+# ====================================================================
+# RUTAS DE EXPORTACIÓN DE ASIGNACIONES
+# ====================================================================
+
+@app.route('/admin/exportar/asignaciones/<semana>/<formato>')
+@admin_required
+def exportar_asignaciones(semana, formato):
+    """Exporta asignaciones de una semana en diferentes formatos"""
+    
+    # Obtener asignaciones de la semana
+    asignaciones = db.session.query(Asignacion)\
+        .join(Candidato)\
+        .join(Reserva)\
+        .join(Usuario, Asignacion.entrevistador_id == Usuario.id)\
+        .filter(Candidato.semana_carga == semana)\
+        .order_by(Reserva.fecha, Reserva.hora_inicio, Asignacion.posicion)\
+        .all()
+    
+    if formato == 'xlsx':
+        return exportar_asignaciones_xlsx(asignaciones, semana)
+    elif formato == 'pdf':
+        return exportar_asignaciones_pdf(asignaciones, semana)
+    elif formato == 'csv':
+        return exportar_asignaciones_csv(asignaciones, semana)
+    else:
+        return jsonify({'error': 'Formato no soportado'}), 400
+
+
+def exportar_asignaciones_xlsx(asignaciones, semana):
+    """Exporta asignaciones a Excel con formato"""
+
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Asignaciones S{semana.split('-W')[1]}"
+    
+    # Estilos
+    header_font = Font(bold=True, color="FFFFFF", size=12)
+    header_fill = PatternFill(start_color="0066B3", end_color="0066B3", fill_type="solid")
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Encabezados
+    headers = [
+        '#', 'Fecha', 'Día', 'Hora', 'Candidato', 'Email', 'Teléfono', 
+        'Nota', 'Entrevistador', 'Espacio', 'Pos.', 'Estado', 'Grado Solicitado'
+    ]
+    ws.append(headers)
+    
+    # Aplicar estilos a encabezados
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = border
+    
+    # Traducción de días
+    dias_esp = {
+        0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 
+        3: 'Jueves', 4: 'Viernes', 5: 'Sábado', 6: 'Domingo'
+    }
+    
+    # Datos
+    for idx, asignacion in enumerate(asignaciones, start=1):
+        candidato = asignacion.candidato
+        reserva = asignacion.reserva
+        entrevistador = asignacion.entrevistador
+        
+        dia_semana = dias_esp[reserva.fecha.weekday()]
+        hora_exacta = asignacion.hora_exacta.strftime('%H:%M') if asignacion.hora_exacta else reserva.hora_inicio.strftime('%H:%M')
+        
+        row = [
+            idx,
+            reserva.fecha.strftime('%d/%m/%Y'),
+            dia_semana,
+            hora_exacta,
+            f"{candidato.nombre} {candidato.apellidos}",
+            candidato.email or 'N/A',
+            candidato.telefono or 'N/A',
+            float(candidato.media_estudios) if candidato.media_estudios else 0,
+            entrevistador.username if entrevistador else 'N/A',
+            reserva.espacio.nombre if reserva.espacio else 'N/A',
+            asignacion.posicion,
+            asignacion.estado.upper(),
+            candidato.primera_opcion[:50] if candidato.primera_opcion else ''
+        ]
+        ws.append(row)
+        
+        # Colorear según nota
+        nota = float(candidato.media_estudios) if candidato.media_estudios else 0
+        color_nota = "FFC7CE" if nota < 5.5 else "FFEB9C" if nota < 6.5 else "C6EFCE"
+        ws.cell(row=idx+1, column=8).fill = PatternFill(start_color=color_nota, end_color=color_nota, fill_type="solid")
+        ws.cell(row=idx+1, column=8).font = Font(bold=True)
+        
+        # Colorear según estado
+        if asignacion.estado == 'confirmado':
+            ws.cell(row=idx+1, column=12).fill = PatternFill(start_color="D1ECF1", end_color="D1ECF1", fill_type="solid")
+            ws.cell(row=idx+1, column=12).font = Font(bold=True, color="0C5460")
+        elif asignacion.estado == 'cancelado':
+            ws.cell(row=idx+1, column=12).fill = PatternFill(start_color="F8D7DA", end_color="F8D7DA", fill_type="solid")
+            ws.cell(row=idx+1, column=12).font = Font(bold=True, color="721C24")
+        
+        # Aplicar bordes
+        for cell in ws[idx+1]:
+            cell.border = border
+            cell.alignment = Alignment(vertical='center')
+    
+    # Ajustar anchos de columna
+    ws.column_dimensions['A'].width = 5
+    ws.column_dimensions['B'].width = 12
+    ws.column_dimensions['C'].width = 12
+    ws.column_dimensions['D'].width = 10
+    ws.column_dimensions['E'].width = 25
+    ws.column_dimensions['F'].width = 25
+    ws.column_dimensions['G'].width = 15
+    ws.column_dimensions['H'].width = 10
+    ws.column_dimensions['I'].width = 18
+    ws.column_dimensions['J'].width = 15
+    ws.column_dimensions['K'].width = 6
+    ws.column_dimensions['L'].width = 12
+    ws.column_dimensions['M'].width = 40
+    
+    # Añadir filtros automáticos
+    ws.auto_filter.ref = ws.dimensions
+    
+    # Congelar primera fila
+    ws.freeze_panes = 'A2'
+    
+    # Guardar en memoria
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'asignaciones_semana_{semana.split("-W")[1]}.xlsx'
+    )
+
+
+def exportar_asignaciones_csv(asignaciones, semana):
+    """Exporta asignaciones a CSV"""
+    output = StringIO()
+    writer = csv.writer(output)
+    
+    # Traducción de días
+    dias_esp = {
+        0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 
+        3: 'Jueves', 4: 'Viernes', 5: 'Sábado', 6: 'Domingo'
+    }
+    
+    # Encabezados
+    writer.writerow([
+        'Fecha', 'Día', 'Hora', 'Candidato', 'Email', 'Teléfono', 
+        'Nota', 'Entrevistador', 'Espacio', 'Posición', 'Estado', 'Grado Solicitado'
+    ])
+    
+    # Datos
+    for asignacion in asignaciones:
+        candidato = asignacion.candidato
+        reserva = asignacion.reserva
+        entrevistador = asignacion.entrevistador
+        
+        dia_semana = dias_esp[reserva.fecha.weekday()]
+        hora_exacta = asignacion.hora_exacta.strftime('%H:%M') if asignacion.hora_exacta else reserva.hora_inicio.strftime('%H:%M')
+        
+        writer.writerow([
+            reserva.fecha.strftime('%d/%m/%Y'),
+            dia_semana,
+            hora_exacta,
+            f"{candidato.nombre} {candidato.apellidos}",
+            candidato.email or 'N/A',
+            candidato.telefono or 'N/A',
+            float(candidato.media_estudios) if candidato.media_estudios else 0,
+            entrevistador.username if entrevistador else 'N/A',
+            reserva.espacio.nombre if reserva.espacio else 'N/A',
+            asignacion.posicion,
+            asignacion.estado.upper(),
+            candidato.primera_opcion if candidato.primera_opcion else ''
+        ])
+    
+    output.seek(0)
+    
+    return send_file(
+        BytesIO(output.getvalue().encode('utf-8-sig')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f'asignaciones_semana_{semana.split("-W")[1]}.csv'
+    )
+
+
+def exportar_asignaciones_pdf(asignaciones, semana):
+    """Exporta asignaciones a PDF"""
+    output = BytesIO()
+    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=1*cm, bottomMargin=1*cm)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Título
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.HexColor('#0066B3'),
+        spaceAfter=30,
+        alignment=1
+    )
+    
+    elements.append(Paragraph(f"Asignaciones de Entrevistas - Semana {semana.split('-W')[1]}", title_style))
+    elements.append(Spacer(1, 0.5*cm))
+    
+    # Traducción de días
+    dias_esp = {
+        0: 'Lun', 1: 'Mar', 2: 'Mié', 
+        3: 'Jue', 4: 'Vie', 5: 'Sáb', 6: 'Dom'
+    }
+    
+    # Tabla
+    data = [['Fecha', 'Día', 'Hora', 'Candidato', 'Email', 'Nota', 'Entrevistador', 'Esp.']]
+    
+    for asignacion in asignaciones:
+        candidato = asignacion.candidato
+        reserva = asignacion.reserva
+        entrevistador = asignacion.entrevistador
+        
+        dia_semana = dias_esp[reserva.fecha.weekday()]
+        hora_exacta = asignacion.hora_exacta.strftime('%H:%M') if asignacion.hora_exacta else reserva.hora_inicio.strftime('%H:%M')
+        
+        data.append([
+            reserva.fecha.strftime('%d/%m'),
+            dia_semana,
+            hora_exacta,
+            f"{candidato.nombre[:12]} {candidato.apellidos[:12]}",
+            (candidato.email or 'N/A')[:20],
+            f"{candidato.media_estudios:.2f}" if candidato.media_estudios else 'N/A',
+            (entrevistador.username if entrevistador else 'N/A')[:12],
+            (reserva.espacio.nombre if reserva.espacio else 'N/A')[:8]
+        ])
+    
+    table = Table(data, colWidths=[2*cm, 1.5*cm, 1.5*cm, 4*cm, 4.5*cm, 1.5*cm, 3*cm, 2*cm])
+    
+    # Estilos de tabla
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066B3')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+    ]))
+    
+    elements.append(table)
+    
+    # Resumen
+    elements.append(Spacer(1, 0.8*cm))
+    resumen_style = ParagraphStyle(
+        'Resumen',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.HexColor('#333333')
+    )
+    elements.append(Paragraph(
+        f"<b>Total de asignaciones:</b> {len(asignaciones)} entrevistas programadas", 
+        resumen_style
+    ))
+    
+    # Construir PDF
+    doc.build(elements)
+    output.seek(0)
+    
+    return send_file(
+        output,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'asignaciones_semana_{semana.split("-W")[1]}.pdf'
+    )
 
 @app.route('/admin/exportar/reservas/<semana>/<formato>')
 @admin_required
@@ -2405,9 +2715,6 @@ def exportar_reservas_semana(semana, formato):
 
 def exportar_reservas_xlsx(reservas, semana):
     """Exporta reservas a Excel"""
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from io import BytesIO
     
     wb = Workbook()
     ws = wb.active

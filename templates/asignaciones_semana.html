@@ -90,9 +90,21 @@
                 <button class="btn btn-success me-2" onclick="mostrarModalEnviarEmails()">
                     <i class="fas fa-envelope"></i> Enviar Emails
                 </button>
-                <button class="btn btn-sm btn-outline-primary" onclick="exportarAsignaciones()">
+                <!-- <button class="btn btn-sm btn-outline-primary" onclick="exportarAsignaciones()">
                     <i class="fas fa-download"></i> Exportar
-                </button>
+                </button> -->
+                <a href="{{ url_for('exportar_asignaciones', semana=semana, formato='xlsx') }}" 
+                class="btn btn-success">
+                    📊 Exportar Excel
+                </a>
+                <a href="{{ url_for('exportar_asignaciones', semana=semana, formato='pdf') }}" 
+                class="btn btn-danger">
+                    📄 Exportar PDF
+                </a>
+                <a href="{{ url_for('exportar_asignaciones', semana=semana, formato='csv') }}" 
+                class="btn btn-secondary">
+                    📋 Exportar CSV
+                </a>
                 <button class="btn btn-sm btn-outline-secondary" onclick="imprimirAsignaciones()">
                     <i class="fas fa-print"></i> Imprimir
                 </button>
