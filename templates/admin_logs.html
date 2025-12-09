@@ -1,0 +1,630 @@
+{% extends "base.html" %}
+{% block title %}Logs de Auditoría{% endblock %}
+
+{% block extra_css %}
+<style>
+    .logs-container {
+        background: white;
+        border-radius: 12px;
+        padding: 25px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    
+    .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    
+    .stat-card.error {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+    
+    .stat-card.today {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+    
+    .stat-number {
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+    
+    .stat-label {
+        font-size: 13px;
+        opacity: 0.9;
+    }
+    
+    .filtros-panel {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 25px;
+        border-left: 4px solid #0066B3;
+    }
+    
+    .filtros-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 15px;
+    }
+    
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .filter-group label {
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 5px;
+        color: #333;
+    }
+    
+    .filter-group select,
+    .filter-group input {
+        padding: 8px 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 6px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+    }
+    
+    .filter-group select:focus,
+    .filter-group input:focus {
+        outline: none;
+        border-color: #0066B3;
+        box-shadow: 0 0 0 3px rgba(0, 102, 179, 0.1);
+    }
+    
+    .filter-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+    }
+    
+    .logs-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+    
+    .logs-table thead {
+        background: #0066B3;
+        color: white;
+    }
+    
+    .logs-table th {
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 13px;
+    }
+    
+    .logs-table td {
+        padding: 12px;
+        border-bottom: 1px solid #e0e0e0;
+        font-size: 13px;
+    }
+    
+    .logs-table tbody tr:hover {
+        background: #f8f9fa;
+        cursor: pointer;
+    }
+    
+    .nivel-badge {
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .nivel-info { background: #d1ecf1; color: #0c5460; }
+    .nivel-warning { background: #fff3cd; color: #856404; }
+    .nivel-error { background: #f8d7da; color: #721c24; }
+    .nivel-critical { background: #721c24; color: white; }
+    
+    .accion-badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        display: inline-block;
+    }
+    
+    .accion-crear { background: #d4edda; color: #155724; }
+    .accion-modificar { background: #cce5ff; color: #004085; }
+    .accion-eliminar { background: #f8d7da; color: #721c24; }
+    .accion-asignar { background: #d1ecf1; color: #0c5460; }
+    .accion-login { background: #d4edda; color: #155724; }
+    .accion-logout { background: #e2e3e5; color: #383d41; }
+    .accion-enviar_email { background: #fff3cd; color: #856404; }
+    
+    .pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        margin-top: 25px;
+        padding-top: 20px;
+        border-top: 2px solid #e0e0e0;
+    }
+    
+    .pagination button {
+        padding: 8px 16px;
+        border: 2px solid #0066B3;
+        background: white;
+        color: #0066B3;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .pagination button:hover:not(:disabled) {
+        background: #0066B3;
+        color: white;
+    }
+    
+    .pagination button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    
+    .pagination .page-info {
+        font-weight: 600;
+        color: #333;
+    }
+    
+    .modal-log {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
+    }
+    
+    .modal-log-content {
+        background: white;
+        margin: 5% auto;
+        padding: 0;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 800px;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    }
+    
+    .modal-log-header {
+        background: linear-gradient(135deg, #0066B3 0%, #003D7A 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 12px 12px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .modal-log-body {
+        padding: 25px;
+    }
+    
+    .modal-log-close {
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+        line-height: 1;
+        transition: all 0.3s ease;
+    }
+    
+    .modal-log-close:hover {
+        transform: scale(1.2);
+    }
+    
+    .log-detail-section {
+        margin-bottom: 20px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .log-detail-section:last-child {
+        border-bottom: none;
+    }
+    
+    .log-detail-section h4 {
+        color: #0066B3;
+        margin-bottom: 10px;
+        font-size: 16px;
+    }
+    
+    .log-detail-grid {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 10px;
+        font-size: 14px;
+    }
+    
+    .log-detail-label {
+        font-weight: 600;
+        color: #666;
+    }
+    
+    .log-detail-value {
+        color: #333;
+    }
+    
+    .log-json-viewer {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 6px;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        overflow-x: auto;
+        border: 1px solid #e0e0e0;
+    }
+    
+    .no-results {
+        text-align: center;
+        padding: 40px;
+        color: #999;
+    }
+    
+    .export-btn {
+        padding: 8px 16px;
+        background: #28a745;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .export-btn:hover {
+        background: #218838;
+        transform: translateY(-2px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+    <h2>📜 Logs de Auditoría</h2>
+    <div style="display: flex; gap: 10px;">
+        <button class="export-btn" onclick="exportarLogs()">
+            📥 Exportar Logs
+        </button>
+        <a href="{{ url_for('admin_usuarios') }}" class="btn btn-secondary">← Volver</a>
+    </div>
+</div>
+
+<!-- Estadísticas Rápidas -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number">{{ total_logs }}</div>
+        <div class="stat-label">Total de Registros</div>
+    </div>
+    
+    <div class="stat-card today">
+        <div class="stat-number">{{ logs_hoy }}</div>
+        <div class="stat-label">Registros Hoy</div>
+    </div>
+    
+    <div class="stat-card error">
+        <div class="stat-number">{{ logs_error }}</div>
+        <div class="stat-label">Errores/Críticos</div>
+    </div>
+</div>
+
+<div class="logs-container">
+    <!-- Panel de Filtros -->
+    <div class="filtros-panel">
+        <h3 style="margin: 0 0 15px 0; color: #0066B3;">🔍 Filtros de Búsqueda</h3>
+        
+        <form method="GET" action="{{ url_for('ver_logs') }}">
+            <div class="filtros-grid">
+                <div class="filter-group">
+                    <label>Usuario</label>
+                    <select name="usuario" id="filtro-usuario">
+                        <option value="">Todos los usuarios</option>
+                        {% for usuario in usuarios_disponibles %}
+                        <option value="{{ usuario }}" {% if filtro_usuario == usuario %}selected{% endif %}>
+                            {{ usuario }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label>Acción</label>
+                    <select name="accion" id="filtro-accion">
+                        <option value="">Todas las acciones</option>
+                        {% for accion in acciones_disponibles %}
+                        <option value="{{ accion }}" {% if filtro_accion == accion %}selected{% endif %}>
+                            {{ accion }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label>Entidad</label>
+                    <select name="entidad" id="filtro-entidad">
+                        <option value="">Todas las entidades</option>
+                        {% for entidad in entidades_disponibles %}
+                        <option value="{{ entidad }}" {% if filtro_entidad == entidad %}selected{% endif %}>
+                            {{ entidad }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label>Nivel</label>
+                    <select name="nivel" id="filtro-nivel">
+                        <option value="">Todos los niveles</option>
+                        <option value="info" {% if filtro_nivel == 'info' %}selected{% endif %}>Info</option>
+                        <option value="warning" {% if filtro_nivel == 'warning' %}selected{% endif %}>Warning</option>
+                        <option value="error" {% if filtro_nivel == 'error' %}selected{% endif %}>Error</option>
+                        <option value="critical" {% if filtro_nivel == 'critical' %}selected{% endif %}>Critical</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label>Fecha Desde</label>
+                    <input type="date" name="fecha_desde" value="{{ fecha_desde }}">
+                </div>
+                
+                <div class="filter-group">
+                    <label>Fecha Hasta</label>
+                    <input type="date" name="fecha_hasta" value="{{ fecha_hasta }}">
+                </div>
+            </div>
+            
+            <div class="filter-group" style="margin-top: 15px;">
+                <label>Buscar en descripción</label>
+                <input type="text" name="buscar" placeholder="Buscar..." value="{{ buscar }}" 
+                       style="width: 100%; padding: 10px;">
+            </div>
+            
+            <div class="filter-actions">
+                <button type="submit" class="btn btn-primary">🔍 Aplicar Filtros</button>
+                <a href="{{ url_for('ver_logs') }}" class="btn btn-secondary">🔄 Limpiar Filtros</a>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Tabla de Logs -->
+    {% if logs %}
+    <div style="overflow-x: auto;">
+        <table class="logs-table">
+            <thead>
+                <tr>
+                    <th style="width: 140px;">Fecha/Hora</th>
+                    <th style="width: 100px;">Usuario</th>
+                    <th style="width: 100px;">Acción</th>
+                    <th style="width: 80px;">Entidad</th>
+                    <th>Descripción</th>
+                    <th style="width: 80px;">Nivel</th>
+                    <th style="width: 100px;">IP</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr onclick="verDetalleLog({{ log.id }})">
+                    <td style="font-family: monospace; font-size: 12px;">
+                        {{ log.fecha_hora.strftime('%d/%m/%Y %H:%M:%S') }}
+                    </td>
+                    <td>{{ log.usuario_username or 'Sistema' }}</td>
+                    <td>
+                        <span class="accion-badge accion-{{ log.accion }}">
+                            {{ log.accion }}
+                        </span>
+                    </td>
+                    <td>{{ log.entidad }}</td>
+                    <td style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        {{ log.descripcion }}
+                    </td>
+                    <td>
+                        <span class="nivel-badge nivel-{{ log.nivel }}">
+                            {{ log.nivel }}
+                        </span>
+                    </td>
+                    <td style="font-family: monospace; font-size: 11px;">
+                        {{ log.ip_address or '-' }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Paginación -->
+    <div class="pagination">
+        <button onclick="window.location.href='{{ url_for('ver_logs', pagina=1, usuario=filtro_usuario, accion=filtro_accion, entidad=filtro_entidad, nivel=filtro_nivel, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, buscar=buscar, por_pagina=por_pagina) }}'"
+                {% if paginacion.page == 1 %}disabled{% endif %}>
+            ⏮ Primera
+        </button>
+        
+        <button onclick="window.location.href='{{ url_for('ver_logs', pagina=paginacion.prev_num, usuario=filtro_usuario, accion=filtro_accion, entidad=filtro_entidad, nivel=filtro_nivel, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, buscar=buscar, por_pagina=por_pagina) }}'"
+                {% if not paginacion.has_prev %}disabled{% endif %}>
+            ← Anterior
+        </button>
+        
+        <span class="page-info">
+            Página {{ paginacion.page }} de {{ paginacion.pages }} 
+            ({{ paginacion.total }} registros)
+        </span>
+        
+        <button onclick="window.location.href='{{ url_for('ver_logs', pagina=paginacion.next_num, usuario=filtro_usuario, accion=filtro_accion, entidad=filtro_entidad, nivel=filtro_nivel, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, buscar=buscar, por_pagina=por_pagina) }}'"
+                {% if not paginacion.has_next %}disabled{% endif %}>
+            Siguiente →
+        </button>
+        
+        <button onclick="window.location.href='{{ url_for('ver_logs', pagina=paginacion.pages, usuario=filtro_usuario, accion=filtro_accion, entidad=filtro_entidad, nivel=filtro_nivel, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, buscar=buscar, por_pagina=por_pagina) }}'"
+                {% if paginacion.page == paginacion.pages %}disabled{% endif %}>
+            Última ⏭
+        </button>
+    </div>
+    
+    {% else %}
+    <div class="no-results">
+        <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 15px; display: block; color: #ccc;"></i>
+        <p style="font-size: 18px; font-weight: 600;">No se encontraron logs</p>
+        <p style="color: #999;">Intenta ajustar los filtros de búsqueda</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal de Detalle de Log -->
+<div id="modalLog" class="modal-log">
+    <div class="modal-log-content">
+        <div class="modal-log-header">
+            <h3 style="margin: 0;">📋 Detalle del Log</h3>
+            <span class="modal-log-close" onclick="cerrarModalLog()">&times;</span>
+        </div>
+        <div class="modal-log-body" id="modal-log-body">
+            <div style="text-align: center; padding: 40px;">
+                <div class="spinner-border" role="status">
+                    <span class="sr-only">Cargando...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function verDetalleLog(logId) {
+    const modal = document.getElementById('modalLog');
+    const body = document.getElementById('modal-log-body');
+    
+    modal.style.display = 'block';
+    body.innerHTML = '<div style="text-align: center; padding: 40px;">Cargando...</div>';
+    
+    fetch(`/admin/logs/${logId}/detalle`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                body.innerHTML = `<div style="color: red; text-align: center; padding: 40px;">${data.error}</div>`;
+                return;
+            }
+            
+            let html = `
+                <div class="log-detail-section">
+                    <h4>Información General</h4>
+                    <div class="log-detail-grid">
+                        <span class="log-detail-label">ID:</span>
+                        <span class="log-detail-value">#${data.id}</span>
+                        
+                        <span class="log-detail-label">Fecha/Hora:</span>
+                        <span class="log-detail-value">${data.fecha_hora}</span>
+                        
+                        <span class="log-detail-label">Usuario:</span>
+                        <span class="log-detail-value">${data.usuario || 'Sistema'}</span>
+                        
+                        <span class="log-detail-label">Acción:</span>
+                        <span class="log-detail-value">
+                            <span class="accion-badge accion-${data.accion}">${data.accion}</span>
+                        </span>
+                        
+                        <span class="log-detail-label">Entidad:</span>
+                        <span class="log-detail-value">${data.entidad} ${data.entidad_id ? `(ID: ${data.entidad_id})` : ''}</span>
+                        
+                        <span class="log-detail-label">Nivel:</span>
+                        <span class="log-detail-value">
+                            <span class="nivel-badge nivel-${data.nivel}">${data.nivel}</span>
+                        </span>
+                        
+                        <span class="log-detail-label">IP:</span>
+                        <span class="log-detail-value">${data.ip_address || 'N/A'}</span>
+                    </div>
+                </div>
+                
+                <div class="log-detail-section">
+                    <h4>Descripción</h4>
+                    <p style="margin: 0; line-height: 1.6; color: #333;">${data.descripcion}</p>
+                </div>
+            `;
+            
+            if (data.datos_anteriores) {
+                html += `
+                    <div class="log-detail-section">
+                        <h4>Datos Anteriores</h4>
+                        <div class="log-json-viewer">${JSON.stringify(JSON.parse(data.datos_anteriores), null, 2)}</div>
+                    </div>
+                `;
+            }
+            
+            if (data.datos_nuevos) {
+                html += `
+                    <div class="log-detail-section">
+                        <h4>Datos Nuevos</h4>
+                        <div class="log-json-viewer">${JSON.stringify(JSON.parse(data.datos_nuevos), null, 2)}</div>
+                    </div>
+                `;
+            }
+            
+            if (data.metadata) {
+                html += `
+                    <div class="log-detail-section">
+                        <h4>Metadata</h4>
+                        <div class="log-json-viewer">${JSON.stringify(JSON.parse(data.metadata), null, 2)}</div>
+                    </div>
+                `;
+            }
+            
+            if (data.user_agent) {
+                html += `
+                    <div class="log-detail-section">
+                        <h4>User Agent</h4>
+                        <p style="font-family: monospace; font-size: 12px; word-break: break-all; color: #666;">${data.user_agent}</p>
+                    </div>
+                `;
+            }
+            
+            body.innerHTML = html;
+        })
+        .catch(error => {
+            body.innerHTML = `<div style="color: red; text-align: center; padding: 40px;">Error al cargar el detalle: ${error}</div>`;
+        });
+}
+
+function cerrarModalLog() {
+    document.getElementById('modalLog').style.display = 'none';
+}
+
+window.onclick = function(event) {
+    const modal = document.getElementById('modalLog');
+    if (event.target == modal) {
+        cerrarModalLog();
+    }
+}
+
+function exportarLogs() {
+    // Obtener parámetros actuales
+    const params = new URLSearchParams(window.location.search);
+    const url = `/admin/logs/exportar?${params.toString()}`;
+    window.location.href = url;
+}
+</script>
+{% endblock %}

@@ -22,6 +22,7 @@ from io import BytesIO, StringIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side    
 import csv
+import json
 
 
 app = Flask(__name__)
@@ -221,7 +222,41 @@ class CargaExcel(db.Model):
     
     cargado_por = db.relationship('Usuario', backref='cargas_excel')
 
+# ====================================================================
+# MODELO DE LOGS Y AUDITORÍA
+# ====================================================================
 
+class LogActividad(db.Model):
+    __tablename__ = 'logs_actividad'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    fecha_hora = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    usuario_username = db.Column(db.String(80), nullable=True)  
+    accion = db.Column(db.String(50), nullable=False, index=True)  
+    entidad = db.Column(db.String(50), nullable=False, index=True)  
+    entidad_id = db.Column(db.Integer, nullable=True)
+    descripcion = db.Column(db.Text, nullable=False)
+    datos_anteriores = db.Column(db.Text, nullable=True)  
+    datos_nuevos = db.Column(db.Text, nullable=True)  
+    ip_address = db.Column(db.String(50), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    nivel = db.Column(db.String(20), default='info', nullable=False)  
+    metadata_extra = db.Column(db.Text, nullable=True) 
+    
+    usuario = db.relationship('Usuario', backref='logs_actividad', foreign_keys=[usuario_id])
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'fecha_hora': self.fecha_hora.strftime('%d/%m/%Y %H:%M:%S'),
+            'usuario': self.usuario_username,
+            'accion': self.accion,
+            'entidad': self.entidad,
+            'entidad_id': self.entidad_id,
+            'descripcion': self.descripcion,
+            'nivel': self.nivel
+        }
 
 # ====================================================================
 # FUNCIONES AUXILIARES PARA CARGA Y ASIGNACIÓN
@@ -743,6 +778,94 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# ====================================================================
+# FUNCIONES DE LOGGING
+# ====================================================================
+
+def registrar_log(accion, entidad, entidad_id, descripcion, datos_anteriores=None, datos_nuevos=None, nivel='info', metadata=None):
+    """
+    Registra una acción en el log de auditoría
+    
+    Args:
+        accion: 'crear', 'modificar', 'eliminar', 'asignar', 'enviar_email', etc.
+        entidad: 'reserva', 'candidato', 'asignacion', 'usuario', etc.
+        entidad_id: ID del objeto afectado
+        descripcion: Descripción legible de la acción
+        datos_anteriores: Dict con datos antes del cambio (se convierte a JSON)
+        datos_nuevos: Dict con datos después del cambio (se convierte a JSON)
+        nivel: 'info', 'warning', 'error', 'critical'
+        metadata: Dict con información adicional
+    """
+    try:
+        
+        
+        # Obtener usuario actual
+        usuario_id = session.get('user_id')
+        usuario_username = session.get('username', 'Sistema')
+        
+        # Obtener IP y User Agent
+        ip_address = request.remote_addr if request else None
+        user_agent = request.headers.get('User-Agent', '')[:255] if request else None
+        
+        # Convertir dicts a JSON
+        datos_anteriores_json = json.dumps(datos_anteriores, default=str) if datos_anteriores else None
+        datos_nuevos_json = json.dumps(datos_nuevos, default=str) if datos_nuevos else None
+        metadata_json = json.dumps(metadata, default=str) if metadata else None
+        
+        log = LogActividad(
+            fecha_hora=datetime.utcnow(),
+            usuario_id=usuario_id,
+            usuario_username=usuario_username,
+            accion=accion,
+            entidad=entidad,
+            entidad_id=entidad_id,
+            descripcion=descripcion,
+            datos_anteriores=datos_anteriores_json,
+            datos_nuevos=datos_nuevos_json,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            nivel=nivel,
+            metadata_extra=metadata_json
+        )
+        
+        db.session.add(log)
+        db.session.commit()
+        
+    except Exception as e:
+        print(f"Error al registrar log: {e}")
+        # No fallar la operación principal si falla el log
+        db.session.rollback()
+
+
+def obtener_cambios(obj_anterior, obj_nuevo, campos):
+    """
+    Compara dos objetos y devuelve un dict con los cambios
+    
+    Args:
+        obj_anterior: Objeto antes del cambio
+        obj_nuevo: Objeto después del cambio
+        campos: Lista de nombres de campos a comparar
+    
+    Returns:
+        Tuple (datos_anteriores, datos_nuevos) con solo los campos que cambiaron
+    """
+    datos_anteriores = {}
+    datos_nuevos = {}
+    
+    for campo in campos:
+        valor_anterior = getattr(obj_anterior, campo, None)
+        valor_nuevo = getattr(obj_nuevo, campo, None)
+        
+        # Convertir a string para comparación
+        valor_anterior_str = str(valor_anterior) if valor_anterior is not None else None
+        valor_nuevo_str = str(valor_nuevo) if valor_nuevo is not None else None
+        
+        if valor_anterior_str != valor_nuevo_str:
+            datos_anteriores[campo] = valor_anterior_str
+            datos_nuevos[campo] = valor_nuevo_str
+    
+    return datos_anteriores if datos_anteriores else None, datos_nuevos if datos_nuevos else None
+
 
 # ====================================================================
 # RUTAS PRINCIPALES
@@ -769,9 +892,24 @@ def login():
             session['user_id'] = usuario.id
             session['username'] = usuario.username
             session['rol'] = usuario.rol
+            registrar_log(
+                accion='login',
+                entidad='usuario',
+                entidad_id=usuario.id,
+                descripcion=f'Usuario {usuario.username} inició sesión',
+                nivel='info'
+            )
+
             flash(f'¡Bienvenido, {usuario.username}!', 'success')
             return redirect(url_for('reservas'))
         else:
+            registrar_log(
+                accion='login_fallido',
+                entidad='usuario',
+                entidad_id=None,
+                descripcion=f'Intento de login fallido para usuario: {username}',
+                nivel='warning'
+            )
             if usuario and not usuario.activo:
                 error = 'Tu cuenta ha sido desactivada. Contacta con el administrador.'
             else:
@@ -815,6 +953,14 @@ def registro():
 
 @app.route('/logout')
 def logout():
+    username = session.get('username', 'Desconocido')
+    registrar_log(
+        accion='logout',
+        entidad='usuario',
+        entidad_id=session.get('user_id'),
+        descripcion=f'Usuario {username} cerró sesión',
+        nivel='info'
+    )
     session.clear()
     flash('Has cerrado sesión correctamente', 'success')
     return redirect(url_for('login'))
@@ -991,12 +1137,32 @@ def hacer_reserva():
         hora_inicio=hora_inicio,
         hora_fin=hora_fin,
         notas=notas,
-        prioridad=prioridad,  # ✅ NUEVO
+        prioridad=prioridad,
         creado_por_admin=session['user_id'] if usuario_id_destino != session['user_id'] else None
     )
     
     db.session.add(nueva_reserva)
     db.session.commit()
+
+    # ✅ NUEVO: Registrar creación de reserva
+    usuario_destino = Usuario.query.get(usuario_id_destino)
+    espacio = Espacio.query.get(espacio_id)
+    
+    registrar_log(
+        accion='crear',
+        entidad='reserva',
+        entidad_id=nueva_reserva.id,
+        descripcion=f'Reserva creada: {usuario_destino.username} - {espacio.nombre if espacio else "N/A"} - {fecha_str} {hora_inicio_str}',
+        datos_nuevos={
+            'usuario': usuario_destino.username,
+            'fecha': fecha_str,
+            'hora_inicio': hora_inicio_str,
+            'hora_fin': hora_fin_str,
+            'prioridad': prioridad,
+            'notas': notas
+        },
+        nivel='info'
+    )
     
     if usuario_id_destino != session['user_id']:
         usuario_destino = Usuario.query.get(usuario_id_destino)
@@ -1098,7 +1264,24 @@ def cancelar_reserva():
     
     if reserva.usuario_id != session['user_id'] and session.get('rol') != 'admin':
         return jsonify({'error': 'No tienes permiso para cancelar esta reserva'}), 403
+    datos_reserva = {
+        'id': reserva.id,
+        'usuario': reserva.usuario.username,
+        'fecha': reserva.fecha.strftime('%d/%m/%Y'),
+        'hora_inicio': reserva.hora_inicio.strftime('%H:%M'),
+        'prioridad': reserva.prioridad,
+        'espacio': reserva.espacio.nombre if reserva.espacio else 'N/A'
+    }
     
+    registrar_log(
+        accion='eliminar',
+        entidad='reserva',
+        entidad_id=reserva.id,
+        descripcion=f'Reserva cancelada: {datos_reserva["usuario"]} - {datos_reserva["espacio"]} - {datos_reserva["fecha"]} {datos_reserva["hora_inicio"]}',
+        datos_anteriores=datos_reserva,
+        nivel='info'
+    )
+
     db.session.delete(reserva)
     db.session.commit()
     
@@ -1756,6 +1939,15 @@ def enviar_emails_semana(semana):
                     asignacion.fecha_envio_email = datetime.now()
                     
                     resultados['candidatos_enviados'] += 1
+
+                    registrar_log(
+                        accion='enviar_email',
+                        entidad='candidato',
+                        entidad_id=asignacion.candidato.id,
+                        descripcion=f'Email enviado a: {asignacion.candidato.nombre} {asignacion.candidato.apellidos} ({asignacion.candidato.email})',
+                        nivel='info',
+                        metadata={'tipo': 'confirmacion_entrevista', 'asignacion_id': asignacion.id}
+                    )
                     
                 except Exception as e:
                     resultados['candidatos_error'] += 1
@@ -1763,6 +1955,13 @@ def enviar_emails_semana(semana):
                         'candidato': f"{asignacion.candidato.nombre} {asignacion.candidato.apellidos}",
                         'error': str(e)
                     })
+                    registrar_log(
+                        accion='enviar_email',
+                        entidad='candidato',
+                        entidad_id=asignacion.candidato.id,
+                        descripcion=f'Error al enviar email a: {asignacion.candidato.email} - {str(e)}',
+                        nivel='error'
+                    )
                     print(f"Error enviando a {asignacion.candidato.email}: {e}")
         
         # ===== ENVÍO A ENTREVISTADORES =====
@@ -1814,6 +2013,16 @@ def enviar_emails_semana(semana):
         
         # Guardar cambios en BD
         db.session.commit()
+
+        registrar_log(
+            accion='enviar_email_masivo',
+            entidad='sistema',
+            entidad_id=None,
+            descripcion=f'Envío masivo completado: {resultados["candidatos_enviados"]} candidatos, {resultados["entrevistadores_enviados"]} entrevistadores',
+            datos_nuevos=resultados,
+            nivel='info',
+            metadata={'semana': semana, 'tipo': tipo}
+        )
         
         # Preparar respuesta
         return jsonify({
@@ -1829,6 +2038,14 @@ def enviar_emails_semana(semana):
         
     except Exception as e:
         db.session.rollback()
+        registrar_log(
+            accion='enviar_email_masivo',
+            entidad='sistema',
+            entidad_id=None,
+            descripcion=f'Error en envío masivo: {str(e)}',
+            nivel='error',
+            metadata={'semana': semana}
+        )
         import traceback
         traceback.print_exc()
         return jsonify({
@@ -2015,6 +2232,23 @@ def asignar_candidato_manual():
         
         db.session.commit()
         
+        registrar_log(
+            accion='asignar',
+            entidad='asignacion',
+            entidad_id=asignacion.id,
+            descripcion=f'Asignación manual: {candidato.nombre} {candidato.apellidos} → {reserva.fecha.strftime("%d/%m/%Y")} {reserva.hora_inicio.strftime("%H:%M")}',
+            datos_nuevos={
+                'candidato': f"{candidato.nombre} {candidato.apellidos}",
+                'candidato_nota': float(candidato.media_estudios) if candidato.media_estudios else None,
+                'fecha': reserva.fecha.strftime('%d/%m/%Y'),
+                'hora': asignacion.hora_exacta.strftime('%H:%M') if asignacion.hora_exacta else None,
+                'entrevistador': reserva.usuario.username,
+                'posicion': posicion
+            },
+            nivel='info',
+            metadata={'tipo': 'manual'}
+        )
+
         return jsonify({
             'success': True,
             'mensaje': f'Candidato {candidato.nombre} {candidato.apellidos} asignado correctamente',
@@ -2024,6 +2258,14 @@ def asignar_candidato_manual():
         
     except Exception as e:
         db.session.rollback()
+
+        registrar_log(
+            accion='asignar',
+            entidad='asignacion',
+            entidad_id=None,
+            descripcion=f'Error al asignar candidato: {str(e)}',
+            nivel='error'
+        )
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Error al asignar candidato: {str(e)}'}), 500
@@ -2823,6 +3065,255 @@ def exportar_reservas_pdf(reservas, semana):
         mimetype='application/pdf',
         as_attachment=True,
         download_name=f'reservas_semana_{semana.split("-W")[1]}.pdf'
+    )
+
+# ====================================================================
+# RUTAS DE LOGS DE AUDITORÍA
+# ====================================================================
+
+@app.route('/admin/logs')
+@admin_required
+def ver_logs():
+    """Vista de logs de auditoría"""
+    
+    # Parámetros de filtro
+    pagina = request.args.get('pagina', 1, type=int)
+    por_pagina = request.args.get('por_pagina', 50, type=int)
+    
+    filtro_usuario = request.args.get('usuario', '')
+    filtro_accion = request.args.get('accion', '')
+    filtro_entidad = request.args.get('entidad', '')
+    filtro_nivel = request.args.get('nivel', '')
+    fecha_desde = request.args.get('fecha_desde', '')
+    fecha_hasta = request.args.get('fecha_hasta', '')
+    buscar = request.args.get('buscar', '')
+    
+    # Query base
+    query = LogActividad.query
+    
+    # Aplicar filtros
+    if filtro_usuario:
+        query = query.filter(LogActividad.usuario_username.ilike(f'%{filtro_usuario}%'))
+    
+    if filtro_accion:
+        query = query.filter(LogActividad.accion == filtro_accion)
+    
+    if filtro_entidad:
+        query = query.filter(LogActividad.entidad == filtro_entidad)
+    
+    if filtro_nivel:
+        query = query.filter(LogActividad.nivel == filtro_nivel)
+    
+    if fecha_desde:
+        fecha_desde_obj = datetime.strptime(fecha_desde, '%Y-%m-%d')
+        query = query.filter(LogActividad.fecha_hora >= fecha_desde_obj)
+    
+    if fecha_hasta:
+        fecha_hasta_obj = datetime.strptime(fecha_hasta, '%Y-%m-%d')
+        fecha_hasta_obj = fecha_hasta_obj.replace(hour=23, minute=59, second=59)
+        query = query.filter(LogActividad.fecha_hora <= fecha_hasta_obj)
+    
+    if buscar:
+        query = query.filter(LogActividad.descripcion.ilike(f'%{buscar}%'))
+    
+    # Ordenar por fecha descendente
+    query = query.order_by(LogActividad.fecha_hora.desc())
+    
+    # Paginación
+    paginacion = query.paginate(page=pagina, per_page=por_pagina, error_out=False)
+    logs = paginacion.items
+    
+    # Obtener valores únicos para filtros
+    acciones_disponibles = db.session.query(LogActividad.accion)\
+        .distinct()\
+        .order_by(LogActividad.accion)\
+        .all()
+    acciones_disponibles = [a[0] for a in acciones_disponibles]
+    
+    entidades_disponibles = db.session.query(LogActividad.entidad)\
+        .distinct()\
+        .order_by(LogActividad.entidad)\
+        .all()
+    entidades_disponibles = [e[0] for e in entidades_disponibles]
+    
+    usuarios_disponibles = db.session.query(LogActividad.usuario_username)\
+        .distinct()\
+        .filter(LogActividad.usuario_username.isnot(None))\
+        .order_by(LogActividad.usuario_username)\
+        .all()
+    usuarios_disponibles = [u[0] for u in usuarios_disponibles]
+    
+    # Estadísticas rápidas
+    total_logs = LogActividad.query.count()
+    logs_hoy = LogActividad.query.filter(
+        LogActividad.fecha_hora >= datetime.now().replace(hour=0, minute=0, second=0)
+    ).count()
+    logs_error = LogActividad.query.filter(LogActividad.nivel.in_(['error', 'critical'])).count()
+    
+    return render_template('admin_logs.html',
+                         logs=logs,
+                         paginacion=paginacion,
+                         acciones_disponibles=acciones_disponibles,
+                         entidades_disponibles=entidades_disponibles,
+                         usuarios_disponibles=usuarios_disponibles,
+                         total_logs=total_logs,
+                         logs_hoy=logs_hoy,
+                         logs_error=logs_error,
+                         filtro_usuario=filtro_usuario,
+                         filtro_accion=filtro_accion,
+                         filtro_entidad=filtro_entidad,
+                         filtro_nivel=filtro_nivel,
+                         fecha_desde=fecha_desde,
+                         fecha_hasta=fecha_hasta,
+                         buscar=buscar,
+                         por_pagina=por_pagina,
+                         username=session['username'])
+
+@app.route('/admin/logs/<int:log_id>/detalle')
+@admin_required
+def detalle_log(log_id):
+    """Obtiene el detalle completo de un log"""
+    
+    log = LogActividad.query.get_or_404(log_id)
+    
+    return jsonify({
+        'id': log.id,
+        'fecha_hora': log.fecha_hora.strftime('%d/%m/%Y %H:%M:%S'),
+        'usuario': log.usuario_username,
+        'accion': log.accion,
+        'entidad': log.entidad,
+        'entidad_id': log.entidad_id,
+        'descripcion': log.descripcion,
+        'datos_anteriores': log.datos_anteriores,
+        'datos_nuevos': log.datos_nuevos,
+        'ip_address': log.ip_address,
+        'user_agent': log.user_agent,
+        'nivel': log.nivel,
+        'metadata': log.metadata_extra
+    })
+
+
+@app.route('/admin/logs/exportar')
+@admin_required
+def exportar_logs():
+    """Exporta logs filtrados a Excel"""
+    
+    # Aplicar los mismos filtros que en la vista
+    filtro_usuario = request.args.get('usuario', '')
+    filtro_accion = request.args.get('accion', '')
+    filtro_entidad = request.args.get('entidad', '')
+    filtro_nivel = request.args.get('nivel', '')
+    fecha_desde = request.args.get('fecha_desde', '')
+    fecha_hasta = request.args.get('fecha_hasta', '')
+    buscar = request.args.get('buscar', '')
+    
+    query = LogActividad.query
+    
+    if filtro_usuario:
+        query = query.filter(LogActividad.usuario_username.ilike(f'%{filtro_usuario}%'))
+    
+    if filtro_accion:
+        query = query.filter(LogActividad.accion == filtro_accion)
+    
+    if filtro_entidad:
+        query = query.filter(LogActividad.entidad == filtro_entidad)
+    
+    if filtro_nivel:
+        query = query.filter(LogActividad.nivel == filtro_nivel)
+    
+    if fecha_desde:
+        fecha_desde_obj = datetime.strptime(fecha_desde, '%Y-%m-%d')
+        query = query.filter(LogActividad.fecha_hora >= fecha_desde_obj)
+    
+    if fecha_hasta:
+        fecha_hasta_obj = datetime.strptime(fecha_hasta, '%Y-%m-%d')
+        fecha_hasta_obj = fecha_hasta_obj.replace(hour=23, minute=59, second=59)
+        query = query.filter(LogActividad.fecha_hora <= fecha_hasta_obj)
+    
+    if buscar:
+        query = query.filter(LogActividad.descripcion.ilike(f'%{buscar}%'))
+    
+    logs = query.order_by(LogActividad.fecha_hora.desc()).limit(1000).all()  # Límite de 1000
+    
+    # Crear Excel
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Logs de Auditoría"
+    
+    # Estilos
+    header_font = Font(bold=True, color="FFFFFF", size=12)
+    header_fill = PatternFill(start_color="0066B3", end_color="0066B3", fill_type="solid")
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Encabezados
+    headers = ['ID', 'Fecha/Hora', 'Usuario', 'Acción', 'Entidad', 'ID Entidad', 'Descripción', 'Nivel', 'IP']
+    ws.append(headers)
+    
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = border
+    
+    # Datos
+    for log in logs:
+        row = [
+            log.id,
+            log.fecha_hora.strftime('%d/%m/%Y %H:%M:%S'),
+            log.usuario_username or 'Sistema',
+            log.accion,
+            log.entidad,
+            log.entidad_id or '',
+            log.descripcion,
+            log.nivel.upper(),
+            log.ip_address or ''
+        ]
+        ws.append(row)
+        
+        # Aplicar bordes
+        for cell in ws[ws.max_row]:
+            cell.border = border
+            cell.alignment = Alignment(vertical='center')
+    
+    # Ajustar anchos
+    ws.column_dimensions['A'].width = 8
+    ws.column_dimensions['B'].width = 18
+    ws.column_dimensions['C'].width = 15
+    ws.column_dimensions['D'].width = 15
+    ws.column_dimensions['E'].width = 12
+    ws.column_dimensions['F'].width = 10
+    ws.column_dimensions['G'].width = 60
+    ws.column_dimensions['H'].width = 10
+    ws.column_dimensions['I'].width = 15
+    
+    # Filtros automáticos
+    ws.auto_filter.ref = ws.dimensions
+    
+    # Guardar
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    # Registrar la exportación
+    registrar_log(
+        accion='exportar',
+        entidad='logs',
+        entidad_id=None,
+        descripcion=f'Exportación de {len(logs)} logs de auditoría',
+        nivel='info',
+        metadata={'cantidad': len(logs), 'filtros_aplicados': True}
+    )
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'logs_auditoria_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
     )
 
 # ====================================================================
