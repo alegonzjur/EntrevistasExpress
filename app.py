@@ -221,6 +221,8 @@ class CargaExcel(db.Model):
     
     cargado_por = db.relationship('Usuario', backref='cargas_excel')
 
+
+
 # ====================================================================
 # FUNCIONES AUXILIARES PARA CARGA Y ASIGNACIÓN
 # ====================================================================
@@ -576,12 +578,6 @@ def generar_email_entrevistador(entrevistador, asignaciones):
                 <small style="color: #666;">📧 {email_candidato}</small><br>
                 <small style="color: #666;">📞 {telefono_candidato}</small>
             </td>
-            <td style="padding: 15px; text-align: center;">
-                <span style="background-color: {'#ffc7ce' if primera_asig.candidato.media_estudios < 5.5 else '#ffeb9c' if primera_asig.candidato.media_estudios < 6.5 else '#c6efce'}; 
-                             padding: 4px 8px; border-radius: 4px; font-weight: 600;">
-                    {primera_asig.candidato.media_estudios:.2f}
-                </span>
-            </td>
             <td style="padding: 15px; font-size: 12px; color: #666;">
                 {primera_asig.candidato.primera_opcion[:50] + '...' if primera_asig.candidato.primera_opcion and len(primera_asig.candidato.primera_opcion) > 50 else primera_asig.candidato.primera_opcion or '-'}
             </td>
@@ -604,11 +600,6 @@ def generar_email_entrevistador(entrevistador, asignaciones):
                 <small style="color: #666;">📞 {telefono_candidato}</small>
             </td>
             <td style="padding: 15px; text-align: center;">
-                <span style="background-color: {'#ffc7ce' if asig.candidato.media_estudios < 5.5 else '#ffeb9c' if asig.candidato.media_estudios < 6.5 else '#c6efce'}; 
-                             padding: 4px 8px; border-radius: 4px; font-weight: 600;">
-                    {asig.candidato.media_estudios:.2f}
-                </span>
-            </td>
             <td style="padding: 15px; font-size: 12px; color: #666;">
                 {asig.candidato.primera_opcion[:50] + '...' if asig.candidato.primera_opcion and len(asig.candidato.primera_opcion) > 50 else asig.candidato.primera_opcion or '-'}
             </td>
@@ -664,7 +655,6 @@ def generar_email_entrevistador(entrevistador, asignaciones):
                                     <th style="padding: 15px; text-align: center; font-weight: 600;">Día</th>
                                     <th style="padding: 15px; text-align: left; font-weight: 600;">Hora</th>
                                     <th style="padding: 15px; text-align: left; font-weight: 600;">Candidato</th>
-                                    <th style="padding: 15px; text-align: center; font-weight: 600;">Nota</th>
                                     <th style="padding: 15px; text-align: left; font-weight: 600;">Grado Solicitado</th>
                                 </tr>
                                 
@@ -684,22 +674,6 @@ def generar_email_entrevistador(entrevistador, asignaciones):
                                     <li>Primera entrevista: <strong>{fechas_ordenadas[0].strftime('%d/%m/%Y') if fechas_ordenadas else '-'}</strong></li>
                                     <li>Última entrevista: <strong>{fechas_ordenadas[-1].strftime('%d/%m/%Y') if fechas_ordenadas else '-'}</strong></li>
                                 </ul>
-                            </div>
-                            
-                            <!-- Leyenda de colores -->
-                            <div style="margin: 20px 0;">
-                                <p style="font-size: 14px; color: #666; margin: 0 0 10px 0;">
-                                    <strong>Leyenda de colores (nota media):</strong>
-                                </p>
-                                <div style="display: inline-block; margin-right: 15px;">
-                                    <span style="background-color: #ffc7ce; padding: 4px 12px; border-radius: 4px; font-size: 12px;">< 5.5</span>
-                                </div>
-                                <div style="display: inline-block; margin-right: 15px;">
-                                    <span style="background-color: #ffeb9c; padding: 4px 12px; border-radius: 4px; font-size: 12px;">5.5 - 6.5</span>
-                                </div>
-                                <div style="display: inline-block;">
-                                    <span style="background-color: #c6efce; padding: 4px 12px; border-radius: 4px; font-size: 12px;">> 6.5</span>
-                                </div>
                             </div>
                             
                             <!-- Nota -->
