@@ -26,16 +26,16 @@ import json
 
 
 app = Flask(__name__)
-app.secret_key = 'a4f8d9e3b2c1a7f6e5d4c3b2a1f9e8d7c6b5a4f3e2d1c9b8a7f6e5d4c3b2a1f0'  # Cambia esto en producción
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:eebormujos?@localhost/reservas_db'
+app.secret_key = 'a4f8d9e3b2c1a7f6e5d4c3b2a1f9e8d7c6b5a4f3e2d1c9b8a7f6e5d4c3b2a1f0'  # Secret Key de la app (NO MOSTRAR)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:eebormujos?@localhost/reservas_db' # Conexión a la base de datos (AJUSTAR SEGÚN ENTORNO)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAIL_SERVER'] = 'smtp.office365.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USE_SSL'] = False
-app.config['MAIL_USERNAME'] = 'aroman.gonzalez@sjd.edu.es'  # ← CAMBIAR
-app.config['MAIL_PASSWORD'] = '48190803F'  # ← CAMBIAR
-app.config['MAIL_DEFAULT_SENDER'] = 'aroman.gonzalez@sjd.edu.es'  # ← CAMBIAR
+app.config['MAIL_USERNAME'] = 'aroman.gonzalez@sjd.edu.es'  # Correo remitente.
+app.config['MAIL_PASSWORD'] = '48190803F'  # Contraseña del correo remitente para realizar conexión.
+app.config['MAIL_DEFAULT_SENDER'] = 'aroman.gonzalez@sjd.edu.es'  # Correo remitente por defecto.
 app.config['MAIL_MAX_EMAILS'] = 50  # Máximo 50 emails por conexión
 app.config['MAIL_ASCII_ATTACHMENTS'] = False
 
@@ -1211,31 +1211,45 @@ def actualizar_enlace_personal():
 @app.route('/perfil')
 @login_required
 def mi_perfil():
-    """Página de perfil del usuario"""
+    """Vista del perfil del usuario"""
+    
     usuario = Usuario.query.get(session['user_id'])
     
-    # Estadísticas del usuario
-    total_reservas = Reserva.query.filter_by(usuario_id=session['user_id']).count()
+    if not usuario:
+        flash('Usuario no encontrado', 'error')
+        return redirect(url_for('login'))
     
-    hoy = datetime.now().date()
+    # Calcular estadísticas
+    from datetime import date
+    
+    # Total de reservas del usuario
+    total_reservas = Reserva.query.filter_by(usuario_id=usuario.id).count()
+    
+    # Reservas futuras (fecha >= hoy)
+    hoy = date.today()
     reservas_futuras = Reserva.query.filter(
-        Reserva.usuario_id == session['user_id'],
+        Reserva.usuario_id == usuario.id,
         Reserva.fecha >= hoy
     ).count()
     
-    # Contar asignaciones
-    total_entrevistas = db.session.query(Asignacion)\
-        .join(Reserva)\
-        .filter(Reserva.usuario_id == session['user_id'])\
-        .count()
+    # Entrevistas realizadas (asignaciones donde el usuario es entrevistador)
+    entrevistas_realizadas = Asignacion.query.filter_by(
+        entrevistador_id=usuario.id
+    ).count()
+    
+    stats = {
+        'total_reservas': total_reservas,
+        'reservas_futuras': reservas_futuras,
+        'entrevistas_realizadas': entrevistas_realizadas
+    }
     
     return render_template('perfil.html',
-                         usuario=usuario,
-                         total_reservas=total_reservas,
-                         reservas_futuras=reservas_futuras,
-                         total_entrevistas=total_entrevistas,
-                         username=session['username'],
-                         es_admin=session.get('rol') == 'admin')
+                         username=usuario.username,
+                         email=usuario.email,
+                         rol=usuario.rol,
+                         fecha_creacion=usuario.fecha_creacion,
+                         enlace_videollamada=usuario.enlace_videollamada_personal,
+                         stats=stats)
 
 @app.route('/api/cancelar', methods=['POST'])
 @login_required
@@ -3066,6 +3080,80 @@ def exportar_reservas_pdf(reservas, semana):
         as_attachment=True,
         download_name=f'reservas_semana_{semana.split("-W")[1]}.pdf'
     )
+
+# ====================================================================
+# RUTA DE CAMBIO DE CONTRASEÑA.
+# ====================================================================
+
+@app.route('/api/cambiar-contrasena', methods=['POST'])
+@login_required
+def cambiar_contrasena():
+    """Permite al usuario cambiar su contraseña"""
+    
+    try:
+        data = request.json
+        contrasena_actual = data.get('contrasena_actual', '')
+        contrasena_nueva = data.get('contrasena_nueva', '')
+        contrasena_confirmacion = data.get('contrasena_confirmacion', '')
+        
+        # Validaciones
+        if not all([contrasena_actual, contrasena_nueva, contrasena_confirmacion]):
+            return jsonify({'error': 'Todos los campos son obligatorios'}), 400
+        
+        if contrasena_nueva != contrasena_confirmacion:
+            return jsonify({'error': 'Las contraseñas nuevas no coinciden'}), 400
+        
+        if len(contrasena_nueva) < 6:
+            return jsonify({'error': 'La contraseña debe tener al menos 6 caracteres'}), 400
+        
+        # Obtener usuario actual
+        usuario = Usuario.query.get(session['user_id'])
+        
+        if not usuario:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+        
+        # Verificar contraseña actual
+        if not check_password_hash(usuario.password, contrasena_actual):
+            # ✅ Registrar intento fallido
+            registrar_log(
+                accion='cambiar_contrasena',
+                entidad='usuario',
+                entidad_id=usuario.id,
+                descripcion=f'Intento fallido de cambio de contraseña: contraseña actual incorrecta',
+                nivel='warning'
+            )
+            return jsonify({'error': 'La contraseña actual es incorrecta'}), 403
+        
+        # Cambiar contraseña
+        usuario.password = generate_password_hash(contrasena_nueva)
+        db.session.commit()
+        
+        # ✅ Registrar cambio exitoso
+        registrar_log(
+            accion='cambiar_contrasena',
+            entidad='usuario',
+            entidad_id=usuario.id,
+            descripcion=f'Contraseña cambiada exitosamente para {usuario.username}',
+            nivel='info'
+        )
+        
+        return jsonify({
+            'success': True,
+            'mensaje': 'Contraseña cambiada correctamente'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        
+        registrar_log(
+            accion='cambiar_contrasena',
+            entidad='usuario',
+            entidad_id=session.get('user_id'),
+            descripcion=f'Error al cambiar contraseña: {str(e)}',
+            nivel='error'
+        )
+        
+        return jsonify({'error': f'Error al cambiar la contraseña: {str(e)}'}), 500
 
 # ====================================================================
 # RUTAS DE LOGS DE AUDITORÍA

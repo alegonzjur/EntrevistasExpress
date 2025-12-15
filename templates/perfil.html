@@ -4,57 +4,50 @@
 {% block extra_css %}
 <style>
     .perfil-container {
-        max-width: 800px;
+        max-width: 1200px;
         margin: 0 auto;
     }
     
     .perfil-header {
-        background: linear-gradient(135deg, #0066B3 0%, #003D7A 100%);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
         padding: 40px;
         border-radius: 12px;
-        text-align: center;
         margin-bottom: 30px;
-        box-shadow: 0 4px 15px rgba(0, 102, 179, 0.3);
+        display: flex;
+        align-items: center;
+        gap: 30px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     }
     
     .perfil-avatar {
         width: 100px;
         height: 100px;
-        background: rgba(255, 255, 255, 0.2);
+        background: white;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin: 0 auto 20px;
         font-size: 48px;
-        border: 4px solid rgba(255, 255, 255, 0.3);
+        font-weight: 700;
+        color: #667eea;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
     }
     
-    .perfil-nombre {
-        font-size: 28px;
-        font-weight: 600;
-        margin-bottom: 10px;
+    .perfil-info h2 {
+        margin: 0 0 10px 0;
+        font-size: 32px;
     }
     
-    .perfil-email {
-        font-size: 16px;
+    .perfil-info p {
+        margin: 0;
         opacity: 0.9;
-    }
-    
-    .perfil-rol {
-        display: inline-block;
-        padding: 6px 16px;
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 20px;
-        font-size: 14px;
-        margin-top: 10px;
-        font-weight: 600;
+        font-size: 16px;
     }
     
     .stats-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
         gap: 20px;
         margin-bottom: 30px;
     }
@@ -63,71 +56,77 @@
         background: white;
         padding: 25px;
         border-radius: 12px;
-        text-align: center;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        text-align: center;
         transition: all 0.3s ease;
     }
     
     .stat-card:hover {
         transform: translateY(-5px);
-        box-shadow: 0 6px 20px rgba(0,102,179,0.2);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
     }
     
     .stat-icon {
         font-size: 36px;
-        margin-bottom: 10px;
+        margin-bottom: 15px;
     }
     
     .stat-number {
-        font-size: 32px;
+        font-size: 36px;
         font-weight: 700;
-        color: #0066B3;
+        color: #667eea;
         margin-bottom: 5px;
     }
     
     .stat-label {
-        font-size: 14px;
         color: #666;
-        font-weight: 500;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
     
-    .card-section {
+    .section-card {
         background: white;
         padding: 30px;
         border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         margin-bottom: 25px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     
-    .section-title {
-        font-size: 20px;
-        font-weight: 600;
-        color: #0066B3;
-        margin-bottom: 20px;
-        padding-bottom: 10px;
+    .section-card h3 {
+        color: #667eea;
+        margin: 0 0 20px 0;
+        padding-bottom: 15px;
         border-bottom: 2px solid #e0e0e0;
-    }
-    
-    .enlace-form {
         display: flex;
+        align-items: center;
         gap: 10px;
-        align-items: flex-start;
-        margin-top: 15px;
     }
     
-    .enlace-form-group {
-        flex: 1;
+    .info-grid {
+        display: grid;
+        grid-template-columns: 200px 1fr;
+        gap: 15px;
+        font-size: 15px;
     }
     
-    .enlace-form label {
-        display: block;
+    .info-label {
         font-weight: 600;
-        margin-bottom: 8px;
+        color: #666;
+    }
+    
+    .info-value {
         color: #333;
     }
     
-    .enlace-form input {
-        width: 100%;
+    .enlace-input-group {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+    }
+    
+    .enlace-input-group input {
+        flex: 1;
         padding: 12px;
         border: 2px solid #e0e0e0;
         border-radius: 8px;
@@ -135,209 +134,502 @@
         transition: all 0.3s ease;
     }
     
-    .enlace-form input:focus {
+    .enlace-input-group input:focus {
         outline: none;
-        border-color: #0066B3;
-        box-shadow: 0 0 0 3px rgba(0, 102, 179, 0.1);
-    }
-    
-    .enlace-actual {
-        background: #e3f2fd;
-        padding: 15px;
-        border-radius: 8px;
-        margin-top: 15px;
-        border-left: 4px solid #2196F3;
-    }
-    
-    .enlace-actual strong {
-        display: block;
-        margin-bottom: 8px;
-        color: #0066B3;
-    }
-    
-    .enlace-actual a {
-        color: #1976D2;
-        text-decoration: none;
-        word-break: break-all;
-        font-weight: 500;
-    }
-    
-    .enlace-actual a:hover {
-        text-decoration: underline;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
     
     .info-box {
-        background: #fff3cd;
+        background: #e7f3ff;
+        border-left: 4px solid #2196F3;
         padding: 15px;
-        border-radius: 8px;
+        border-radius: 4px;
         margin-top: 15px;
-        border-left: 4px solid #ffc107;
-        font-size: 14px;
-        color: #856404;
     }
     
-    .info-box strong {
+    .info-box p {
+        margin: 0;
+        color: #1565c0;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+    
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
+        z-index: 1000;
+        animation: fadeIn 0.3s ease;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    .modal-content {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        padding: 0;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 500px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+        animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translate(-50%, -48%);
+        }
+        to {
+            opacity: 1;
+            transform: translate(-50%, -50%);
+        }
+    }
+    
+    .modal-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px 25px;
+        border-radius: 12px 12px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .modal-header h3 {
+        margin: 0;
+        font-size: 20px;
+    }
+    
+    .modal-close {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 28px;
+        cursor: pointer;
+        line-height: 1;
+        transition: all 0.3s ease;
+    }
+    
+    .modal-close:hover {
+        transform: scale(1.2);
+    }
+    
+    .modal-body {
+        padding: 25px;
+    }
+    
+    .form-group {
+        margin-bottom: 20px;
+    }
+    
+    .form-group label {
         display: block;
-        margin-bottom: 5px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #333;
+        font-size: 14px;
+    }
+    
+    .form-group input {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+        box-sizing: border-box;
+    }
+    
+    .form-group input:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    .password-strength {
+        margin-top: 8px;
+        height: 4px;
+        background: #e0e0e0;
+        border-radius: 2px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+    
+    .password-strength-bar {
+        height: 100%;
+        width: 0%;
+        transition: all 0.3s ease;
+    }
+    
+    .password-strength-text {
+        font-size: 12px;
+        margin-top: 5px;
+        color: #666;
+    }
+    
+    .modal-footer {
+        padding: 0 25px 25px 25px;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+    
+    .alert {
+        padding: 12px 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        font-size: 14px;
+    }
+    
+    .alert-error {
+        background: #f8d7da;
+        color: #721c24;
+        border-left: 4px solid #f5c6cb;
+    }
+    
+    .alert-success {
+        background: #d4edda;
+        color: #155724;
+        border-left: 4px solid #c3e6cb;
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="perfil-container">
+    <!-- Header del Perfil -->
     <div class="perfil-header">
         <div class="perfil-avatar">
-            👤
+            {{ username[0].upper() }}
         </div>
-        <div class="perfil-nombre">{{ usuario.username }}</div>
-        <div class="perfil-email">{{ usuario.email }}</div>
-        <div class="perfil-rol">
-            {% if usuario.rol == 'admin' %}
-                🛡️ Administrador
-            {% else %}
-                👨‍🏫 Profesor
-            {% endif %}
+        <div class="perfil-info">
+            <h2>{{ username }}</h2>
+            <p>📧 {{ email }}</p>
+            <p>👤 {{ rol|capitalize }}</p>
         </div>
     </div>
     
+    <!-- Estadísticas -->
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-icon">📅</div>
-            <div class="stat-number">{{ total_reservas }}</div>
-            <div class="stat-label">Reservas Totales</div>
+            <div class="stat-number">{{ stats.total_reservas }}</div>
+            <div class="stat-label">Total Reservas</div>
         </div>
         
         <div class="stat-card">
-            <div class="stat-icon">🔜</div>
-            <div class="stat-number">{{ reservas_futuras }}</div>
-            <div class="stat-label">Próximas Entrevistas</div>
+            <div class="stat-icon">⏰</div>
+            <div class="stat-number">{{ stats.reservas_futuras }}</div>
+            <div class="stat-label">Próximas</div>
         </div>
         
         <div class="stat-card">
-            <div class="stat-icon">👥</div>
-            <div class="stat-number">{{ total_entrevistas }}</div>
-            <div class="stat-label">Candidatos Entrevistados</div>
+            <div class="stat-icon">✅</div>
+            <div class="stat-number">{{ stats.entrevistas_realizadas }}</div>
+            <div class="stat-label">Realizadas</div>
         </div>
     </div>
     
-    <!-- Sección de Enlace Personal -->
-    <div class="card-section">
-        <div class="section-title">🎥 Enlace Personal de Videollamada</div>
+    <!-- Enlace de Videollamada -->
+    <div class="section-card">
+        <h3>🎥 Enlace de Videollamada Personal</h3>
         
-        <p style="color: #666; margin-bottom: 15px;">
-            Configura tu enlace personal de Google Meet, Zoom, Teams, etc. 
-            Este enlace se usará automáticamente en <strong>todas tus reservas</strong> y se enviará a los candidatos en el email de confirmación.
+        <p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">
+            Configura un enlace único que se enviará automáticamente a todos tus candidatos.
         </p>
         
-        {% if usuario.enlace_videollamada_personal %}
-        <div class="enlace-actual">
-            <strong>✓ Enlace configurado:</strong>
-            <a href="{{ usuario.enlace_videollamada_personal }}" target="_blank">
-                {{ usuario.enlace_videollamada_personal }}
-            </a>
-        </div>
-        {% endif %}
-        
-        <div class="enlace-form">
-            <div class="enlace-form-group">
-                <label for="enlace-personal">
-                    {% if usuario.enlace_videollamada_personal %}
-                        Actualizar enlace:
-                    {% else %}
-                        Añadir enlace:
-                    {% endif %}
-                </label>
-                <input type="url" 
-                       id="enlace-personal" 
-                       placeholder="https://meet.google.com/xxx-xxxx-xxx"
-                       value="{{ usuario.enlace_videollamada_personal or '' }}">
-            </div>
-            <div style="padding-top: 28px;">
-                <button class="btn btn-primary" onclick="guardarEnlacePersonal()">
-                    💾 Guardar
-                </button>
-            </div>
+        <div class="enlace-input-group">
+            <input 
+                type="url" 
+                id="enlace-personal" 
+                placeholder="https://meet.google.com/tu-sala-personal" 
+                value="{{ enlace_videollamada or '' }}"
+            >
+            <button class="btn btn-primary" onclick="guardarEnlacePersonal()">
+                💾 Guardar
+            </button>
         </div>
         
         <div class="info-box">
-            <strong>💡 Consejo:</strong>
-            Usa un enlace recurrente de Google Meet o una sala personal de Zoom para que sea siempre el mismo.
+            <p>
+                💡 <strong>Consejo:</strong> Usa un enlace recurrente de Class.
+            </p>
         </div>
     </div>
     
-    <!-- Información de Cuenta -->
-    <div class="card-section">
-        <div class="section-title">📋 Información de la Cuenta</div>
+    <!-- Información de la Cuenta -->
+    <div class="section-card">
+        <h3>👤 Información de la Cuenta</h3>
         
-        <div style="display: grid; gap: 15px;">
-            <div style="display: flex; justify-content: space-between; padding: 12px; background: #f8f9fa; border-radius: 6px;">
-                <strong>Nombre de usuario:</strong>
-                <span>{{ usuario.username }}</span>
-            </div>
+        <div class="info-grid">
+            <span class="info-label">Usuario:</span>
+            <span class="info-value">{{ username }}</span>
             
-            <div style="display: flex; justify-content: space-between; padding: 12px; background: #f8f9fa; border-radius: 6px;">
-                <strong>Email:</strong>
-                <span>{{ usuario.email }}</span>
-            </div>
+            <span class="info-label">Email:</span>
+            <span class="info-value">{{ email }}</span>
             
-            <div style="display: flex; justify-content: space-between; padding: 12px; background: #f8f9fa; border-radius: 6px;">
-                <strong>Rol:</strong>
-                <span>
-                    {% if usuario.rol == 'admin' %}
-                        🛡️ Administrador
-                    {% else %}
+            <span class="info-label">Rol:</span>
+            <span class="info-value">
+                {% if rol == 'admin' %}
+                    <span style="background: #d1ecf1; color: #0c5460; padding: 4px 12px; border-radius: 12px; font-weight: 600;">
+                        👑 Administrador
+                    </span>
+                {% else %}
+                    <span style="background: #d4edda; color: #155724; padding: 4px 12px; border-radius: 12px; font-weight: 600;">
                         👨‍🏫 Profesor
-                    {% endif %}
-                </span>
-            </div>
+                    </span>
+                {% endif %}
+            </span>
             
-            <div style="display: flex; justify-content: space-between; padding: 12px; background: #f8f9fa; border-radius: 6px;">
-                <strong>Cuenta creada:</strong>
-                <span>{{ usuario.fecha_creacion.strftime('%d/%m/%Y') }}</span>
-            </div>
+            <span class="info-label">Miembro desde:</span>
+            <span class="info-value">{{ fecha_creacion.strftime('%d/%m/%Y') }}</span>
+            
+            <span class="info-label">Contraseña:</span>
+            <span class="info-value">
+                <button class="btn btn-secondary" onclick="abrirModalCambiarContrasena()" style="padding: 8px 16px; font-size: 13px;">
+                    🔐 Cambiar Contraseña
+                </button>
+            </span>
         </div>
-    </div>
-    
-    <div style="text-align: center; margin-top: 30px;">
-        <a href="{{ url_for('reservas') }}" class="btn btn-secondary">
-            ← Volver al Calendario
-        </a>
-        <a href="{{ url_for('mis_reservas') }}" class="btn btn-primary">
-            📋 Ver Mis Reservas
-        </a>
     </div>
 </div>
+
+<!-- Modal de Cambio de Contraseña -->
+<div id="modalCambiarContrasena" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>🔐 Cambiar Contraseña</h3>
+            <button class="modal-close" onclick="cerrarModalCambiarContrasena()">&times;</button>
+        </div>
+        
+        <div class="modal-body">
+            <div id="alert-container"></div>
+            
+            <form id="formCambiarContrasena" onsubmit="cambiarContrasena(event)">
+                <div class="form-group">
+                    <label for="contrasena-actual">Contraseña Actual *</label>
+                    <input 
+                        type="password" 
+                        id="contrasena-actual" 
+                        required
+                        placeholder="Ingresa tu contraseña actual"
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="contrasena-nueva">Nueva Contraseña *</label>
+                    <input 
+                        type="password" 
+                        id="contrasena-nueva" 
+                        required
+                        placeholder="Mínimo 6 caracteres"
+                        oninput="verificarFortalezaContrasena()"
+                    >
+                    <div class="password-strength">
+                        <div class="password-strength-bar" id="password-strength-bar"></div>
+                    </div>
+                    <div class="password-strength-text" id="password-strength-text"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="contrasena-confirmacion">Confirmar Nueva Contraseña *</label>
+                    <input 
+                        type="password" 
+                        id="contrasena-confirmacion" 
+                        required
+                        placeholder="Repite la nueva contraseña"
+                    >
+                </div>
+            </form>
+        </div>
+        
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="cerrarModalCambiarContrasena()">
+                Cancelar
+            </button>
+            <button type="submit" form="formCambiarContrasena" class="btn btn-primary">
+                💾 Guardar Cambios
+            </button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+// Función para guardar enlace personal (ya existente)
 async function guardarEnlacePersonal() {
-    const input = document.getElementById('enlace-personal');
-    const enlace = input.value.trim();
+    const enlace = document.getElementById('enlace-personal').value.trim();
     
     try {
         const response = await fetch('/api/actualizar-enlace-personal', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ enlace: enlace })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('✅ ' + data.mensaje);
+            location.reload();
+        } else {
+            alert('❌ ' + data.error);
+        }
+    } catch (error) {
+        alert('❌ Error al guardar el enlace: ' + error);
+    }
+}
+
+// Modal de cambiar contraseña
+function abrirModalCambiarContrasena() {
+    document.getElementById('modalCambiarContrasena').style.display = 'block';
+    document.getElementById('formCambiarContrasena').reset();
+    document.getElementById('alert-container').innerHTML = '';
+    document.getElementById('password-strength-bar').style.width = '0%';
+    document.getElementById('password-strength-text').textContent = '';
+}
+
+function cerrarModalCambiarContrasena() {
+    document.getElementById('modalCambiarContrasena').style.display = 'none';
+}
+
+// Cerrar modal al hacer click fuera
+window.onclick = function(event) {
+    const modal = document.getElementById('modalCambiarContrasena');
+    if (event.target === modal) {
+        cerrarModalCambiarContrasena();
+    }
+}
+
+// Verificar fortaleza de contraseña
+function verificarFortalezaContrasena() {
+    const password = document.getElementById('contrasena-nueva').value;
+    const strengthBar = document.getElementById('password-strength-bar');
+    const strengthText = document.getElementById('password-strength-text');
+    
+    let strength = 0;
+    let strengthLabel = '';
+    let color = '';
+    
+    if (password.length === 0) {
+        strengthBar.style.width = '0%';
+        strengthText.textContent = '';
+        return;
+    }
+    
+    // Calcular fortaleza
+    if (password.length >= 6) strength += 25;
+    if (password.length >= 8) strength += 25;
+    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength += 25;
+    if (/\d/.test(password)) strength += 15;
+    if (/[@$!%*?&#]/.test(password)) strength += 10;
+    
+    // Determinar nivel
+    if (strength < 40) {
+        strengthLabel = 'Débil';
+        color = '#f44336';
+    } else if (strength < 60) {
+        strengthLabel = 'Media';
+        color = '#ff9800';
+    } else if (strength < 80) {
+        strengthLabel = 'Buena';
+        color = '#2196F3';
+    } else {
+        strengthLabel = 'Fuerte';
+        color = '#4CAF50';
+    }
+    
+    strengthBar.style.width = strength + '%';
+    strengthBar.style.backgroundColor = color;
+    strengthText.textContent = strengthLabel;
+    strengthText.style.color = color;
+}
+
+// Cambiar contraseña
+async function cambiarContrasena(event) {
+    event.preventDefault();
+    
+    const alertContainer = document.getElementById('alert-container');
+    const contrasenaActual = document.getElementById('contrasena-actual').value;
+    const contrasenaNueva = document.getElementById('contrasena-nueva').value;
+    const contrasenaConfirmacion = document.getElementById('contrasena-confirmacion').value;
+    
+    // Limpiar alertas anteriores
+    alertContainer.innerHTML = '';
+    
+    // Validaciones del lado del cliente
+    if (contrasenaNueva !== contrasenaConfirmacion) {
+        alertContainer.innerHTML = '<div class="alert alert-error">❌ Las contraseñas nuevas no coinciden</div>';
+        return;
+    }
+    
+    if (contrasenaNueva.length < 6) {
+        alertContainer.innerHTML = '<div class="alert alert-error">❌ La contraseña debe tener al menos 6 caracteres</div>';
+        return;
+    }
+    
+    if (contrasenaActual === contrasenaNueva) {
+        alertContainer.innerHTML = '<div class="alert alert-error">❌ La nueva contraseña debe ser diferente a la actual</div>';
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/cambiar-contrasena', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                enlace: enlace
+                contrasena_actual: contrasenaActual,
+                contrasena_nueva: contrasenaNueva,
+                contrasena_confirmacion: contrasenaConfirmacion
             })
         });
         
         const data = await response.json();
         
         if (response.ok) {
-            alert(data.mensaje);
-            location.reload();
+            alertContainer.innerHTML = '<div class="alert alert-success">✅ ' + data.mensaje + '</div>';
+            
+            // Limpiar formulario
+            document.getElementById('formCambiarContrasena').reset();
+            document.getElementById('password-strength-bar').style.width = '0%';
+            document.getElementById('password-strength-text').textContent = '';
+            
+            // Cerrar modal después de 2 segundos
+            setTimeout(() => {
+                cerrarModalCambiarContrasena();
+            }, 2000);
         } else {
-            alert('Error: ' + data.error);
+            alertContainer.innerHTML = '<div class="alert alert-error">❌ ' + data.error + '</div>';
         }
     } catch (error) {
-        alert('Error al guardar el enlace');
-        console.error(error);
+        alertContainer.innerHTML = '<div class="alert alert-error">❌ Error al cambiar la contraseña: ' + error + '</div>';
     }
 }
+
+// Cerrar modal con ESC
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        cerrarModalCambiarContrasena();
+    }
+});
 </script>
 {% endblock %}
