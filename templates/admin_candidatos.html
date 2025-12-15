@@ -401,38 +401,71 @@ document.getElementById('formAsignacion').addEventListener('submit', async funct
         btnAsignar.innerHTML = '<i class="fas fa-magic"></i> Ejecutar Asignación';
     }
 });
-function testEmailConfig() {
-    const email = prompt('Introduce tu email para recibir un email de prueba:', '{{ session.email }}');
+async function testEmailConfig() {
+    const { value: email } = await Swal.fire({
+        title: 'Email de Prueba',
+        input: 'email',
+        inputLabel: 'Introduce tu email para recibir un email de prueba',
+        inputValue: '{{ session.email }}',
+        inputPlaceholder: 'tu@email.com',
+        showCancelButton: true,
+        confirmButtonText: 'Enviar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#0066B3',
+        inputValidator: (value) => {
+            if (!value) {
+                return 'Debes introducir un email';
+            }
+        }
+    });
+    
     if (!email) return;
     
-    const btn = event.target;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+    Swal.fire({
+        title: 'Enviando email de prueba...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
     
-    fetch('/admin/candidatos/test-email', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email: email })
-    })
-    .then(response => response.json())
-    .then(data => {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar Email de Prueba';
+    try {
+        const response = await fetch('/admin/candidatos/test-email', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email: email })
+        });
+        
+        const data = await response.json();
+        Swal.close();
         
         if (data.success) {
-            alert('✅ ' + data.mensaje + '\n\nRevisa tu bandeja de entrada (y spam).');
+            Swal.fire({
+                icon: 'success',
+                title: '¡Email Enviado!',
+                html: data.mensaje + '<br><br><small>Revisa tu bandeja de entrada (y spam)</small>',
+                confirmButtonColor: '#28a745'
+            });
         } else {
-            alert('❌ Error: ' + data.error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error,
+                confirmButtonColor: '#dc3545'
+            });
         }
-    })
-    .catch(error => {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar Email de Prueba';
-        console.error('Error:', error);
-        alert('❌ Error al enviar email de prueba: ' + error.message);
-    });
+    } catch (error) {
+        Swal.close();
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error al enviar email de prueba: ' + error.message,
+            confirmButtonColor: '#dc3545'
+        });
+    }
 }
 </script>
 {% endblock %}

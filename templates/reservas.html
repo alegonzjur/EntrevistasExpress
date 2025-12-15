@@ -225,7 +225,7 @@ async function cargarFranjas() {
 function handleFranjaClick(espacioId, fecha, nombreDia, horaInicio, horaFin, franja) {
     if (franja.tiene_mi_reserva) {
         // Si tengo una reserva, mostrar opciones
-        mostrarModalMisReservas(espacioId, fecha, nombreDia, horaInicio, horaFin, franja);
+        mostrarModalMisReservasMejorado(espacioId, fecha, nombreDia, horaInicio, horaFin, franja);
     } else if (franja.completa) {
         // Si está completa, mostrar información
         mostrarInfoCompleta(franja);
@@ -237,7 +237,66 @@ function handleFranjaClick(espacioId, fecha, nombreDia, horaInicio, horaFin, fra
 
 function mostrarInfoCompleta(franja) {
     let usuarios = franja.reservas.map(r => r.usuario).join(', ');
-    alert(`Esta franja está completa (2/2).\n\nReservada por: ${usuarios}`);
+    
+    let htmlInfo = '<div style="text-align: left;">';
+    htmlInfo += '<p><strong>Esta franja está completa (2/2):</strong></p>';
+    htmlInfo += '<ul style="margin: 10px 0; padding-left: 20px;">';
+    franja.reservas.forEach(r => {
+        const prioridadBadge = r.prioridad === 'secundaria' ? 
+            '<span style="background: #9333EA; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-left: 5px;">SECUNDARIA</span>' : '';
+        htmlInfo += `<li>👤 ${r.usuario}${prioridadBadge}</li>`;
+    });
+    htmlInfo += '</ul></div>';
+    
+    Swal.fire({
+        icon: 'info',
+        title: 'Franja Completa',
+        html: htmlInfo,
+        confirmButtonColor: '#0066B3'
+    });
+}
+
+async function mostrarModalMisReservasMejorado(espacioId, fecha, nombreDia, horaInicio, horaFin, franja) {
+    let miReserva = franja.reservas.find(r => r.es_mia);
+    
+    let otrasReservas = '';
+    if (franja.num_reservas > 1) {
+        let otros = franja.reservas.filter(r => !r.es_mia).map(r => r.usuario).join(', ');
+        otrasReservas = `<p><strong>Compartida con:</strong> ${otros}</p>`;
+    }
+    
+    let notasHtml = miReserva.notas ? `<p><strong>Notas:</strong> ${miReserva.notas}</p>` : '';
+    
+    const result = await Swal.fire({
+        icon: 'question',
+        title: '¿Cancelar Reserva?',
+        html: `
+            <div style="text-align: left; padding: 10px;">
+                <p><strong>Día:</strong> ${nombreDia}</p>
+                <p><strong>Horario:</strong> ${horaInicio} - ${horaFin}</p>
+                <p><strong>Ocupación:</strong> ${franja.num_reservas}/2 reservas</p>
+                ${notasHtml}
+                ${otrasReservas}
+            </div>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sí, cancelar',
+        cancelButtonText: 'Volver',
+        reverseButtons: true
+    });
+    
+    if (result.isConfirmed) {
+        reservaActual = { 
+            espacioId, 
+            fecha, 
+            horaInicio, 
+            horaFin,
+            reservaId: miReserva.id 
+        };
+        confirmarCancelacion();
+    }
 }
 
 function mostrarModalMisReservas(espacioId, fecha, nombreDia, horaInicio, horaFin, franja) {
@@ -321,7 +380,7 @@ async function confirmarReserva() {
     if (!reservaActual) return;
     
     const notas = document.getElementById('notas-reserva').value;
-    const prioridad = document.getElementById('prioridad-reserva').value;  // ✅ NUEVO
+    const prioridad = document.getElementById('prioridad-reserva').value;
     
     const usuarioSelector = document.getElementById('usuario-selector');
     const usuarioId = usuarioSelector ? usuarioSelector.value : null;
@@ -332,12 +391,22 @@ async function confirmarReserva() {
         hora_inicio: reservaActual.horaInicio,
         hora_fin: reservaActual.horaFin,
         notas: notas,
-        prioridad: prioridad  // ✅ NUEVO
+        prioridad: prioridad
     };
     
     if (usuarioId) {
         requestBody.usuario_id = parseInt(usuarioId);
     }
+    
+    // ✅ Mostrar loading
+    Swal.fire({
+        title: 'Creando reserva...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
     
     try {
         const response = await fetch('/api/reservar', {
@@ -351,20 +420,47 @@ async function confirmarReserva() {
         const data = await response.json();
         
         if (response.ok) {
-            alert(data.mensaje || '¡Reserva realizada correctamente!');
+            await Swal.fire({
+                icon: 'success',
+                title: '¡Reserva Creada!',
+                text: data.mensaje || '¡Reserva realizada correctamente!',
+                confirmButtonColor: '#28a745',
+                timer: 3000,
+                timerProgressBar: true
+            });
             cerrarModal();
             cargarFranjas();
         } else {
-            alert('Error: ' + data.error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error,
+                confirmButtonColor: '#dc3545'
+            });
         }
     } catch (error) {
-        alert('Error al realizar la reserva');
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error al realizar la reserva',
+            confirmButtonColor: '#dc3545'
+        });
         console.error(error);
     }
 }
 
 async function confirmarCancelacion() {
     if (!reservaActual) return;
+    
+    // ✅ Mostrar loading
+    Swal.fire({
+        title: 'Cancelando reserva...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
     
     try {
         const response = await fetch('/api/cancelar', {
@@ -383,14 +479,31 @@ async function confirmarCancelacion() {
         const data = await response.json();
         
         if (response.ok) {
-            alert('Reserva cancelada correctamente');
+            await Swal.fire({
+                icon: 'success',
+                title: '¡Cancelada!',
+                text: 'Reserva cancelada correctamente',
+                confirmButtonColor: '#28a745',
+                timer: 2000,
+                timerProgressBar: true
+            });
             cerrarModalCancelar();
             cargarFranjas();
         } else {
-            alert('Error: ' + data.error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error,
+                confirmButtonColor: '#dc3545'
+            });
         }
     } catch (error) {
-        alert('Error al cancelar la reserva');
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error al cancelar la reserva',
+            confirmButtonColor: '#dc3545'
+        });
         console.error(error);
     }
 }

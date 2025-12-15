@@ -475,6 +475,15 @@
 async function guardarEnlacePersonal() {
     const enlace = document.getElementById('enlace-personal').value.trim();
     
+    Swal.fire({
+        title: 'Guardando enlace...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
     try {
         const response = await fetch('/api/actualizar-enlace-personal', {
             method: 'POST',
@@ -485,15 +494,34 @@ async function guardarEnlacePersonal() {
         });
         
         const data = await response.json();
+        Swal.close();
         
         if (response.ok) {
-            alert('✅ ' + data.mensaje);
+            await Swal.fire({
+                icon: 'success',
+                title: '¡Guardado!',
+                text: data.mensaje,
+                confirmButtonColor: '#28a745',
+                timer: 2000,
+                timerProgressBar: true
+            });
             location.reload();
         } else {
-            alert('❌ ' + data.error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error,
+                confirmButtonColor: '#dc3545'
+            });
         }
     } catch (error) {
-        alert('❌ Error al guardar el enlace: ' + error);
+        Swal.close();
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error al guardar el enlace: ' + error,
+            confirmButtonColor: '#dc3545'
+        });
     }
 }
 
@@ -576,19 +604,43 @@ async function cambiarContrasena(event) {
     
     // Validaciones del lado del cliente
     if (contrasenaNueva !== contrasenaConfirmacion) {
-        alertContainer.innerHTML = '<div class="alert alert-error">❌ Las contraseñas nuevas no coinciden</div>';
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Las contraseñas nuevas no coinciden',
+            confirmButtonColor: '#dc3545'
+        });
         return;
     }
     
     if (contrasenaNueva.length < 6) {
-        alertContainer.innerHTML = '<div class="alert alert-error">❌ La contraseña debe tener al menos 6 caracteres</div>';
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'La contraseña debe tener al menos 6 caracteres',
+            confirmButtonColor: '#dc3545'
+        });
         return;
     }
     
     if (contrasenaActual === contrasenaNueva) {
-        alertContainer.innerHTML = '<div class="alert alert-error">❌ La nueva contraseña debe ser diferente a la actual</div>';
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'La nueva contraseña debe ser diferente a la actual',
+            confirmButtonColor: '#dc3545'
+        });
         return;
     }
+    
+    Swal.fire({
+        title: 'Cambiando contraseña...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
     
     try {
         const response = await fetch('/api/cambiar-contrasena', {
@@ -604,24 +656,41 @@ async function cambiarContrasena(event) {
         });
         
         const data = await response.json();
+        Swal.close();
         
         if (response.ok) {
-            alertContainer.innerHTML = '<div class="alert alert-success">✅ ' + data.mensaje + '</div>';
+            await Swal.fire({
+                icon: 'success',
+                title: '¡Contraseña Actualizada!',
+                text: data.mensaje,
+                confirmButtonColor: '#28a745',
+                timer: 2000,
+                timerProgressBar: true
+            });
             
             // Limpiar formulario
             document.getElementById('formCambiarContrasena').reset();
             document.getElementById('password-strength-bar').style.width = '0%';
             document.getElementById('password-strength-text').textContent = '';
             
-            // Cerrar modal después de 2 segundos
-            setTimeout(() => {
-                cerrarModalCambiarContrasena();
-            }, 2000);
+            // Cerrar modal
+            cerrarModalCambiarContrasena();
         } else {
-            alertContainer.innerHTML = '<div class="alert alert-error">❌ ' + data.error + '</div>';
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error,
+                confirmButtonColor: '#dc3545'
+            });
         }
     } catch (error) {
-        alertContainer.innerHTML = '<div class="alert alert-error">❌ Error al cambiar la contraseña: ' + error + '</div>';
+        Swal.close();
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error al cambiar la contraseña: ' + error,
+            confirmButtonColor: '#dc3545'
+        });
     }
 }
 

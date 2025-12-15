@@ -502,11 +502,25 @@ function cancelarSeleccion() {
 
 async function confirmarAsignacion() {
     if (!candidatoSeleccionado || !reservaSeleccionada) {
-        alert('Debes seleccionar un candidato y una reserva');
+        Swal.fire({
+            icon: 'warning',
+            title: 'Atención',
+            text: 'Debes seleccionar un candidato y una reserva',
+            confirmButtonColor: '#ffc107'
+        });
         return;
     }
     
     const posicion = reservaSeleccionada.espacios_libres === 2 ? 1 : 2;
+    
+    Swal.fire({
+        title: 'Asignando candidato...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
     
     try {
         const response = await fetch('/admin/candidatos/asignar-manual', {
@@ -522,23 +536,60 @@ async function confirmarAsignacion() {
         });
         
         const data = await response.json();
+        Swal.close();
         
         if (response.ok) {
-            alert(data.mensaje);
+            await Swal.fire({
+                icon: 'success',
+                title: '¡Asignado!',
+                text: data.mensaje,
+                confirmButtonColor: '#28a745',
+                timer: 2000,
+                timerProgressBar: true
+            });
             location.reload();
         } else {
-            alert('Error: ' + data.error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error,
+                confirmButtonColor: '#dc3545'
+            });
         }
     } catch (error) {
-        alert('Error al asignar candidato');
+        Swal.close();
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error al asignar candidato',
+            confirmButtonColor: '#dc3545'
+        });
         console.error(error);
     }
 }
-
 async function desasignarCandidato(asignacionId, nombreCandidato) {
-    if (!confirm(`¿Estás seguro de que deseas desasignar a ${nombreCandidato}?`)) {
-        return;
-    }
+    const result = await Swal.fire({
+        icon: 'warning',
+        title: '¿Desasignar?',
+        text: `¿Estás seguro de que deseas desasignar a ${nombreCandidato}?`,
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sí, desasignar',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true
+    });
+    
+    if (!result.isConfirmed) return;
+    
+    Swal.fire({
+        title: 'Desasignando...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
     
     try {
         const response = await fetch('/admin/candidatos/desasignar-manual', {
@@ -552,15 +603,34 @@ async function desasignarCandidato(asignacionId, nombreCandidato) {
         });
         
         const data = await response.json();
+        Swal.close();
         
         if (response.ok) {
-            alert(data.mensaje);
+            await Swal.fire({
+                icon: 'success',
+                title: '¡Desasignado!',
+                text: data.mensaje,
+                confirmButtonColor: '#28a745',
+                timer: 2000,
+                timerProgressBar: true
+            });
             location.reload();
         } else {
-            alert('Error: ' + data.error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error,
+                confirmButtonColor: '#dc3545'
+            });
         }
     } catch (error) {
-        alert('Error al desasignar candidato');
+        Swal.close();
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error al desasignar candidato',
+            confirmButtonColor: '#dc3545'
+        });
         console.error(error);
     }
 }
