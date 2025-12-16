@@ -393,7 +393,16 @@
                     </span>
                 {% endif %}
             </span>
-            
+            <span class="info-label">Sede:</span>
+            <span class="info-value">
+                {% if sede %}
+                    <span style="background: #0066B3; color: white; padding: 6px 12px; border-radius: 12px; font-weight: 600;">
+                        🏢 {{ sede }}
+                    </span>
+                {% else %}
+                    <span style="color: #999;">No asignada</span>
+                {% endif %}
+            </span>
             <span class="info-label">Miembro desde:</span>
             <span class="info-value">{{ fecha_creacion.strftime('%d/%m/%Y') }}</span>
             

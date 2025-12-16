@@ -222,6 +222,7 @@ tr:hover {
                 <th>Usuario</th>
                 <th>Email</th>
                 <th>Rol</th>
+                <th>Sede</th>
                 <th>Estado</th>
                 <th>Fecha Registro</th>
                 <th>Acciones</th>
@@ -236,6 +237,15 @@ tr:hover {
                     <span class="badge badge-{{ usuario.rol }}">
                         {{ 'Administrador' if usuario.rol == 'admin' else 'Profesor' }}
                     </span>
+                </td>
+                <td>
+                    {% if usuario.sede %}
+                    <span class="badge badge-primary" style="background: #0066B3; padding: 5px 10px; border-radius: 12px; font-size: 12px;">
+                        🏢 {{ usuario.sede }}
+                    </span>
+                    {% else %}
+                    <span style="color: #999;">-</span>
+                    {% endif %}
                 </td>
                 <td>
                     <span class="badge badge-{{ 'activo' if usuario.activo else 'inactivo' }}" id="estado-{{ usuario.id }}">

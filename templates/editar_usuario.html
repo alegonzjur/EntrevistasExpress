@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Editar Usuario{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 0 auto;">
+    <h2>✏️ Editar Usuario: {{ usuario.username }}</h2>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }}" style="padding: 15px; margin-bottom: 20px; border-radius: 8px;">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="card" style="background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <form method="POST">
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="font-weight: 600; margin-bottom: 8px; display: block;">
+                    Usuario
+                </label>
+                <input type="text" 
+                       value="{{ usuario.username }}" 
+                       disabled
+                       style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; background: #f5f5f5;">
+                <small style="color: #666; display: block; margin-top: 5px;">
+                    El nombre de usuario no se puede cambiar
+                </small>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="email" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                    Email *
+                </label>
+                <input type="email" 
+                       id="email" 
+                       name="email" 
+                       value="{{ usuario.email }}"
+                       required 
+                       style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="rol" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                    Rol *
+                </label>
+                <select id="rol" 
+                        name="rol" 
+                        required
+                        onchange="toggleSedeField()"
+                        style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                    <option value="profesor" {% if usuario.rol == 'profesor' %}selected{% endif %}>Profesor</option>
+                    <option value="admin" {% if usuario.rol == 'admin' %}selected{% endif %}>Administrador</option>
+                </select>
+            </div>
+            
+            <!-- ✅ Campo de Sede -->
+            <div class="form-group" id="sede-group" style="margin-bottom: 20px;">
+                <label for="sede" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                    Sede * <small style="color: #666; font-weight: normal;">(Solo para profesores)</small>
+                </label>
+                <select id="sede" 
+                        name="sede"
+                        style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                    <option value="">Selecciona una sede...</option>
+                    {% for sede in sedes %}
+                    <option value="{{ sede }}" {% if usuario.sede == sede %}selected{% endif %}>
+                        🏢 {{ sede }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 30px;">
+                <button type="submit" 
+                        class="btn btn-primary" 
+                        style="flex: 1; padding: 12px;">
+                    💾 Guardar Cambios
+                </button>
+                <a href="{{ url_for('admin_usuarios') }}" 
+                   class="btn btn-secondary" 
+                   style="flex: 1; padding: 12px; text-align: center; text-decoration: none; display: inline-block;">
+                    ❌ Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function toggleSedeField() {
+    const rol = document.getElementById('rol').value;
+    const sedeGroup = document.getElementById('sede-group');
+    const sedeSelect = document.getElementById('sede');
+    
+    if (rol === 'profesor') {
+        sedeGroup.style.display = 'block';
+        sedeSelect.required = true;
+    } else {
+        sedeGroup.style.display = 'none';
+        sedeSelect.required = false;
+        sedeSelect.value = '';
+    }
+}
+
+window.onload = toggleSedeField;
+</script>
+{% endblock %}

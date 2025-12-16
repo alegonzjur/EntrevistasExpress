@@ -72,6 +72,7 @@ class Usuario(db.Model):
     activo = db.Column(db.Boolean, default=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     enlace_videollamada_personal = db.Column(db.String(500), nullable=True)
+    sede = db.Column(db.String(50), nullable=True)
     
     # Relación con reservas (especificando foreign_keys para evitar ambigüedad)
     reservas = db.relationship('Reserva', 
@@ -257,7 +258,17 @@ class LogActividad(db.Model):
             'descripcion': self.descripcion,
             'nivel': self.nivel
         }
+    
+# ====================================================================
+# CONSTANTES
+# ====================================================================
 
+# Sedes disponibles
+SEDES_DISPONIBLES = [
+    'Bormujos',
+    'Ciempozuelos',
+    'Pº de la Habana'
+]
 # ====================================================================
 # FUNCIONES AUXILIARES PARA CARGA Y ASIGNACIÓN
 # ====================================================================
@@ -925,31 +936,63 @@ def registro():
         username = request.form['username']
         email = request.form['email']
         password = request.form['password']
+        confirm_password = request.form['confirm_password']
         rol = request.form.get('rol', 'profesor')
+        sede = request.form.get('sede')
         
+        # Validaciones
+        if len(password) < 6:
+            flash('La contraseña debe tener al menos 6 caracteres', 'error')
+            return render_template('registro.html', sedes=SEDES_DISPONIBLES)  # ✅ MODIFICADO
+        
+        if password != confirm_password:
+            flash('Las contraseñas no coinciden', 'error')
+            return render_template('registro.html', sedes=SEDES_DISPONIBLES)
+        
+        # Verificar si ya existe
         if Usuario.query.filter_by(username=username).first():
-            flash('El usuario ya existe', 'error')
-            return render_template('registro.html')
+            flash('El nombre de usuario ya existe', 'error')
+            return render_template('registro.html', sedes=SEDES_DISPONIBLES)  # ✅ MODIFICADO
         
         if Usuario.query.filter_by(email=email).first():
             flash('El email ya está registrado', 'error')
-            return render_template('registro.html')
+            return render_template('registro.html', sedes=SEDES_DISPONIBLES)  # ✅ MODIFICADO
+        
+        # ✅ NUEVO: Validar sede si es profesor
+        if rol == 'profesor' and not sede:
+            flash('Debes seleccionar una sede para el profesor', 'error')
+            return render_template('registro.html',username=session['username'], sedes=SEDES_DISPONIBLES)
         
         hashed_password = generate_password_hash(password)
         nuevo_usuario = Usuario(
             username=username, 
             email=email, 
             password=hashed_password,
-            rol=rol
+            rol=rol,
+            sede=sede if rol == 'profesor' else None
         )
         
         db.session.add(nuevo_usuario)
         db.session.commit()
+
+        registrar_log(
+            accion='crear',
+            entidad='usuario',
+            entidad_id=nuevo_usuario.id,
+            descripcion=f'Usuario creado: {username} ({rol}) - Sede: {sede if sede else "N/A"}',
+            datos_nuevos={
+                'username': username,
+                'email': email,
+                'rol': rol,
+                'sede': sede
+            },
+            nivel='info'
+        )
         
         flash(f'Usuario {username} creado correctamente como {rol}', 'success')
         return redirect(url_for('admin_usuarios'))
     
-    return render_template('registro.html')
+    return render_template('registro.html', username=session['username'],sedes=SEDES_DISPONIBLES)
 
 @app.route('/logout')
 def logout():
@@ -1249,6 +1292,7 @@ def mi_perfil():
                          rol=usuario.rol,
                          fecha_creacion=usuario.fecha_creacion,
                          enlace_videollamada=usuario.enlace_videollamada_personal,
+                         sede=usuario.sede,
                          stats=stats)
 
 @app.route('/api/cancelar', methods=['POST'])
@@ -1332,7 +1376,8 @@ def admin_usuarios():
     usuarios = Usuario.query.order_by(Usuario.fecha_creacion.desc()).all()
     return render_template('admin_usuarios.html', 
                          usuarios=usuarios,
-                         username=session['username'])
+                         username=session['username'],
+                         sedes=SEDES_DISPONIBLES)
 
 @app.route('/admin/usuario/toggle/<int:usuario_id>', methods=['POST'])
 @admin_required
@@ -1351,6 +1396,62 @@ def toggle_usuario(usuario_id):
         'mensaje': f'Usuario {usuario.username} {estado}',
         'activo': usuario.activo
     })
+
+@app.route('/admin/usuarios/editar/<int:usuario_id>', methods=['GET', 'POST'])
+@admin_required
+def editar_usuario(usuario_id):
+    """Editar información de un usuario"""
+    
+    usuario = Usuario.query.get_or_404(usuario_id)
+    
+    if request.method == 'POST':
+        email_nuevo = request.form.get('email')
+        rol_nuevo = request.form.get('rol')
+        sede_nueva = request.form.get('sede')  # ✅ NUEVO
+        
+        # Guardar valores anteriores para el log
+        datos_anteriores = {
+            'email': usuario.email,
+            'rol': usuario.rol,
+            'sede': usuario.sede
+        }
+        
+        # Actualizar
+        usuario.email = email_nuevo
+        usuario.rol = rol_nuevo
+        
+        # ✅ NUEVO: Actualizar sede solo si es profesor
+        if rol_nuevo == 'profesor':
+            usuario.sede = sede_nueva
+        else:
+            usuario.sede = None
+        
+        db.session.commit()
+        
+        # ✅ Registrar cambio
+        datos_nuevos = {
+            'email': email_nuevo,
+            'rol': rol_nuevo,
+            'sede': sede_nueva if rol_nuevo == 'profesor' else None
+        }
+        
+        registrar_log(
+            accion='modificar',
+            entidad='usuario',
+            entidad_id=usuario.id,
+            descripcion=f'Usuario modificado: {usuario.username}',
+            datos_anteriores=datos_anteriores,
+            datos_nuevos=datos_nuevos,
+            nivel='info'
+        )
+        
+        flash(f'Usuario {usuario.username} actualizado correctamente', 'success')
+        return redirect(url_for('admin_usuarios'))
+    
+    return render_template('editar_usuario.html', 
+                         usuario=usuario, 
+                         username=session['username'],
+                         sedes=SEDES_DISPONIBLES)  # ✅ NUEVO
 
 @app.route('/admin/usuario/eliminar/<int:usuario_id>', methods=['POST'])
 @admin_required

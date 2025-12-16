@@ -1,204 +1,138 @@
 {% extends "base.html" %}
-{% block title %}Registro de Nuevo Usuario{% endblock %}
-
-{% block styles %}
-.registro-container {
-    max-width: 500px;
-    margin: 0 auto;
-}
-
-.registro-header {
-    text-align: center;
-    margin-bottom: 35px;
-}
-
-.registro-header h1 {
-    color: #0066B3;
-    font-size: 28px;
-    margin-bottom: 10px;
-    font-weight: 700;
-}
-
-.registro-header p {
-    color: #666;
-    font-size: 14px;
-}
-
-.admin-badge {
-    display: inline-block;
-    padding: 8px 16px;
-    background: linear-gradient(135deg, #0066B3 0%, #003D7A 100%);
-    color: white;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 20px;
-}
-
-.form-card {
-    background: white;
-    border-radius: 12px;
-    padding: 40px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-}
-
-.form-group {
-    margin-bottom: 22px;
-}
-
-.form-group label {
-    display: block;
-    color: #333333;
-    font-weight: 600;
-    margin-bottom: 8px;
-    font-size: 14px;
-}
-
-.form-group input,
-.form-group select {
-    width: 100%;
-    padding: 14px;
-    border: 2px solid #E0E0E0;
-    border-radius: 8px;
-    font-size: 15px;
-    transition: all 0.3s;
-    font-family: inherit;
-}
-
-.form-group input:focus,
-.form-group select:focus {
-    outline: none;
-    border-color: #0066B3;
-    box-shadow: 0 0 0 3px rgba(0, 102, 179, 0.1);
-}
-
-.form-group select {
-    cursor: pointer;
-    background: white;
-}
-
-.btn-submit {
-    width: 100%;
-    padding: 15px;
-    background: linear-gradient(135deg, #0066B3 0%, #003D7A 100%);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s;
-    margin-top: 10px;
-}
-
-.btn-submit:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0, 102, 179, 0.4);
-}
-
-.btn-submit:active {
-    transform: translateY(0);
-}
-
-.btn-volver {
-    width: 100%;
-    padding: 12px;
-    background: #6b7280;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s;
-    margin-top: 15px;
-    text-decoration: none;
-    display: block;
-    text-align: center;
-}
-
-.btn-volver:hover {
-    background: #4b5563;
-}
-
-.password-requirements {
-    font-size: 12px;
-    color: #666;
-    margin-top: 5px;
-    padding-left: 5px;
-}
-
-.rol-info {
-    background: #F5F5F5;
-    padding: 12px;
-    border-radius: 8px;
-    font-size: 13px;
-    color: #666;
-    margin-top: 8px;
-    border-left: 3px solid #0066B3;
-}
-
-.rol-info strong {
-    color: #0066B3;
-}
-{% endblock %}
+{% block title %}Registro de Usuario{% endblock %}
 
 {% block content %}
-<div class="registro-container">
-    <div class="registro-header">
-        <div class="admin-badge">⚙️ Panel de Administración</div>
-        <h1>➕ Crear Nuevo Usuario</h1>
-        <p>Registra un nuevo profesor o administrador en el sistema</p>
-    </div>
+<div style="max-width: 600px; margin: 0 auto;">
+    <h2>➕ Crear Nuevo Usuario</h2>
     
-    <div class="form-card">
-        <form method="POST" action="{{ url_for('registro') }}">
-            <div class="form-group">
-                <label for="username">Usuario *</label>
-                <input type="text" id="username" name="username" required autofocus minlength="3" placeholder="Nombre de usuario">
-            </div>
-            
-            <div class="form-group">
-                <label for="email">Correo Electrónico *</label>
-                <input type="email" id="email" name="email" required placeholder="usuario@ejemplo.com">
-            </div>
-            
-            <div class="form-group">
-                <label for="password">Contraseña *</label>
-                <input type="password" id="password" name="password" required minlength="6" placeholder="Mínimo 6 caracteres">
-                <div class="password-requirements">
-                    Mínimo 6 caracteres
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }}" style="padding: 15px; margin-bottom: 20px; border-radius: 8px;">
+                    {{ message }}
                 </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="card" style="background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <form method="POST">
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="username" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                    Usuario *
+                </label>
+                <input type="text" 
+                       id="username" 
+                       name="username" 
+                       required 
+                       placeholder="Nombre de usuario"
+                       style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
             </div>
             
-            <div class="form-group">
-                <label for="rol">Rol *</label>
-                <select id="rol" name="rol" required onchange="mostrarInfoRol(this.value)">
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="email" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                    Email *
+                </label>
+                <input type="email" 
+                       id="email" 
+                       name="email" 
+                       required 
+                       placeholder="correo@ejemplo.com"
+                       style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="password" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                    Contraseña *
+                </label>
+                <input type="password" 
+                       id="password" 
+                       name="password" 
+                       required 
+                       minlength="6"
+                       placeholder="Mínimo 6 caracteres"
+                       style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="confirm_password" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                    Confirmar Contraseña *
+                </label>
+                <input type="password" 
+                       id="confirm_password" 
+                       name="confirm_password" 
+                       required 
+                       minlength="6"
+                       placeholder="Repite la contraseña"
+                       style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="rol" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                    Rol *
+                </label>
+                <select id="rol" 
+                        name="rol" 
+                        required
+                        onchange="toggleSedeField()"
+                        style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
                     <option value="profesor">Profesor</option>
                     <option value="admin">Administrador</option>
                 </select>
-                <div class="rol-info" id="rol-info">
-                    <strong>Profesor:</strong> Puede realizar y gestionar sus propias reservas
-                </div>
             </div>
             
-            <button type="submit" class="btn-submit">Crear Usuario</button>
+            <!-- ✅ NUEVO: Campo de Sede -->
+            <div class="form-group" id="sede-group" style="margin-bottom: 20px;">
+                <label for="sede" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                    Sede * <small style="color: #666; font-weight: normal;">(Solo para profesores)</small>
+                </label>
+                <select id="sede" 
+                        name="sede"
+                        style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                    <option value="">Selecciona una sede...</option>
+                    {% for sede in sedes %}
+                    <option value="{{ sede }}">🏢 {{ sede }}</option>
+                    {% endfor %}
+                </select>
+                <small style="color: #666; display: block; margin-top: 5px;">
+                    La sede determina qué entrevistas se asignarán a este profesor
+                </small>
+            </div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 30px;">
+                <button type="submit" 
+                        class="btn btn-primary" 
+                        style="flex: 1; padding: 12px;">
+                    ✅ Crear Usuario
+                </button>
+                <a href="{{ url_for('admin_usuarios') }}" 
+                   class="btn btn-secondary" 
+                   style="flex: 1; padding: 12px; text-align: center; text-decoration: none; display: inline-block;">
+                    ❌ Cancelar
+                </a>
+            </div>
         </form>
-        
-        <a href="{{ url_for('admin_usuarios') }}" class="btn-volver">← Volver a Gestión de Usuarios</a>
     </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
 <script>
-function mostrarInfoRol(rol) {
-    const infoDiv = document.getElementById('rol-info');
-    if (rol === 'admin') {
-        infoDiv.innerHTML = '<strong>Administrador:</strong> Puede gestionar usuarios y acceder a todas las funcionalidades';
+// Mostrar/ocultar campo de sede según el rol
+function toggleSedeField() {
+    const rol = document.getElementById('rol').value;
+    const sedeGroup = document.getElementById('sede-group');
+    const sedeSelect = document.getElementById('sede');
+    
+    if (rol === 'profesor') {
+        sedeGroup.style.display = 'block';
+        sedeSelect.required = true;
     } else {
-        infoDiv.innerHTML = '<strong>Profesor:</strong> Puede realizar y gestionar sus propias reservas';
+        sedeGroup.style.display = 'none';
+        sedeSelect.required = false;
+        sedeSelect.value = '';
     }
 }
+
+// Ejecutar al cargar la página
+window.onload = toggleSedeField;
 </script>
 {% endblock %}
