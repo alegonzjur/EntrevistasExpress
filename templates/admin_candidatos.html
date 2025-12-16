@@ -82,8 +82,6 @@
                             <i class="fas fa-upload"></i> Cargar y Procesar
                         </button>
                     </form>
-                    
-                    <div id="resultadoCarga" class="mt-3"></div>
                 </div>
             </div>
         </div>
@@ -123,8 +121,6 @@
                             <i class="fas fa-magic"></i> Ejecutar Asignación
                         </button>
                     </form>
-                    
-                    <div id="resultadoAsignacion" class="mt-3"></div>
                 </div>
             </div>
         </div>
@@ -169,8 +165,8 @@
                                             <i class="fas fa-calendar-check"></i> Ver Asignaciones
                                         </a>
                                             
-                                        <a href="{{ url_for('gestion_manual_candidatos', semana=semana.semana_carga) }}" class="btn btn-primary">
-                                             Gestión Manual
+                                        <a href="{{ url_for('gestion_manual_candidatos', semana=semana.semana_carga) }}" class="btn btn-sm btn-primary">
+                                             🎯 Gestión Manual
                                         </a>
                                     </td>
                                 </tr>
@@ -250,6 +246,8 @@
             </div>
         </div>
     </div>
+    
+    <!-- Pruebas y Configuración -->
     <div class="card mt-4">
         <div class="card-header bg-info text-white">
             <h5 class="mb-0">
@@ -274,18 +272,27 @@
 </div>
 
 <script>
-// Cargar Excel
+// ====================================================================
+// CARGAR EXCEL
+// ====================================================================
 document.getElementById('formCargarExcel').addEventListener('submit', async function(e) {
     e.preventDefault();
     
+    const formData = new FormData(this);
     const btnCargar = document.getElementById('btnCargar');
-    const resultadoDiv = document.getElementById('resultadoCarga');
     
     btnCargar.disabled = true;
     btnCargar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
-    resultadoDiv.innerHTML = '';
     
-    const formData = new FormData(this);
+    Swal.fire({
+        title: 'Procesando archivo Excel...',
+        html: 'Leyendo y validando datos...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
     
     try {
         const response = await fetch('/admin/candidatos/cargar-excel', {
@@ -294,63 +301,114 @@ document.getElementById('formCargarExcel').addEventListener('submit', async func
         });
         
         const data = await response.json();
+        Swal.close();
         
         if (response.ok) {
-            resultadoDiv.innerHTML = `
-                <div class="alert alert-success">
-                    <h5><i class="fas fa-check-circle"></i> ¡Éxito!</h5>
-                    <p>${data.mensaje}</p>
-                    <ul>
-                        <li>Total leídos: ${data.total_leidos}</li>
-                        <li>Válidos: ${data.total_validos}</li>
-                        <li>Importados (nota < ${data.umbral}): ${data.candidatos_finales}</li>
-                        <li>Semana: ${data.semana}</li>
-                    </ul>
-                </div>
+            let mensajeHTML = `
+                <div style="text-align: left;">
+                    <strong>✅ ${data.candidatos_finales} candidatos importados correctamente</strong><br><br>
+                    📊 <strong>Detalles:</strong><br>
+                    • Total leídos: ${data.total_leidos}<br>
+                    • Válidos: ${data.total_validos}<br>
+                    • Importados (nota < ${data.umbral}): ${data.candidatos_finales}
             `;
             
-            // Recargar página después de 2 segundos
-            setTimeout(() => location.reload(), 2000);
+            // Mostrar duplicados si los hay
+            if (data.candidatos_duplicados && data.candidatos_duplicados > 0) {
+                mensajeHTML += `<br>• ⚠️ Duplicados omitidos: ${data.candidatos_duplicados}`;
+            }
+            
+            // Añadir información de sedes
+            if (data.mensaje_sedes) {
+                mensajeHTML += '<br><br>' + data.mensaje_sedes;
+            }
+            
+            // Añadir mensaje de duplicados
+            if (data.mensaje_duplicados) {
+                mensajeHTML += data.mensaje_duplicados;
+            }
+            
+            mensajeHTML += '</div>';
+            
+            await Swal.fire({
+                icon: data.candidatos_duplicados > 0 ? 'warning' : 'success',
+                title: data.candidatos_duplicados > 0 ? '¡Importación con Advertencias!' : '¡Importación Exitosa!',
+                html: mensajeHTML,
+                confirmButtonColor: '#28a745',
+                width: 600
+            });
+            
+            location.reload();
         } else {
-            resultadoDiv.innerHTML = `
-                <div class="alert alert-danger">
-                    <h5><i class="fas fa-exclamation-circle"></i> Error</h5>
-                    <p>${data.error}</p>
-                </div>
-            `;
+            if (data.duplicado) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Archivo Duplicado',
+                    text: data.error,
+                    confirmButtonColor: '#ffc107'
+                });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: data.error,
+                    confirmButtonColor: '#dc3545'
+                });
+            }
         }
     } catch (error) {
-        resultadoDiv.innerHTML = `
-            <div class="alert alert-danger">
-                <h5><i class="fas fa-exclamation-circle"></i> Error</h5>
-                <p>Error de conexión: ${error.message}</p>
-            </div>
-        `;
+        Swal.close();
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error de conexión: ' + error.message,
+            confirmButtonColor: '#dc3545'
+        });
     } finally {
         btnCargar.disabled = false;
         btnCargar.innerHTML = '<i class="fas fa-upload"></i> Cargar y Procesar';
     }
 });
 
-// Ejecutar Asignación
+// ====================================================================
+// EJECUTAR ASIGNACIÓN
+// ====================================================================
 document.getElementById('formAsignacion').addEventListener('submit', async function(e) {
     e.preventDefault();
     
-    const btnAsignar = document.getElementById('btnAsignar');
-    const resultadoDiv = document.getElementById('resultadoAsignacion');
+    const result = await Swal.fire({
+        icon: 'question',
+        title: '¿Ejecutar Asignación Automática?',
+        text: 'Se asignarán candidatos automáticamente a las reservas disponibles según su sede',
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sí, ejecutar',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true
+    });
     
-    if (!confirm('¿Estás seguro de ejecutar la asignación automática?')) {
-        return;
-    }
+    if (!result.isConfirmed) return;
+    
+    const btnAsignar = document.getElementById('btnAsignar');
     
     btnAsignar.disabled = true;
     btnAsignar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ejecutando...';
-    resultadoDiv.innerHTML = '';
     
     const formData = {
         semana_carga: document.getElementById('semanaCargaAsignacion').value,
         max_por_profesor: document.getElementById('maxPorProfesor').value || null
     };
+    
+    Swal.fire({
+        title: 'Ejecutando asignación automática...',
+        html: 'Procesando candidatos por sede...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
     
     try {
         const response = await fetch('/admin/candidatos/ejecutar-asignacion', {
@@ -362,45 +420,68 @@ document.getElementById('formAsignacion').addEventListener('submit', async funct
         });
         
         const data = await response.json();
+        Swal.close();
         
         if (response.ok) {
-            resultadoDiv.innerHTML = `
-                <div class="alert alert-success">
-                    <h5><i class="fas fa-check-circle"></i> ¡Asignación Completada!</h5>
-                    <p>${data.mensaje}</p>
-                    <ul>
-                        <li>Candidatos asignados: ${data.candidatos_asignados}</li>
-                        ${data.candidatos_sin_asignar > 0 ? `<li>Sin asignar: ${data.candidatos_sin_asignar}</li>` : ''}
-                        <li>Franjas utilizadas: ${data.franjas_utilizadas}</li>
-                        <li>Semana carga: ${data.semana_carga}</li>
-                        <li>Semana entrevistas: ${data.semana_entrevistas}</li>
-                        <li>Tiempo: ${data.tiempo_segundos}s</li>
-                    </ul>
-                </div>
+            let mensajeHTML = `
+                <div style="text-align: left;">
+                    <strong>✅ ${data.candidatos_asignados} candidatos asignados correctamente</strong><br><br>
+                    📊 <strong>Detalles:</strong><br>
+                    • Candidatos asignados: ${data.candidatos_asignados}<br>
+                    • Candidatos sin asignar: ${data.candidatos_sin_asignar}<br>
+                    • Franjas utilizadas: ${data.franjas_utilizadas}<br>
+                    • Semana carga: ${data.semana_carga}<br>
+                    • Semana entrevistas: ${data.semana_entrevistas}<br>
+                    • Tiempo: ${data.tiempo_segundos}s
             `;
             
-            // Recargar página después de 2 segundos
-            setTimeout(() => location.reload(), 2000);
+            // Añadir estadísticas por sede
+            if (data.stats_por_sede) {
+                mensajeHTML += '<br><br>📍 <strong>Por sede:</strong><br>';
+                for (const [sede, stats] of Object.entries(data.stats_por_sede)) {
+                    mensajeHTML += `<br><strong>${sede}:</strong><br>`;
+                    mensajeHTML += `  • Total: ${stats.total_candidatos}<br>`;
+                    mensajeHTML += `  • Asignados: ${stats.asignados}<br>`;
+                    mensajeHTML += `  • Pendientes: ${stats.sin_asignar}`;
+                }
+            }
+            
+            mensajeHTML += '</div>';
+            
+            await Swal.fire({
+                icon: 'success',
+                title: '¡Asignación Completada!',
+                html: mensajeHTML,
+                confirmButtonColor: '#28a745',
+                width: 650
+            });
+            
+            location.reload();
         } else {
-            resultadoDiv.innerHTML = `
-                <div class="alert alert-danger">
-                    <h5><i class="fas fa-exclamation-circle"></i> Error</h5>
-                    <p>${data.error}</p>
-                </div>
-            `;
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error,
+                confirmButtonColor: '#dc3545'
+            });
         }
     } catch (error) {
-        resultadoDiv.innerHTML = `
-            <div class="alert alert-danger">
-                <h5><i class="fas fa-exclamation-circle"></i> Error</h5>
-                <p>Error de conexión: ${error.message}</p>
-            </div>
-        `;
+        Swal.close();
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error de conexión: ' + error.message,
+            confirmButtonColor: '#dc3545'
+        });
     } finally {
         btnAsignar.disabled = false;
         btnAsignar.innerHTML = '<i class="fas fa-magic"></i> Ejecutar Asignación';
     }
 });
+
+// ====================================================================
+// TEST EMAIL
+// ====================================================================
 async function testEmailConfig() {
     const { value: email } = await Swal.fire({
         title: 'Email de Prueba',

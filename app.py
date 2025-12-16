@@ -123,6 +123,7 @@ class Candidato(db.Model):
     telefono = db.Column(db.String(20), nullable=True)
     media_estudios = db.Column(db.Numeric(4, 2), nullable=False)
     primera_opcion = db.Column(db.Text)
+    sede = db.Column(db.String(50), nullable=True)
     estado = db.Column(db.String(20), default='pendiente', nullable=False)
     fecha_carga = db.Column(db.DateTime, default=datetime.utcnow)
     semana_carga = db.Column(db.String(20))
@@ -151,7 +152,8 @@ class Candidato(db.Model):
             'telefono': self.telefono,
             'media_estudios': float(self.media_estudios) if self.media_estudios else None,
             'estado': self.estado,
-            'primera_opcion': self.primera_opcion
+            'primera_opcion': self.primera_opcion,
+            'sede': self.sede
         }
 
 
@@ -269,6 +271,46 @@ SEDES_DISPONIBLES = [
     'Ciempozuelos',
     'Pº de la Habana'
 ]
+
+# ====================================================================
+# FUNCIONES AUXILIARES PARA SEDES
+# ====================================================================
+
+def detectar_sede_desde_primera_opcion(primera_opcion):
+    """
+    Detecta la sede a partir del campo 'primera_opcion'
+    
+    Busca las palabras clave en el texto:
+    - "Bormujos" -> Bormujos
+    - "Pº de la Habana" o "Paseo de la Habana" -> Pº de la Habana
+    - "Ciempozuelos" -> Ciempozuelos
+    
+    Args:
+        primera_opcion: String con la primera opción del candidato
+    
+    Returns:
+        String con el nombre de la sede o None si no se detecta
+    """
+    if not primera_opcion:
+        return None
+    
+    # Convertir a mayúsculas para facilitar la búsqueda
+    texto = primera_opcion.upper()
+    
+    # Buscar sedes en orden de especificidad
+    # (Primero las más específicas para evitar falsos positivos)
+    
+    if 'Pº DE LA HABANA' in texto.replace(' ', '') or 'PASEO DE LA HABANA' in texto:
+        return 'Pº de la Habana'
+    
+    if 'BORMUJOS' in texto:
+        return 'Bormujos'
+    
+    if 'CIEMPOZUELOS' in texto:
+        return 'Ciempozuelos'
+    
+    # Si no se detecta ninguna sede
+    return None
 # ====================================================================
 # FUNCIONES AUXILIARES PARA CARGA Y ASIGNACIÓN
 # ====================================================================
@@ -1666,15 +1708,15 @@ def cargar_excel_candidatos():
         
         # Procesar datos
         df_procesado = df[columnas_necesarias].copy()
-        df_procesado.rename(columns={
-            'Solicitud': 'solicitud',
-            'Apellidos': 'apellidos',
-            'Nombre': 'nombre',
-            'Media estudios realizados': 'media_estudios',
-            'Primera opción': 'primera_opcion',
-            'Email': 'email',
-            'Telefono': 'telefono'
-        }, inplace=True)
+        df_procesado.columns = [
+            'solicitud',
+            'apellidos',
+            'nombre',
+            'media_estudios',
+            'primera_opcion',
+            'email',
+            'telefono'
+        ]
         
         # Limpiar datos
         df_procesado = df_procesado.dropna(subset=['solicitud', 'apellidos', 'nombre', 'media_estudios'])
@@ -1682,15 +1724,21 @@ def cargar_excel_candidatos():
         df_procesado['media_estudios'] = pd.to_numeric(df_procesado['media_estudios'], errors='coerce')
         df_procesado = df_procesado.dropna(subset=['solicitud', 'media_estudios'])
         
+        # Convertir teléfono a string
+        df_procesado['telefono'] = df_procesado['telefono'].apply(
+            lambda x: str(int(x)) if pd.notna(x) and x != '' else None
+        )
+        
+        # ✅ CORRECCIÓN: Detectar sede AQUÍ en df_procesado (antes de filtrar)
+        df_procesado['sede'] = df_procesado['primera_opcion'].apply(detectar_sede_desde_primera_opcion)
+        
         total_leidos = len(df)
         total_validos = len(df_procesado)
         
-        # Filtrar por umbral
+        # Filtrar por umbral (AHORA df_filtrado ya tiene la columna 'sede')
         df_filtrado = df_procesado[df_procesado['media_estudios'] < umbral].copy()
         
         # Añadir campos de gestión
-        # df_filtrado['email'] = None
-        
         df_filtrado['estado'] = 'pendiente'
         df_filtrado['fecha_carga'] = datetime.now()
         df_filtrado['semana_carga'] = semana
@@ -1702,17 +1750,60 @@ def cargar_excel_candidatos():
             os.remove(filepath)
             return jsonify({
                 'error': f'No hay candidatos con nota inferior a {umbral}',
-                'total_leidos': total_leidos,
-                'total_validos': total_validos
+                'total_leidos': int(total_leidos),
+                'total_validos': int(total_validos)
             }), 400
         
-        # Guardar en base de datos
-        for col in ['apellidos', 'nombre', 'primera_opcion', 'archivo_origen', 'email', 'telefono']:
+        # ✅ Contar candidatos por sede - CONVERTIR A TIPOS NATIVOS
+        candidatos_por_sede_raw = df_filtrado['sede'].value_counts().to_dict()
+        candidatos_por_sede = {
+            str(k) if k is not None else 'Sin detectar': int(v) 
+            for k, v in candidatos_por_sede_raw.items()
+        }
+        candidatos_sin_sede = int(df_filtrado['sede'].isna().sum())
+        
+        # Verificar duplicados antes de insertar
+        solicitudes_en_df = df_filtrado['solicitud'].tolist()
+        candidatos_existentes = Candidato.query.filter(
+            Candidato.solicitud.in_(solicitudes_en_df),
+            Candidato.semana_carga == semana
+        ).all()
+        
+        candidatos_duplicados = len(candidatos_existentes)
+        
+        if candidatos_duplicados > 0:
+            # Obtener solicitudes duplicadas
+            solicitudes_duplicadas = [c.solicitud for c in candidatos_existentes]
+            
+            # Filtrar el DataFrame para excluir duplicados
+            df_filtrado = df_filtrado[~df_filtrado['solicitud'].isin(solicitudes_duplicadas)].copy()
+            
+            candidatos_finales = len(df_filtrado)
+            
+            if candidatos_finales == 0:
+                os.remove(filepath)
+                return jsonify({
+                    'error': f'Todos los candidatos ({candidatos_duplicados}) ya están cargados en la semana {semana}',
+                    'duplicados': candidatos_duplicados,
+                    'total_leidos': int(total_leidos)
+                }), 400
+            
+            # ✅ Recalcular estadísticas después de eliminar duplicados
+            candidatos_por_sede_raw = df_filtrado['sede'].value_counts().to_dict()
+            candidatos_por_sede = {
+                str(k) if k is not None else 'Sin detectar': int(v) 
+                for k, v in candidatos_por_sede_raw.items()
+            }
+            candidatos_sin_sede = int(df_filtrado['sede'].isna().sum())
+        
+        # Codificar campos de texto
+        for col in ['apellidos', 'nombre', 'primera_opcion', 'archivo_origen', 'email', 'telefono', 'sede']:
             if col in df_filtrado.columns:
                 df_filtrado[col] = df_filtrado[col].apply(
-                    lambda x: str(x).encode('utf-8', 'ignore').decode('utf-8') if x is not None and str(x) != 'nan' else x
+                    lambda x: str(x).encode('utf-8', 'ignore').decode('utf-8') if x is not None and str(x) not in ['nan', 'None'] else None
                 )
         
+        # Guardar en base de datos
         df_filtrado.to_sql('candidatos', db.engine, if_exists='append', index=False, method='multi', chunksize=100)
         
         # Registrar carga
@@ -1721,224 +1812,72 @@ def cargar_excel_candidatos():
             archivo_hash=archivo_hash,
             candidatos_totales=total_leidos,
             candidatos_importados=candidatos_finales,
-            candidatos_duplicados=0,
+            candidatos_duplicados=candidatos_duplicados,
             cargado_por_usuario_id=session['user_id'],
             semana_destino=semana,
             estado='completado',
-            mensaje=f'Importación exitosa. {candidatos_finales} candidatos con nota < {umbral}'
+            mensaje=f'Importación exitosa. {candidatos_finales} candidatos con nota < {umbral}' + 
+                    (f' ({candidatos_duplicados} duplicados omitidos)' if candidatos_duplicados > 0 else '')
         )
         db.session.add(carga)
         db.session.commit()
         
+        # ✅ Registrar en logs de auditoría
+        registrar_log(
+            accion='cargar_excel',
+            entidad='candidatos',
+            entidad_id=None,
+            descripcion=f'Carga de Excel: {candidatos_finales} candidatos importados para semana {semana}',
+            datos_nuevos={
+                'archivo': filename,
+                'semana': semana,
+                'candidatos_importados': candidatos_finales,
+                'candidatos_duplicados': candidatos_duplicados,
+                'umbral': umbral,
+                'candidatos_por_sede': candidatos_por_sede
+            },
+            nivel='info'
+        )
+        
+        # Mensaje con información de sedes
+        mensaje_sedes = ''
+        if candidatos_por_sede:
+            mensaje_sedes = '<br><strong>📍 Por sede:</strong><br>'
+            for sede, cantidad in candidatos_por_sede.items():
+                mensaje_sedes += f'• {sede}: {cantidad}<br>'
+        if candidatos_sin_sede > 0:
+            mensaje_sedes += f'• ⚠️ Sin sede detectada: {candidatos_sin_sede}<br>'
+        
+        # Advertencia sobre duplicados
+        mensaje_duplicados = ''
+        if candidatos_duplicados > 0:
+            mensaje_duplicados = f'<br><strong>⚠️ Duplicados omitidos:</strong> {candidatos_duplicados} candidatos ya existían<br>'
+        
+        # Eliminar archivo temporal
+        os.remove(filepath)
+        
+        # ✅ CRÍTICO: Convertir TODOS los valores a tipos nativos de Python
         return jsonify({
             'success': True,
             'mensaje': f'{candidatos_finales} candidatos importados correctamente',
-            'total_leidos': total_leidos,
-            'total_validos': total_validos,
-            'candidatos_finales': candidatos_finales,
-            'umbral': umbral,
-            'semana': semana
+            'total_leidos': int(total_leidos),
+            'total_validos': int(total_validos),
+            'candidatos_finales': int(candidatos_finales),
+            'candidatos_duplicados': int(candidatos_duplicados),
+            'umbral': float(umbral),
+            'semana': str(semana),
+            'candidatos_por_sede': candidatos_por_sede,
+            'candidatos_sin_sede': int(candidatos_sin_sede),
+            'mensaje_sedes': mensaje_sedes,
+            'mensaje_duplicados': mensaje_duplicados
         })
         
     except Exception as e:
         if 'filepath' in locals() and os.path.exists(filepath):
             os.remove(filepath)
-        return jsonify({'error': f'Error al procesar el archivo: {str(e)}'}), 500
-
-
-@app.route('/admin/candidatos/ejecutar-asignacion', methods=['POST'])
-@admin_required
-def ejecutar_asignacion():
-    """Ejecuta el algoritmo de asignación automática"""
-    
-    try:
-        data = request.json
-        semana_carga = data.get('semana_carga')
-        max_por_profesor = data.get('max_por_profesor')
-        
-        if not semana_carga:
-            return jsonify({'error': 'Debe especificar una semana de carga'}), 400
-        
-        # Calcular semana de entrevistas (siguiente)
-        año, semana_num = semana_carga.split('-W')
-        primer_dia = datetime.strptime(f'{año}-W{semana_num}-1', '%Y-W%W-%w').date()
-        siguiente_lunes = primer_dia + timedelta(days=7)
-        semana_entrevistas = siguiente_lunes.strftime('%Y-W%W')
-        
-        # Verificar candidatos pendientes
-        candidatos_pendientes = Candidato.query\
-            .filter_by(semana_carga=semana_carga, estado='pendiente')\
-            .count()
-        
-        if candidatos_pendientes == 0:
-            return jsonify({
-                'error': f'No hay candidatos pendientes para la semana {semana_carga}',
-                'candidatos_pendientes': 0
-            }), 400
-        
-        # Calcular rango de fechas para semana de entrevistas
-        año_ent, semana_num_ent = semana_entrevistas.split('-W')
-        primer_dia_ent = datetime.strptime(f'{año_ent}-W{semana_num_ent}-1', '%Y-W%W-%w').date()
-        viernes_ent = primer_dia_ent + timedelta(days=4)
-        
-        # Verificar reservas disponibles
-        reservas = Reserva.query\
-            .filter(Reserva.fecha >= primer_dia_ent)\
-            .filter(Reserva.fecha <= viernes_ent)\
-            .count()
-        
-        if reservas == 0:
-            return jsonify({
-                'error': f'No hay reservas para la semana de entrevistas {semana_entrevistas} ({primer_dia_ent.strftime("%d/%m")} - {viernes_ent.strftime("%d/%m")})',
-                'reservas_disponibles': 0
-            }), 400
-        
-        inicio = datetime.now()
-        
-        # Obtener candidatos ordenados por nota
-        candidatos = Candidato.query\
-            .filter_by(semana_carga=semana_carga, estado='pendiente')\
-            .order_by(Candidato.media_estudios.asc())\
-            .all()
-        
-        # Obtener reservas con espacios
-        reservas_obj = Reserva.query\
-            .filter(Reserva.fecha >= primer_dia_ent)\
-            .filter(Reserva.fecha <= viernes_ent)\
-            .order_by(Reserva.fecha, Reserva.hora_inicio)\
-            .all()
-        
-        franjas_disponibles = []
-        for reserva in reservas_obj:
-            asignaciones_existentes = Asignacion.query\
-                .filter_by(reserva_id=reserva.id)\
-                .count()
-            
-            espacios_libres = 2 - asignaciones_existentes
-            if espacios_libres > 0:
-                franjas_disponibles.append({
-                    'reserva': reserva,
-                    'espacios_libres': espacios_libres,
-                    'asignaciones_actuales': asignaciones_existentes
-                })
-        
-        # Asignar candidatos
-        asignaciones_creadas = []
-        idx_candidato = 0
-        idx_franja = 0
-        
-        asignaciones_por_profesor = {}
-        
-        while idx_candidato < len(candidatos) and idx_franja < len(franjas_disponibles):
-            candidato = candidatos[idx_candidato]
-            franja = franjas_disponibles[idx_franja]
-            reserva = franja['reserva']
-            entrevistador_id = reserva.usuario_id
-            
-            # Verificar límite por profesor
-            if max_por_profesor:
-                actual = asignaciones_por_profesor.get(entrevistador_id, 0)
-                if actual >= int(max_por_profesor):
-                    idx_franja += 1
-                    continue
-            
-            # Determinar posición y minuto de inicio
-            if franja['asignaciones_actuales'] == 0:
-                posicion = 1
-                minuto_inicio = 0
-            else:
-                posicion = 2
-                minuto_inicio = 15
-            
-            # Calcular hora exacta
-            hora_base = datetime.combine(reserva.fecha, reserva.hora_inicio)
-            hora_exacta = hora_base + timedelta(minutes=minuto_inicio)
-            
-            # ✅ CREAR ASIGNACIÓN SIN hora_exacta EN EL CONSTRUCTOR
-            asignacion = Asignacion(
-                candidato_id=candidato.id,
-                reserva_id=reserva.id,
-                entrevistador_id=entrevistador_id,
-                posicion=posicion,
-                minuto_inicio=minuto_inicio,
-                # NO incluir hora_exacta aquí
-                estado='confirmado',
-                fecha_asignacion=datetime.now(),
-                asignado_por_admin_id=session['user_id']
-            )
-            
-            db.session.add(asignacion)
-            
-        
-            try:
-                # Verificar si hora_exacta es una columna o una propiedad
-                if hasattr(type(asignacion), 'hora_exacta'):
-                    attr = getattr(type(asignacion), 'hora_exacta')
-                    # Si NO es una propiedad calculada, asignarla
-                    if not isinstance(attr, property):
-                        asignacion.hora_exacta = hora_exacta.time()
-            except Exception as e:
-                # Si hay error al asignar, continuar sin ella
-                print(f"Advertencia: No se pudo asignar hora_exacta: {e}")
-            
-            asignaciones_creadas.append({
-                'candidato_id': candidato.id,
-                'reserva_id': reserva.id
-            })
-            
-            # Actualizar estado del candidato
-            candidato.estado = 'asignado'
-            
-            # Actualizar contadores
-            asignaciones_por_profesor[entrevistador_id] = asignaciones_por_profesor.get(entrevistador_id, 0) + 1
-            franja['espacios_libres'] -= 1
-            franja['asignaciones_actuales'] += 1
-            
-            idx_candidato += 1
-            
-            if franja['espacios_libres'] == 0:
-                idx_franja += 1
-        
-        # Guardar cambios
-        db.session.flush()
-        
-        # Crear log
-        tiempo_total = (datetime.now() - inicio).total_seconds()
-        
-        log = LogAsignacion(
-            fecha_ejecucion=datetime.now(),
-            semana_objetivo=semana_carga,
-            candidatos_procesados=len(candidatos),
-            candidatos_filtrados=0,
-            candidatos_asignados=len(asignaciones_creadas),
-            candidatos_sin_asignar=len(candidatos) - len(asignaciones_creadas),
-            franjas_utilizadas=len(set([a['reserva_id'] for a in asignaciones_creadas])),
-            algoritmo_usado='balanceado',
-            tiempo_ejecucion_segundos=round(tiempo_total, 2),
-            estado='exito' if len(asignaciones_creadas) == len(candidatos) else 'parcial',
-            mensaje=f'Asignación desde interfaz web. Candidatos W{semana_carga.split("-W")[1]} → Entrevistas W{semana_entrevistas.split("-W")[1]}',
-            ejecutado_por_usuario_id=session['user_id']
-        )
-        
-        db.session.add(log)
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'mensaje': f'{len(asignaciones_creadas)} candidatos asignados correctamente',
-            'candidatos_asignados': len(asignaciones_creadas),
-            'candidatos_sin_asignar': len(candidatos) - len(asignaciones_creadas),
-            'franjas_utilizadas': len(set([a['reserva_id'] for a in asignaciones_creadas])),
-            'semana_carga': semana_carga,
-            'semana_entrevistas': semana_entrevistas,
-            'tiempo_segundos': round(tiempo_total, 2)
-        })
-        
-    except Exception as e:
-        db.session.rollback()
         import traceback
         traceback.print_exc()
-        return jsonify({'error': f'Error al ejecutar asignación: {str(e)}'}), 500
+        return jsonify({'error': f'Error al procesar el archivo: {str(e)}'}), 500
 
 
 @app.route('/admin/candidatos/semana/<semana>')
@@ -2564,7 +2503,7 @@ def exportar_candidatos_xlsx(candidatos, semana):
     )
     
     # Encabezados
-    headers = ['#', 'Solicitud', 'Apellidos', 'Nombre', 'Email','Telefono', 'Nota Media', 'Primera Opción', 'Estado', 'Fecha Carga']
+    headers = ['#', 'Solicitud', 'Apellidos', 'Nombre', 'Email','Telefono', 'Nota Media', 'Sede','Primera Opción', 'Estado', 'Fecha Carga']
     ws.append(headers)
     
     # Aplicar estilos a encabezados
@@ -2584,6 +2523,7 @@ def exportar_candidatos_xlsx(candidatos, semana):
             candidato.email or 'N/A',
             candidato.telefono or 'N/A',
             float(candidato.media_estudios) if candidato.media_estudios else 0,
+            candidato.sede or 'Sin detectar',
             candidato.primera_opcion or '',
             candidato.estado.upper(),
             candidato.fecha_carga.strftime('%d/%m/%Y %H:%M')
@@ -2594,6 +2534,11 @@ def exportar_candidatos_xlsx(candidatos, semana):
         nota = float(candidato.media_estudios) if candidato.media_estudios else 0
         color = "FFC7CE" if nota < 5.5 else "FFEB9C" if nota < 6.5 else "C6EFCE"
         ws.cell(row=idx+1, column=6).fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+
+        if candidato.sede:
+            color_sede = "D1ECF1"  # Azul claro
+            ws.cell(row=idx+1, column=8).fill = PatternFill(start_color=color_sede, end_color=color_sede, fill_type="solid")
+            ws.cell(row=idx+1, column=8).font = Font(bold=True)
         
         # Colorear según estado
         if candidato.estado == 'asignado':
@@ -2616,9 +2561,10 @@ def exportar_candidatos_xlsx(candidatos, semana):
     ws.column_dimensions['E'].width = 25
     ws.column_dimensions['F'].width = 15
     ws.column_dimensions['G'].width = 12
-    ws.column_dimensions['H'].width = 40
-    ws.column_dimensions['I'].width = 12
-    ws.column_dimensions['J'].width = 18
+    ws.column_dimensions['H'].width = 18
+    ws.column_dimensions['I'].width = 40
+    ws.column_dimensions['J'].width = 12
+    ws.column_dimensions['K'].width = 18
     
     # Guardar en memoria
     output = BytesIO()
