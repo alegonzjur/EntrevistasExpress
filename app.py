@@ -23,6 +23,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side    
 import csv
 import json
+import unicodedata
 
 
 app = Flask(__name__)
@@ -294,19 +295,28 @@ def detectar_sede_desde_primera_opcion(primera_opcion):
     if not primera_opcion:
         return None
     
+    def normalizar_texto(texto):
+    # Quitar acentos
+        texto_sin_acentos = ''.join(
+            c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
+    # Convertir a mayúsculas
+        return texto_sin_acentos.upper()
+
+    texto_normalizado = normalizar_texto(primera_opcion)
+    texto_limpio = texto_normalizado.replace('º', '').replace('°', '').replace('O', '')
     # Convertir a mayúsculas para facilitar la búsqueda
-    texto = primera_opcion.upper()
-    
-    # Buscar sedes en orden de especificidad
-    # (Primero las más específicas para evitar falsos positivos)
-    
-    if 'Pº DE LA HABANA' in texto.replace(' ', '') or 'PASEO DE LA HABANA' in texto:
+    # Buscar patrones de "Pº de la Habana", "Paseo de la Habana", "P de la Habana"
+    if any(patron in texto_limpio for patron in ['P DE LA HABANA', 'PASEO DE LA HABANA', 'PDELA HABANA']):
         return 'Pº de la Habana'
     
-    if 'BORMUJOS' in texto:
+    # También buscar en texto original por si acaso
+    if 'HABANA' in texto_normalizado:
+        return 'Pº de la Habana'
+    
+    if 'BORMUJOS' in texto_normalizado:
         return 'Bormujos'
     
-    if 'CIEMPOZUELOS' in texto:
+    if 'CIEMPOZUELOS' in texto_normalizado:
         return 'Ciempozuelos'
     
     # Si no se detecta ninguna sede
@@ -1646,6 +1656,357 @@ def admin_candidatos():
                          semanas_disponibles=semanas_disponibles,
                          username=session['username'])
 
+@app.route('/admin/candidatos/ejecutar-asignacion', methods=['POST'])
+@admin_required
+def ejecutar_asignacion():
+    """Ejecuta el algoritmo de asignación automática con filtrado por sedes"""
+    
+    try:
+        data = request.json
+        semana_carga = data.get('semana_carga')
+        max_por_profesor = data.get('max_por_profesor')
+        
+        if not semana_carga:
+            return jsonify({'error': 'Debe especificar una semana de carga'}), 400
+        
+        # Calcular semana de entrevistas (siguiente)
+        año, semana_num = semana_carga.split('-W')
+        primer_dia = datetime.strptime(f'{año}-W{semana_num}-1', '%Y-W%W-%w').date()
+        siguiente_lunes = primer_dia + timedelta(days=7)
+        semana_entrevistas = siguiente_lunes.strftime('%Y-W%W')
+        
+        # Verificar candidatos pendientes
+        candidatos_pendientes = Candidato.query\
+            .filter_by(semana_carga=semana_carga, estado='pendiente')\
+            .count()
+        
+        if candidatos_pendientes == 0:
+            return jsonify({
+                'error': f'No hay candidatos pendientes para la semana {semana_carga}',
+                'candidatos_pendientes': 0
+            }), 400
+        
+        # Calcular rango de fechas para semana de entrevistas
+        año_ent, semana_num_ent = semana_entrevistas.split('-W')
+        primer_dia_ent = datetime.strptime(f'{año_ent}-W{semana_num_ent}-1', '%Y-W%W-%w').date()
+        viernes_ent = primer_dia_ent + timedelta(days=4)
+        
+        # Verificar reservas disponibles
+        reservas = Reserva.query\
+            .filter(Reserva.fecha >= primer_dia_ent)\
+            .filter(Reserva.fecha <= viernes_ent)\
+            .count()
+        
+        if reservas == 0:
+            return jsonify({
+                'error': f'No hay reservas para la semana de entrevistas {semana_entrevistas} ({primer_dia_ent.strftime("%d/%m")} - {viernes_ent.strftime("%d/%m")})',
+                'reservas_disponibles': 0
+            }), 400
+        
+        inicio = datetime.now()
+        
+        # Obtener candidatos ordenados por nota
+        candidatos = Candidato.query\
+            .filter_by(semana_carga=semana_carga, estado='pendiente')\
+            .order_by(Candidato.media_estudios.asc())\
+            .all()
+        
+        # ✅ Agrupar candidatos por sede
+        candidatos_por_sede = {}
+        candidatos_sin_sede = []
+        
+        for candidato in candidatos:
+            if candidato.sede:
+                if candidato.sede not in candidatos_por_sede:
+                    candidatos_por_sede[candidato.sede] = []
+                candidatos_por_sede[candidato.sede].append(candidato)
+            else:
+                candidatos_sin_sede.append(candidato)
+        
+        # Obtener reservas con espacios
+        reservas_obj = Reserva.query\
+            .filter(Reserva.fecha >= primer_dia_ent)\
+            .filter(Reserva.fecha <= viernes_ent)\
+            .order_by(
+                Reserva.prioridad.desc(),  # 'normal' antes que 'secundaria'
+                Reserva.fecha, 
+                Reserva.hora_inicio
+            )\
+            .all()
+        
+        # ✅ Agrupar reservas por sede del entrevistador
+        reservas_por_sede = {}
+        reservas_sin_sede = []
+        
+        for reserva in reservas_obj:
+            entrevistador = Usuario.query.get(reserva.usuario_id)
+            
+            asignaciones_existentes = Asignacion.query.filter_by(reserva_id=reserva.id).count()
+            espacios_libres = 2 - asignaciones_existentes
+            
+            if espacios_libres > 0:
+                franja_info = {
+                    'reserva': reserva,
+                    'espacios_libres': espacios_libres,
+                    'asignaciones_actuales': asignaciones_existentes,
+                    'entrevistador_id': reserva.usuario_id
+                }
+                
+                if entrevistador and entrevistador.sede:
+                    if entrevistador.sede not in reservas_por_sede:
+                        reservas_por_sede[entrevistador.sede] = []
+                    reservas_por_sede[entrevistador.sede].append(franja_info)
+                else:
+                    reservas_sin_sede.append(franja_info)
+        
+        # Variables para tracking
+        asignaciones_creadas = []
+        asignaciones_por_profesor = {}
+        stats_por_sede = {}
+        
+        # ✅ Asignar por sede
+        for sede in SEDES_DISPONIBLES:
+            candidatos_sede = candidatos_por_sede.get(sede, [])
+            franjas_sede = reservas_por_sede.get(sede, [])
+            
+            if not candidatos_sede:
+                stats_por_sede[sede] = {
+                    'total_candidatos': 0,
+                    'asignados': 0,
+                    'sin_asignar': 0
+                }
+                continue
+            
+            if not franjas_sede:
+                stats_por_sede[sede] = {
+                    'total_candidatos': len(candidatos_sede),
+                    'asignados': 0,
+                    'sin_asignar': len(candidatos_sede)
+                }
+                continue
+            
+            asignados_sede = 0
+            idx_candidato = 0
+            idx_franja = 0
+            
+            # Asignar candidatos de esta sede
+            while idx_candidato < len(candidatos_sede) and idx_franja < len(franjas_sede):
+                candidato = candidatos_sede[idx_candidato]
+                franja = franjas_sede[idx_franja]
+                reserva = franja['reserva']
+                entrevistador_id = franja['entrevistador_id']
+                
+                # Verificar límite por profesor
+                if max_por_profesor:
+                    actual = asignaciones_por_profesor.get(entrevistador_id, 0)
+                    if actual >= int(max_por_profesor):
+                        idx_franja += 1
+                        continue
+                
+                # Determinar posición y minuto de inicio
+                if franja['asignaciones_actuales'] == 0:
+                    posicion = 1
+                    minuto_inicio = 0
+                else:
+                    posicion = 2
+                    minuto_inicio = 15
+                
+                # Calcular hora exacta
+                hora_base = datetime.combine(reserva.fecha, reserva.hora_inicio)
+                hora_exacta = hora_base + timedelta(minutes=minuto_inicio)
+                
+                # Crear asignación
+                asignacion = Asignacion(
+                    candidato_id=candidato.id,
+                    reserva_id=reserva.id,
+                    entrevistador_id=entrevistador_id,
+                    posicion=posicion,
+                    minuto_inicio=minuto_inicio,
+                    estado='confirmado',
+                    fecha_asignacion=datetime.now(),
+                    asignado_por_admin_id=session['user_id']
+                )
+                
+                db.session.add(asignacion)
+                
+                # Intentar asignar hora_exacta si existe como columna
+                try:
+                    if hasattr(type(asignacion), 'hora_exacta'):
+                        attr = getattr(type(asignacion), 'hora_exacta')
+                        if not isinstance(attr, property):
+                            asignacion.hora_exacta = hora_exacta.time()
+                except Exception as e:
+                    print(f"Advertencia: No se pudo asignar hora_exacta: {e}")
+                
+                asignaciones_creadas.append({
+                    'candidato_id': candidato.id,
+                    'reserva_id': reserva.id,
+                    'sede': sede
+                })
+                
+                # Actualizar estado del candidato
+                candidato.estado = 'asignado'
+                
+                # Actualizar contadores
+                asignaciones_por_profesor[entrevistador_id] = asignaciones_por_profesor.get(entrevistador_id, 0) + 1
+                franja['espacios_libres'] -= 1
+                franja['asignaciones_actuales'] += 1
+                asignados_sede += 1
+                
+                idx_candidato += 1
+                
+                if franja['espacios_libres'] == 0:
+                    idx_franja += 1
+            
+            # Guardar estadísticas de esta sede
+            stats_por_sede[sede] = {
+                'total_candidatos': len(candidatos_sede),
+                'asignados': asignados_sede,
+                'sin_asignar': len(candidatos_sede) - asignados_sede
+            }
+        
+        # ✅ Asignar candidatos sin sede a reservas sin sede (fallback)
+        if candidatos_sin_sede and reservas_sin_sede:
+            asignados_sin_sede = 0
+            idx_candidato = 0
+            idx_franja = 0
+            
+            while idx_candidato < len(candidatos_sin_sede) and idx_franja < len(reservas_sin_sede):
+                candidato = candidatos_sin_sede[idx_candidato]
+                franja = reservas_sin_sede[idx_franja]
+                reserva = franja['reserva']
+                entrevistador_id = franja['entrevistador_id']
+                
+                # Verificar límite por profesor
+                if max_por_profesor:
+                    actual = asignaciones_por_profesor.get(entrevistador_id, 0)
+                    if actual >= int(max_por_profesor):
+                        idx_franja += 1
+                        continue
+                
+                # Determinar posición y minuto de inicio
+                if franja['asignaciones_actuales'] == 0:
+                    posicion = 1
+                    minuto_inicio = 0
+                else:
+                    posicion = 2
+                    minuto_inicio = 15
+                
+                # Calcular hora exacta
+                hora_base = datetime.combine(reserva.fecha, reserva.hora_inicio)
+                hora_exacta = hora_base + timedelta(minutes=minuto_inicio)
+                
+                # Crear asignación
+                asignacion = Asignacion(
+                    candidato_id=candidato.id,
+                    reserva_id=reserva.id,
+                    entrevistador_id=entrevistador_id,
+                    posicion=posicion,
+                    minuto_inicio=minuto_inicio,
+                    estado='confirmado',
+                    fecha_asignacion=datetime.now(),
+                    asignado_por_admin_id=session['user_id']
+                )
+                
+                db.session.add(asignacion)
+                
+                try:
+                    if hasattr(type(asignacion), 'hora_exacta'):
+                        attr = getattr(type(asignacion), 'hora_exacta')
+                        if not isinstance(attr, property):
+                            asignacion.hora_exacta = hora_exacta.time()
+                except Exception as e:
+                    print(f"Advertencia: No se pudo asignar hora_exacta: {e}")
+                
+                asignaciones_creadas.append({
+                    'candidato_id': candidato.id,
+                    'reserva_id': reserva.id,
+                    'sede': 'Sin sede'
+                })
+                
+                candidato.estado = 'asignado'
+                asignaciones_por_profesor[entrevistador_id] = asignaciones_por_profesor.get(entrevistador_id, 0) + 1
+                franja['espacios_libres'] -= 1
+                franja['asignaciones_actuales'] += 1
+                asignados_sin_sede += 1
+                
+                idx_candidato += 1
+                
+                if franja['espacios_libres'] == 0:
+                    idx_franja += 1
+            
+            # Estadísticas de candidatos sin sede
+            stats_por_sede['Sin sede'] = {
+                'total_candidatos': len(candidatos_sin_sede),
+                'asignados': asignados_sin_sede,
+                'sin_asignar': len(candidatos_sin_sede) - asignados_sin_sede
+            }
+        elif candidatos_sin_sede:
+            # Hay candidatos sin sede pero no hay reservas sin sede
+            stats_por_sede['Sin sede'] = {
+                'total_candidatos': len(candidatos_sin_sede),
+                'asignados': 0,
+                'sin_asignar': len(candidatos_sin_sede)
+            }
+        
+        # Guardar cambios
+        db.session.flush()
+        
+        # Crear log
+        tiempo_total = (datetime.now() - inicio).total_seconds()
+        
+        log = LogAsignacion(
+            fecha_ejecucion=datetime.now(),
+            semana_objetivo=semana_carga,
+            candidatos_procesados=len(candidatos),
+            candidatos_filtrados=0,
+            candidatos_asignados=len(asignaciones_creadas),
+            candidatos_sin_asignar=len(candidatos) - len(asignaciones_creadas),
+            franjas_utilizadas=len(set([a['reserva_id'] for a in asignaciones_creadas])),
+            algoritmo_usado='asignacion_por_sedes',
+            tiempo_ejecucion_segundos=round(tiempo_total, 2),
+            estado='exito' if len(asignaciones_creadas) == len(candidatos) else 'parcial',
+            mensaje=f'Asignación por sedes. Candidatos W{semana_carga.split("-W")[1]} → Entrevistas W{semana_entrevistas.split("-W")[1]}',
+            ejecutado_por_usuario_id=session['user_id']
+        )
+        
+        db.session.add(log)
+        db.session.commit()
+        
+        # Registrar en logs de auditoría
+        registrar_log(
+            accion='asignacion_automatica',
+            entidad='sistema',
+            entidad_id=None,
+            descripcion=f'Asignación automática por sedes ejecutada: {len(asignaciones_creadas)} candidatos asignados',
+            datos_nuevos={
+                'semana_carga': semana_carga,
+                'semana_entrevistas': semana_entrevistas,
+                'candidatos_asignados': len(asignaciones_creadas),
+                'candidatos_sin_asignar': len(candidatos) - len(asignaciones_creadas),
+                'stats_por_sede': stats_por_sede,
+                'tiempo_segundos': round(tiempo_total, 2)
+            },
+            nivel='info'
+        )
+        
+        return jsonify({
+            'success': True,
+            'mensaje': f'{len(asignaciones_creadas)} candidatos asignados correctamente',
+            'candidatos_asignados': len(asignaciones_creadas),
+            'candidatos_sin_asignar': len(candidatos) - len(asignaciones_creadas),
+            'franjas_utilizadas': len(set([a['reserva_id'] for a in asignaciones_creadas])),
+            'semana_carga': semana_carga,
+            'semana_entrevistas': semana_entrevistas,
+            'tiempo_segundos': round(tiempo_total, 2),
+            'stats_por_sede': stats_por_sede
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error al ejecutar asignación: {str(e)}'}), 500
 
 @app.route('/admin/candidatos/cargar-excel', methods=['POST'])
 @admin_required
