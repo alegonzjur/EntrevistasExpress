@@ -3812,6 +3812,252 @@ def exportar_logs():
         download_name=f'logs_auditoria_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
     )
 
+
+# ====================================================================
+# RUTAS DE GESTIÓN Y ELIMINACIÓN
+# ====================================================================
+
+@app.route('/admin/cargas/eliminar/<int:carga_id>', methods=['POST'])
+@admin_required
+def eliminar_carga(carga_id):
+    """Elimina una carga de Excel y todos sus candidatos asociados"""
+    
+    try:
+        carga = CargaExcel.query.get_or_404(carga_id)
+        
+        # Obtener candidatos de esta carga
+        candidatos = Candidato.query.filter_by(
+            archivo_origen=carga.archivo_nombre,
+            semana_carga=carga.semana_destino
+        ).all()
+        
+        num_candidatos = len(candidatos)
+        
+        # Verificar si hay asignaciones
+        candidatos_ids = [c.id for c in candidatos]
+        asignaciones = Asignacion.query.filter(Asignacion.candidato_id.in_(candidatos_ids)).all()
+        num_asignaciones = len(asignaciones)
+        
+        # Eliminar asignaciones primero (por FK)
+        if num_asignaciones > 0:
+            for asignacion in asignaciones:
+                db.session.delete(asignacion)
+        
+        # Eliminar candidatos
+        for candidato in candidatos:
+            db.session.delete(candidato)
+        
+        # Eliminar registro de carga
+        db.session.delete(carga)
+        db.session.commit()
+        
+        # Registrar en logs
+        registrar_log(
+            accion='eliminar',
+            entidad='carga_excel',
+            entidad_id=carga_id,
+            descripcion=f'Carga eliminada: {carga.archivo_nombre} ({num_candidatos} candidatos, {num_asignaciones} asignaciones)',
+            datos_anteriores={
+                'archivo': carga.archivo_nombre,
+                'semana': carga.semana_destino,
+                'candidatos': num_candidatos,
+                'asignaciones': num_asignaciones
+            },
+            nivel='warning'
+        )
+        
+        return jsonify({
+            'success': True,
+            'mensaje': f'Carga eliminada correctamente',
+            'candidatos_eliminados': num_candidatos,
+            'asignaciones_eliminadas': num_asignaciones
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error al eliminar carga: {str(e)}'}), 500
+
+
+@app.route('/admin/candidatos/semana/<semana>/eliminar-todos', methods=['POST'])
+@admin_required
+def eliminar_candidatos_semana(semana):
+    """Elimina todos los candidatos de una semana específica"""
+    
+    try:
+        # Obtener candidatos
+        candidatos = Candidato.query.filter_by(semana_carga=semana).all()
+        num_candidatos = len(candidatos)
+        
+        if num_candidatos == 0:
+            return jsonify({'error': 'No hay candidatos en esta semana'}), 404
+        
+        # Obtener asignaciones
+        candidatos_ids = [c.id for c in candidatos]
+        asignaciones = Asignacion.query.filter(Asignacion.candidato_id.in_(candidatos_ids)).all()
+        num_asignaciones = len(asignaciones)
+        
+        # Eliminar asignaciones primero
+        for asignacion in asignaciones:
+            db.session.delete(asignacion)
+        
+        # Eliminar candidatos
+        for candidato in candidatos:
+            db.session.delete(candidato)
+        
+        db.session.commit()
+        
+        # Registrar en logs
+        registrar_log(
+            accion='eliminar',
+            entidad='candidatos_semana',
+            entidad_id=None,
+            descripcion=f'Candidatos eliminados de semana {semana}: {num_candidatos} candidatos, {num_asignaciones} asignaciones',
+            datos_anteriores={
+                'semana': semana,
+                'candidatos': num_candidatos,
+                'asignaciones': num_asignaciones
+            },
+            nivel='warning'
+        )
+        
+        return jsonify({
+            'success': True,
+            'mensaje': f'Todos los candidatos eliminados correctamente',
+            'candidatos_eliminados': num_candidatos,
+            'asignaciones_eliminadas': num_asignaciones
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error al eliminar candidatos: {str(e)}'}), 500
+
+
+@app.route('/admin/candidato/<int:candidato_id>/eliminar', methods=['POST'])
+@admin_required
+def eliminar_candidato(candidato_id):
+    """Elimina un candidato individual y su asignación si existe"""
+    
+    try:
+        candidato = Candidato.query.get_or_404(candidato_id)
+        
+        # Eliminar asignación si existe
+        asignacion = Asignacion.query.filter_by(candidato_id=candidato_id).first()
+        if asignacion:
+            db.session.delete(asignacion)
+        
+        nombre_completo = candidato.nombre_completo
+        
+        # Eliminar candidato
+        db.session.delete(candidato)
+        db.session.commit()
+        
+        # Registrar en logs
+        registrar_log(
+            accion='eliminar',
+            entidad='candidato',
+            entidad_id=candidato_id,
+            descripcion=f'Candidato eliminado: {nombre_completo}',
+            datos_anteriores={
+                'nombre': nombre_completo,
+                'solicitud': candidato.solicitud,
+                'estado': candidato.estado
+            },
+            nivel='warning'
+        )
+        
+        return jsonify({
+            'success': True,
+            'mensaje': f'Candidato eliminado correctamente'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error al eliminar candidato: {str(e)}'}), 500
+
+
+@app.route('/admin/asignaciones/semana/<semana>/eliminar-todas', methods=['POST'])
+@admin_required
+def eliminar_asignaciones_semana(semana):
+    """Elimina todas las asignaciones de una semana y resetea candidatos a pendiente"""
+    
+    try:
+        # Obtener candidatos de la semana
+        candidatos = Candidato.query.filter_by(semana_carga=semana).all()
+        candidatos_ids = [c.id for c in candidatos]
+        
+        # Obtener asignaciones
+        asignaciones = Asignacion.query.filter(Asignacion.candidato_id.in_(candidatos_ids)).all()
+        num_asignaciones = len(asignaciones)
+        
+        if num_asignaciones == 0:
+            return jsonify({'error': 'No hay asignaciones en esta semana'}), 404
+        
+        # Eliminar asignaciones
+        for asignacion in asignaciones:
+            db.session.delete(asignacion)
+        
+        # Resetear estado de candidatos a pendiente
+        for candidato in candidatos:
+            if candidato.estado == 'asignado':
+                candidato.estado = 'pendiente'
+        
+        db.session.commit()
+        
+        # Registrar en logs
+        registrar_log(
+            accion='eliminar',
+            entidad='asignaciones_semana',
+            entidad_id=None,
+            descripcion=f'Asignaciones eliminadas de semana {semana}: {num_asignaciones} asignaciones',
+            datos_anteriores={
+                'semana': semana,
+                'asignaciones': num_asignaciones
+            },
+            nivel='warning'
+        )
+        
+        return jsonify({
+            'success': True,
+            'mensaje': f'Todas las asignaciones eliminadas correctamente',
+            'asignaciones_eliminadas': num_asignaciones
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error al eliminar asignaciones: {str(e)}'}), 500
+
+
+@app.route('/admin/log-asignacion/<int:log_id>/eliminar', methods=['POST'])
+@admin_required
+def eliminar_log_asignacion(log_id):
+    """Elimina un registro de log de asignación"""
+    
+    try:
+        log = LogAsignacion.query.get_or_404(log_id)
+        
+        semana = log.semana_objetivo
+        
+        db.session.delete(log)
+        db.session.commit()
+        
+        # Registrar en logs de auditoría
+        registrar_log(
+            accion='eliminar',
+            entidad='log_asignacion',
+            entidad_id=log_id,
+            descripcion=f'Log de asignación eliminado: semana {semana}',
+            nivel='info'
+        )
+        
+        return jsonify({
+            'success': True,
+            'mensaje': 'Log eliminado correctamente'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error al eliminar log: {str(e)}'}), 500
+
 # ====================================================================
 # INICIALIZACIÓN
 # ====================================================================

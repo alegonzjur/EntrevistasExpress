@@ -1,6 +1,74 @@
 {% extends "base.html" %}
 
 {% block title %}Gestión de Candidatos{% endblock %}
+{% block extra_css %}
+<style>
+    /* Hacer la tabla más ancha */
+    .table-candidatos-semana {
+        width: 100%;
+        font-size: 14px;
+    }
+    
+    .table-candidatos-semana th,
+    .table-candidatos-semana td {
+        vertical-align: middle;
+        padding: 12px 8px;
+    }
+    
+    /* Columnas más estrechas */
+    .table-candidatos-semana th:nth-child(1),
+    .table-candidatos-semana td:nth-child(1) {
+        width: 10%;
+    }
+    
+    .table-candidatos-semana th:nth-child(2),
+    .table-candidatos-semana td:nth-child(2) {
+        width: 8%;
+        text-align: center;
+    }
+    
+    .table-candidatos-semana th:nth-child(3),
+    .table-candidatos-semana td:nth-child(3) {
+        width: 8%;
+        text-align: center;
+    }
+    
+    .table-candidatos-semana th:nth-child(4),
+    .table-candidatos-semana td:nth-child(4) {
+        width: 8%;
+        text-align: center;
+    }
+    
+    .table-candidatos-semana th:nth-child(5),
+    .table-candidatos-semana td:nth-child(5) {
+        width: 66%;
+    }
+    
+    /* Botones más compactos */
+    .btn-accion {
+        padding: 6px 10px;
+        font-size: 13px;
+        margin: 2px;
+        white-space: nowrap;
+        display: inline-block;
+    }
+    
+    /* Contenedor de acciones con flex */
+    .acciones-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        align-items: center;
+    }
+    
+    /* Badges más pequeños */
+    .badge-count {
+        padding: 4px 8px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
@@ -136,11 +204,11 @@
                 <div class="card-body">
                     {% if semanas_con_candidatos %}
                     <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
+                        <table class="table table-striped table-hover table-candidatos-semana">
+                            <thead class="table-light">
                                 <tr>
                                     <th>Semana</th>
-                                    <th>Total Candidatos</th>
+                                    <th>Total</th>
                                     <th>Pendientes</th>
                                     <th>Asignados</th>
                                     <th>Acciones</th>
@@ -150,24 +218,36 @@
                                 {% for semana in semanas_con_candidatos %}
                                 <tr>
                                     <td><strong>{{ semana.semana_carga }}</strong></td>
-                                    <td>{{ semana.total }}</td>
+                                    <td><span class="badge bg-primary badge-count">{{ semana.total }}</span></td>
                                     <td>
-                                        <span class="badge bg-warning">{{ semana.pendientes }}</span>
+                                        <span class="badge bg-warning text-dark badge-count">{{ semana.pendientes }}</span>
                                     </td>
                                     <td>
-                                        <span class="badge bg-success">{{ semana.asignados }}</span>
+                                        <span class="badge bg-success badge-count">{{ semana.asignados }}</span>
                                     </td>
                                     <td>
-                                        <a href="{{ url_for('ver_candidatos_semana', semana=semana.semana_carga) }}" class="btn btn-sm btn-primary">
-                                            <i class="fas fa-eye"></i> Ver Candidatos
-                                        </a>
-                                        <a href="{{ url_for('ver_asignaciones_semana', semana=semana.semana_carga) }}" class="btn btn-sm btn-info">
-                                            <i class="fas fa-calendar-check"></i> Ver Asignaciones
-                                        </a>
-                                            
-                                        <a href="{{ url_for('gestion_manual_candidatos', semana=semana.semana_carga) }}" class="btn btn-sm btn-primary">
-                                             🎯 Gestión Manual
-                                        </a>
+                                        <div class="acciones-container">
+                                            <a href="{{ url_for('ver_candidatos_semana', semana=semana.semana_carga) }}" 
+                                            class="btn btn-sm btn-primary btn-accion">
+                                                <i class="fas fa-eye"></i> Ver Candidatos
+                                            </a>
+                                            <a href="{{ url_for('ver_asignaciones_semana', semana=semana.semana_carga) }}" 
+                                            class="btn btn-sm btn-info btn-accion">
+                                                <i class="fas fa-calendar-check"></i> Ver Asignaciones
+                                            </a>
+                                            <a href="{{ url_for('gestion_manual_candidatos', semana=semana.semana_carga) }}" 
+                                            class="btn btn-sm btn-primary btn-accion">
+                                                🎯 Gestión Manual
+                                            </a>
+                                            <button class="btn btn-sm btn-warning btn-accion" 
+                                                    onclick="eliminarAsignacionesSemana('{{ semana.semana_carga }}')">
+                                                <i class="fas fa-undo"></i> Resetear
+                                            </button>
+                                            <button class="btn btn-sm btn-danger btn-accion" 
+                                                    onclick="eliminarCandidatosSemana('{{ semana.semana_carga }}')">
+                                                <i class="fas fa-trash"></i> Eliminar Todo
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -181,95 +261,107 @@
             </div>
         </div>
     </div>
-    
-    <!-- Historial de Cargas -->
-    <div class="row mt-4">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="fas fa-history"></i> Últimas Cargas de Excel</h5>
-                </div>
-                <div class="card-body">
-                    {% if ultimas_cargas %}
-                    <div class="list-group">
-                        {% for carga in ultimas_cargas %}
-                        <div class="list-group-item">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1">{{ carga.archivo_nombre }}</h6>
-                                <small>{{ carga.fecha_carga.strftime('%d/%m/%Y %H:%M') }}</small>
-                            </div>
-                            <p class="mb-1">
-                                <span class="badge bg-primary">{{ carga.candidatos_importados }} importados</span>
-                                <span class="badge bg-secondary">Semana {{ carga.semana_destino }}</span>
-                            </p>
-                            <small>{{ carga.mensaje }}</small>
-                        </div>
-                        {% endfor %}
+        
+        <!-- Historial de Cargas -->
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-history"></i> Últimas Cargas de Excel</h5>
                     </div>
-                    {% else %}
-                    <p class="text-muted">No hay cargas recientes.</p>
-                    {% endif %}
+                    <div class="card-body">
+                        {% if ultimas_cargas %}
+                        <div class="list-group">
+                            {% for carga in ultimas_cargas %}
+                            <div class="list-group-item">
+                                <div class="d-flex w-100 justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="mb-1">{{ carga.archivo_nombre }}</h6>
+                                        <small>{{ carga.fecha_carga.strftime('%d/%m/%Y %H:%M') }}</small>
+                                    </div>
+                                    <!-- ✅ NUEVO: Botón eliminar carga -->
+                                    <button class="btn btn-sm btn-danger" onclick="eliminarCarga({{ carga.id }}, '{{ carga.archivo_nombre }}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                <p class="mb-1 mt-2">
+                                    <span class="badge bg-primary">{{ carga.candidatos_importados }} importados</span>
+                                    <span class="badge bg-secondary">Semana {{ carga.semana_destino }}</span>
+                                </p>
+                                <small>{{ carga.mensaje }}</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="text-muted">No hay cargas recientes.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Historial de Asignaciones -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-history"></i> Últimas Asignaciones</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if ultimos_logs %}
+                        <div class="list-group">
+                            {% for log in ultimos_logs %}
+                            <div class="list-group-item">
+                                <div class="d-flex w-100 justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="mb-1">Semana {{ log.semana_objetivo }}</h6>
+                                        <small>{{ log.fecha_ejecucion.strftime('%d/%m/%Y %H:%M') }}</small>
+                                    </div>
+                                    <!-- ✅ NUEVO: Botón eliminar log -->
+                                    <button class="btn btn-sm btn-danger" onclick="eliminarLogAsignacion({{ log.id }})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                <p class="mb-1 mt-2">
+                                    <span class="badge bg-success">{{ log.candidatos_asignados }} asignados</span>
+                                    {% if log.candidatos_sin_asignar > 0 %}
+                                    <span class="badge bg-warning">{{ log.candidatos_sin_asignar }} sin asignar</span>
+                                    {% endif %}
+                                    <span class="badge bg-info">{{ log.franjas_utilizadas }} franjas</span>
+                                </p>
+                                <small>{{ log.mensaje }}</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="text-muted">No hay asignaciones recientes.</p>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
         
-        <!-- Historial de Asignaciones -->
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="fas fa-history"></i> Últimas Asignaciones</h5>
-                </div>
-                <div class="card-body">
-                    {% if ultimos_logs %}
-                    <div class="list-group">
-                        {% for log in ultimos_logs %}
-                        <div class="list-group-item">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1">Semana {{ log.semana_objetivo }}</h6>
-                                <small>{{ log.fecha_ejecucion.strftime('%d/%m/%Y %H:%M') }}</small>
-                            </div>
-                            <p class="mb-1">
-                                <span class="badge bg-success">{{ log.candidatos_asignados }} asignados</span>
-                                {% if log.candidatos_sin_asignar > 0 %}
-                                <span class="badge bg-warning">{{ log.candidatos_sin_asignar }} sin asignar</span>
-                                {% endif %}
-                                <span class="badge bg-info">{{ log.franjas_utilizadas }} franjas</span>
-                            </p>
-                            <small>{{ log.mensaje }}</small>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    <p class="text-muted">No hay asignaciones recientes.</p>
-                    {% endif %}
-                </div>
+        <!-- Pruebas y Configuración -->
+        <div class="card mt-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-flask"></i> Pruebas y Configuración
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-3">
+                    Herramientas para probar y verificar la configuración del sistema de emails.
+                </p>
+                
+                <button class="btn btn-info" onclick="testEmailConfig()">
+                    <i class="fas fa-paper-plane"></i> Enviar Email de Prueba
+                </button>
+                
+                <small class="d-block mt-2 text-muted">
+                    <i class="fas fa-info-circle"></i>
+                    Envía un email de prueba para verificar que la configuración de Office 365 funciona correctamente.
+                </small>
             </div>
         </div>
     </div>
-    
-    <!-- Pruebas y Configuración -->
-    <div class="card mt-4">
-        <div class="card-header bg-info text-white">
-            <h5 class="mb-0">
-                <i class="fas fa-flask"></i> Pruebas y Configuración
-            </h5>
-        </div>
-        <div class="card-body">
-            <p class="text-muted mb-3">
-                Herramientas para probar y verificar la configuración del sistema de emails.
-            </p>
-            
-            <button class="btn btn-info" onclick="testEmailConfig()">
-                <i class="fas fa-paper-plane"></i> Enviar Email de Prueba
-            </button>
-            
-            <small class="d-block mt-2 text-muted">
-                <i class="fas fa-info-circle"></i>
-                Envía un email de prueba para verificar que la configuración de Office 365 funciona correctamente.
-            </small>
-        </div>
-    </div>
-</div>
 
 <script>
 // ====================================================================
@@ -313,17 +405,14 @@ document.getElementById('formCargarExcel').addEventListener('submit', async func
                     • Importados (nota < ${data.umbral}): ${data.candidatos_finales}
             `;
             
-            // Mostrar duplicados si los hay
             if (data.candidatos_duplicados && data.candidatos_duplicados > 0) {
                 mensajeHTML += `<br>• ⚠️ Duplicados omitidos: ${data.candidatos_duplicados}`;
             }
             
-            // Añadir información de sedes
             if (data.mensaje_sedes) {
                 mensajeHTML += '<br><br>' + data.mensaje_sedes;
             }
             
-            // Añadir mensaje de duplicados
             if (data.mensaje_duplicados) {
                 mensajeHTML += data.mensaje_duplicados;
             }
@@ -435,7 +524,6 @@ document.getElementById('formAsignacion').addEventListener('submit', async funct
                     • Tiempo: ${data.tiempo_segundos}s
             `;
             
-            // Añadir estadísticas por sede
             if (data.stats_por_sede) {
                 mensajeHTML += '<br><br>📍 <strong>Por sede:</strong><br>';
                 for (const [sede, stats] of Object.entries(data.stats_por_sede)) {
@@ -478,6 +566,269 @@ document.getElementById('formAsignacion').addEventListener('submit', async funct
         btnAsignar.innerHTML = '<i class="fas fa-magic"></i> Ejecutar Asignación';
     }
 });
+
+// ====================================================================
+// FUNCIONES DE ELIMINACIÓN
+// ====================================================================
+
+async function eliminarCarga(cargaId, nombreArchivo) {
+    const result = await Swal.fire({
+        icon: 'warning',
+        title: '¿Eliminar Carga de Excel?',
+        html: `
+            <p>Se eliminará la carga: <strong>${nombreArchivo}</strong></p>
+            <p style="color: #dc3545;"><strong>⚠️ ADVERTENCIA:</strong></p>
+            <p>Esto eliminará también:</p>
+            <ul style="text-align: left;">
+                <li>Todos los candidatos importados</li>
+                <li>Todas las asignaciones realizadas</li>
+            </ul>
+            <p><strong>Esta acción no se puede deshacer</strong></p>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true
+    });
+    
+    if (!result.isConfirmed) return;
+    
+    Swal.fire({
+        title: 'Eliminando...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    try {
+        const response = await fetch(`/admin/cargas/eliminar/${cargaId}`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        Swal.close();
+        
+        if (response.ok) {
+            await Swal.fire({
+                icon: 'success',
+                title: '¡Eliminado!',
+                html: `
+                    ${data.mensaje}<br><br>
+                    • Candidatos eliminados: ${data.candidatos_eliminados}<br>
+                    • Asignaciones eliminadas: ${data.asignaciones_eliminadas}
+                `,
+                confirmButtonColor: '#28a745'
+            });
+            location.reload();
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error,
+                confirmButtonColor: '#dc3545'
+            });
+        }
+    } catch (error) {
+        Swal.close();
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error de conexión: ' + error.message,
+            confirmButtonColor: '#dc3545'
+        });
+    }
+}
+
+async function eliminarCandidatosSemana(semana) {
+    const result = await Swal.fire({
+        icon: 'warning',
+        title: '¿Eliminar Todos los Candidatos?',
+        html: `
+            <p>Se eliminarán <strong>TODOS</strong> los candidatos de la semana: <strong>${semana}</strong></p>
+            <p style="color: #dc3545;"><strong>⚠️ ADVERTENCIA:</strong></p>
+            <p>Esto eliminará:</p>
+            <ul style="text-align: left;">
+                <li>Todos los candidatos de esta semana</li>
+                <li>Todas las asignaciones realizadas</li>
+            </ul>
+            <p><strong>Esta acción no se puede deshacer</strong></p>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sí, eliminar todo',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true
+    });
+    
+    if (!result.isConfirmed) return;
+    
+    Swal.fire({
+        title: 'Eliminando...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    try {
+        const response = await fetch(`/admin/candidatos/semana/${semana}/eliminar-todos`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        Swal.close();
+        
+        if (response.ok) {
+            await Swal.fire({
+                icon: 'success',
+                title: '¡Eliminado!',
+                html: `
+                    ${data.mensaje}<br><br>
+                    • Candidatos eliminados: ${data.candidatos_eliminados}<br>
+                    • Asignaciones eliminadas: ${data.asignaciones_eliminadas}
+                `,
+                confirmButtonColor: '#28a745'
+            });
+            location.reload();
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error,
+                confirmButtonColor: '#dc3545'
+            });
+        }
+    } catch (error) {
+        Swal.close();
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error de conexión: ' + error.message,
+            confirmButtonColor: '#dc3545'
+        });
+    }
+}
+
+async function eliminarAsignacionesSemana(semana) {
+    const result = await Swal.fire({
+        icon: 'warning',
+        title: '¿Resetear Asignaciones?',
+        html: `
+            <p>Se eliminarán <strong>TODAS</strong> las asignaciones de la semana: <strong>${semana}</strong></p>
+            <p>Los candidatos volverán al estado <strong>"pendiente"</strong> y podrás reasignarlos.</p>
+            <p><strong>Esta acción no se puede deshacer</strong></p>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: '#ffc107',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sí, resetear',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true
+    });
+    
+    if (!result.isConfirmed) return;
+    
+    Swal.fire({
+        title: 'Reseteando asignaciones...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    try {
+        const response = await fetch(`/admin/asignaciones/semana/${semana}/eliminar-todas`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        Swal.close();
+        
+        if (response.ok) {
+            await Swal.fire({
+                icon: 'success',
+                title: '¡Reseteado!',
+                html: `
+                    ${data.mensaje}<br><br>
+                    • Asignaciones eliminadas: ${data.asignaciones_eliminadas}
+                `,
+                confirmButtonColor: '#28a745'
+            });
+            location.reload();
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error,
+                confirmButtonColor: '#dc3545'
+            });
+        }
+    } catch (error) {
+        Swal.close();
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error de conexión: ' + error.message,
+            confirmButtonColor: '#dc3545'
+        });
+    }
+}
+
+async function eliminarLogAsignacion(logId) {
+    const result = await Swal.fire({
+        icon: 'question',
+        title: '¿Eliminar Log?',
+        text: 'Se eliminará este registro del historial de asignaciones',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true
+    });
+    
+    if (!result.isConfirmed) return;
+    
+    try {
+        const response = await fetch(`/admin/log-asignacion/${logId}/eliminar`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            await Swal.fire({
+                icon: 'success',
+                title: '¡Eliminado!',
+                text: data.mensaje,
+                confirmButtonColor: '#28a745',
+                timer: 2000
+            });
+            location.reload();
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.error,
+                confirmButtonColor: '#dc3545'
+            });
+        }
+    } catch (error) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error de conexión: ' + error.message,
+            confirmButtonColor: '#dc3545'
+        });
+    }
+}
 
 // ====================================================================
 // TEST EMAIL
