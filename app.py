@@ -34,9 +34,9 @@ app.config['MAIL_SERVER'] = 'smtp.office365.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USE_SSL'] = False
-app.config['MAIL_USERNAME'] = 'aroman.gonzalez@sjd.edu.es'  # Correo remitente.
-app.config['MAIL_PASSWORD'] = '48190803F'  # Contraseña del correo remitente para realizar conexión.
-app.config['MAIL_DEFAULT_SENDER'] = 'aroman.gonzalez@sjd.edu.es'  # Correo remitente por defecto.
+app.config['MAIL_USERNAME'] = 'entrevistas.euef@comillas.edu'  # Correo remitente.
+app.config['MAIL_PASSWORD'] = 'Ent.Enf@2026'  # Contraseña del correo remitente para realizar conexión.
+app.config['MAIL_DEFAULT_SENDER'] = 'entrevistas.euef@comillas.edu'  # Correo remitente por defecto.
 app.config['MAIL_MAX_EMAILS'] = 50  # Máximo 50 emails por conexión
 app.config['MAIL_ASCII_ATTACHMENTS'] = False
 
