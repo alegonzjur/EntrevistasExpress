@@ -57,20 +57,30 @@
             </div>
             
             <!-- ✅ Campo de Sede -->
-            <div class="form-group" id="sede-group" style="margin-bottom: 20px;">
-                <label for="sede" style="font-weight: 600; margin-bottom: 8px; display: block;">
-                    Sede * <small style="color: #666; font-weight: normal;">(Solo para profesores)</small>
+            <div class="form-group" id="sedes-group" style="margin-bottom: 20px;">
+                <label for="sedes" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                    Sedes Asignadas * <small style="color: #666; font-weight: normal;">(Selecciona una o más)</small>
                 </label>
-                <select id="sede" 
-                        name="sede"
-                        style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
-                    <option value="">Selecciona una sede...</option>
+                
+                <div style="border: 2px solid #e0e0e0; border-radius: 8px; padding: 15px;">
                     {% for sede in sedes %}
-                    <option value="{{ sede }}" {% if usuario.sede == sede %}selected{% endif %}>
-                        🏢 {{ sede }}
-                    </option>
+                    <div class="form-check" style="margin-bottom: 10px;">
+                        <input class="form-check-input" 
+                            type="checkbox" 
+                            name="sedes[]" 
+                            value="{{ sede }}" 
+                            id="sede_{{ loop.index }}"
+                            {% if usuario and sede in [s.nombre for s in usuario.sedes] %}checked{% endif %}>
+                        <label class="form-check-label" for="sede_{{ loop.index }}">
+                            🏢 {{ sede }}
+                        </label>
+                    </div>
                     {% endfor %}
-                </select>
+                </div>
+                
+                <small style="color: #666; display: block; margin-top: 8px;">
+                    El profesor podrá realizar entrevistas en todas las sedes seleccionadas
+                </small>
             </div>
             
             <div style="display: flex; gap: 10px; margin-top: 30px;">
@@ -92,16 +102,14 @@
 <script>
 function toggleSedeField() {
     const rol = document.getElementById('rol').value;
-    const sedeGroup = document.getElementById('sede-group');
-    const sedeSelect = document.getElementById('sede');
+    const sedesGroup = document.getElementById('sedes-group');
     
     if (rol === 'profesor') {
-        sedeGroup.style.display = 'block';
-        sedeSelect.required = true;
+        sedesGroup.style.display = 'block';
     } else {
-        sedeGroup.style.display = 'none';
-        sedeSelect.required = false;
-        sedeSelect.value = '';
+        sedesGroup.style.display = 'none';
+        // Desmarcar todos los checkboxes
+        document.querySelectorAll('input[name="sedes[]"]').forEach(cb => cb.checked = false);
     }
 }
 

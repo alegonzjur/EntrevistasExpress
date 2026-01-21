@@ -393,12 +393,14 @@
                     </span>
                 {% endif %}
             </span>
-            <span class="info-label">Sede:</span>
+            <span class="info-label">Sedes:</span>
             <span class="info-value">
-                {% if sede %}
-                    <span style="background: #0066B3; color: white; padding: 6px 12px; border-radius: 12px; font-weight: 600;">
-                        🏢 {{ sede }}
+                {% if usuario.sedes %}
+                    {% for sede_obj in usuario.sedes %}
+                    <span style="background: #0066B3; color: white; padding: 6px 12px; border-radius: 12px; font-weight: 600; margin-right: 5px; display: inline-block; margin-bottom: 5px;">
+                        🏢 {{ sede_obj.nombre }}
                     </span>
+                    {% endfor %}
                 {% else %}
                     <span style="color: #999;">No asignada</span>
                 {% endif %}

@@ -63,6 +63,26 @@ if not os.path.exists(UPLOAD_FOLDER):
 # MODELOS DE BASE DE DATOS
 # ====================================================================
 
+
+
+
+class Sede(db.Model):
+    __tablename__ = 'sedes'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(50), unique=True, nullable=False)
+    activa = db.Column(db.Boolean, default=True)
+    descripcion = db.Column(db.String(255))
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Sede {self.nombre}>'
+
+usuario_sede = db.Table('usuario_sede',
+    db.Column('usuario_id', db.Integer, db.ForeignKey('usuarios.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('sede_id', db.Integer, db.ForeignKey('sedes.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('fecha_asignacion', db.DateTime, default=datetime.utcnow)
+)
 class Usuario(db.Model):
     __tablename__ = 'usuarios'
     id = db.Column(db.Integer, primary_key=True)
@@ -74,6 +94,11 @@ class Usuario(db.Model):
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     enlace_videollamada_personal = db.Column(db.String(500), nullable=True)
     sede = db.Column(db.String(50), nullable=True)
+
+    sedes = db.relationship('Sede', 
+                           secondary=usuario_sede, 
+                           lazy='subquery',
+                           backref=db.backref('profesores', lazy=True))
     
     # Relación con reservas (especificando foreign_keys para evitar ambigüedad)
     reservas = db.relationship('Reserva', 
@@ -86,6 +111,33 @@ class Usuario(db.Model):
                                       foreign_keys='Reserva.creado_por_admin',
                                       backref='creador_admin',
                                       lazy=True)
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'rol': self.rol,
+            'activo': self.activo,
+            'sede': self.sede,  # Sede principal
+            'sedes': [s.nombre for s in self.sedes] if self.sedes else [],  
+            'enlace_videollamada_personal': self.enlace_videollamada_personal
+    }
+    def puede_atender_sede(self, sede_nombre):
+        """Verifica si el profesor puede atender entrevistas de esta sede"""
+        if not sede_nombre:
+            return True  # Si no hay sede, puede atender cualquiera
+        
+        # Si tiene sedes específicas asignadas, verificar
+        if self.sedes:
+            return any(s.nombre == sede_nombre for s in self.sedes)
+        
+        # Si no tiene sedes asignadas pero tiene sede principal, usar esa
+        if self.sede:
+            return self.sede == sede_nombre
+        
+        # Si no tiene ninguna, puede atender cualquiera
+        return True
+
 
 class Espacio(db.Model):
     __tablename__ = 'espacios'
@@ -154,7 +206,8 @@ class Candidato(db.Model):
             'media_estudios': float(self.media_estudios) if self.media_estudios else None,
             'estado': self.estado,
             'primera_opcion': self.primera_opcion,
-            'sede': self.sede
+            'sede': self.sede,
+            'sedes': [s.nombre for s in self.sedes]
         }
 
 
@@ -981,6 +1034,26 @@ def login():
     
     return render_template('login.html')
 
+@app.route('/logout')
+def logout():
+    """Cerrar sesión del usuario"""
+    
+    # Registrar en logs antes de limpiar la sesión
+    if 'user_id' in session:
+        registrar_log(
+            accion='logout',
+            entidad='usuario',
+            entidad_id=session.get('user_id'),
+            descripcion=f'Usuario cerró sesión: {session.get("username")}',
+            nivel='info'
+        )
+    
+    # Limpiar sesión
+    session.clear()
+    
+    flash('Sesión cerrada correctamente', 'success')
+    return redirect(url_for('login'))
+
 @app.route('/registro', methods=['GET', 'POST'])
 @admin_required
 def registro():
@@ -990,7 +1063,7 @@ def registro():
         password = request.form['password']
         confirm_password = request.form['confirm_password']
         rol = request.form.get('rol', 'profesor')
-        sede = request.form.get('sede')
+        sedes_seleccionadas = request.form.getlist('sedes[]')
         
         # Validaciones
         if len(password) < 6:
@@ -1011,54 +1084,54 @@ def registro():
             return render_template('registro.html', sedes=SEDES_DISPONIBLES)  # ✅ MODIFICADO
         
         # ✅ NUEVO: Validar sede si es profesor
-        if rol == 'profesor' and not sede:
-            flash('Debes seleccionar una sede para el profesor', 'error')
-            return render_template('registro.html',username=session['username'], sedes=SEDES_DISPONIBLES)
+        if rol == 'profesor' and not sedes_seleccionadas:
+            flash('Debes seleccionar al menos una sede para el profesor', 'error')
+            return render_template('registro.html', 
+                                 username=session['username'],
+                                 sedes=SEDES_DISPONIBLES)
         
-        hashed_password = generate_password_hash(password)
+        # Crear usuario
         nuevo_usuario = Usuario(
-            username=username, 
-            email=email, 
-            password=hashed_password,
+            username=username,
+            email=email,
+            password=generate_password_hash(password),
             rol=rol,
-            sede=sede if rol == 'profesor' else None
+            sede=sedes_seleccionadas[0] if sedes_seleccionadas else None  # Primera como principal
         )
         
         db.session.add(nuevo_usuario)
+        db.session.flush()  # Para obtener el ID
+        
+        # ✅ NUEVO: Asignar sedes al profesor
+        if rol == 'profesor' and sedes_seleccionadas:
+            for sede_nombre in sedes_seleccionadas:
+                sede = Sede.query.filter_by(nombre=sede_nombre).first()
+                if sede:
+                    nuevo_usuario.sedes.append(sede)
+        
         db.session.commit()
-
+        
+        # Registrar en logs
         registrar_log(
             accion='crear',
             entidad='usuario',
             entidad_id=nuevo_usuario.id,
-            descripcion=f'Usuario creado: {username} ({rol}) - Sede: {sede if sede else "N/A"}',
+            descripcion=f'Usuario creado: {username} ({rol}) - Sedes: {", ".join(sedes_seleccionadas)}',
             datos_nuevos={
                 'username': username,
                 'email': email,
                 'rol': rol,
-                'sede': sede
+                'sedes': sedes_seleccionadas
             },
             nivel='info'
         )
         
-        flash(f'Usuario {username} creado correctamente como {rol}', 'success')
+        flash(f'Usuario {username} creado correctamente', 'success')
         return redirect(url_for('admin_usuarios'))
     
-    return render_template('registro.html', username=session['username'],sedes=SEDES_DISPONIBLES)
-
-@app.route('/logout')
-def logout():
-    username = session.get('username', 'Desconocido')
-    registrar_log(
-        accion='logout',
-        entidad='usuario',
-        entidad_id=session.get('user_id'),
-        descripcion=f'Usuario {username} cerró sesión',
-        nivel='info'
-    )
-    session.clear()
-    flash('Has cerrado sesión correctamente', 'success')
-    return redirect(url_for('login'))
+    return render_template('registro.html', 
+                         username=session['username'], 
+                         sedes=SEDES_DISPONIBLES)
 
 
 # ====================================================================
@@ -1752,10 +1825,23 @@ def ejecutar_asignacion():
                     'entrevistador_id': reserva.usuario_id
                 }
                 
-                if entrevistador and entrevistador.sede:
-                    if entrevistador.sede not in reservas_por_sede:
-                        reservas_por_sede[entrevistador.sede] = []
-                    reservas_por_sede[entrevistador.sede].append(franja_info)
+                if entrevistador:
+            # Obtener sedes del profesor (usando relación many-to-many)
+                    if entrevistador.sedes:
+                        sedes_profesor = [s.nombre for s in entrevistador.sedes]
+                    elif entrevistador.sede:
+                        sedes_profesor = [entrevistador.sede]
+                    else:
+                        sedes_profesor = []
+                    
+                    if sedes_profesor:
+                        # Añadir esta franja a TODAS las sedes del profesor
+                        for sede_nombre in sedes_profesor:
+                            if sede_nombre not in reservas_por_sede:
+                                reservas_por_sede[sede_nombre] = []
+                            reservas_por_sede[sede_nombre].append(franja_info)
+                    else:
+                        reservas_sin_sede.append(franja_info)
                 else:
                     reservas_sin_sede.append(franja_info)
         
