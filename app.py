@@ -1412,6 +1412,7 @@ def mi_perfil():
     }
     
     return render_template('perfil.html',
+                         usuario=usuario,
                          username=usuario.username,
                          email=usuario.email,
                          rol=usuario.rol,
@@ -1532,24 +1533,32 @@ def editar_usuario(usuario_id):
     if request.method == 'POST':
         email_nuevo = request.form.get('email')
         rol_nuevo = request.form.get('rol')
-        sede_nueva = request.form.get('sede')  # ✅ NUEVO
+        sedes_seleccionadas = request.form.getlist('sedes')  # ✅ CAMBIO: obtener lista de sedes
         
         # Guardar valores anteriores para el log
         datos_anteriores = {
             'email': usuario.email,
             'rol': usuario.rol,
-            'sede': usuario.sede
+            'sedes': [s.nombre for s in usuario.sedes]
         }
         
-        # Actualizar
+        # Actualizar email y rol
         usuario.email = email_nuevo
         usuario.rol = rol_nuevo
         
-        # ✅ NUEVO: Actualizar sede solo si es profesor
-        if rol_nuevo == 'profesor':
-            usuario.sede = sede_nueva
+        # ✅ CAMBIO: Actualizar sedes (relación muchos-a-muchos)
+        if rol_nuevo == 'profesor' and sedes_seleccionadas:
+            # Limpiar sedes actuales
+            usuario.sedes = []
+            
+            # Añadir las nuevas sedes seleccionadas
+            for sede_nombre in sedes_seleccionadas:
+                sede = Sede.query.filter_by(nombre=sede_nombre).first()
+                if sede:
+                    usuario.sedes.append(sede)
         else:
-            usuario.sede = None
+            # Si es admin, limpiar sedes
+            usuario.sedes = []
         
         db.session.commit()
         
@@ -1557,7 +1566,7 @@ def editar_usuario(usuario_id):
         datos_nuevos = {
             'email': email_nuevo,
             'rol': rol_nuevo,
-            'sede': sede_nueva if rol_nuevo == 'profesor' else None
+            'sedes': [s.nombre for s in usuario.sedes] if rol_nuevo == 'profesor' else []
         }
         
         registrar_log(
@@ -1573,10 +1582,13 @@ def editar_usuario(usuario_id):
         flash(f'Usuario {usuario.username} actualizado correctamente', 'success')
         return redirect(url_for('admin_usuarios'))
     
+    # ✅ CAMBIO: Pasar todas las sedes disponibles
+    todas_sedes = Sede.query.filter_by(activa=True).all()
+    
     return render_template('editar_usuario.html', 
                          usuario=usuario, 
                          username=session['username'],
-                         sedes=SEDES_DISPONIBLES)  # ✅ NUEVO
+                         todas_sedes=todas_sedes)
 
 @app.route('/admin/usuario/eliminar/<int:usuario_id>', methods=['POST'])
 @admin_required

@@ -7,6 +7,15 @@ h2 {
     margin-bottom: 20px;
 }
 
+.btn-editar {
+    background: #8b5cf6;
+    color: white;
+}
+
+.btn-editar:hover {
+    background: #7c3aed;
+}
+
 .admin-header {
     display: flex;
     justify-content: space-between;
@@ -239,14 +248,15 @@ tr:hover {
                     </span>
                 </td>
                 <td>
-                    {% if usuario.sede %}
-                    <span class="badge badge-primary" style="background: #0066B3; padding: 5px 10px; border-radius: 12px; font-size: 12px;">
-                        🏢 {{ usuario.sede }}
-                    </span>
+                    {% if usuario.sedes %}
+                        {% for sede_obj in usuario.sedes %}
+                        <span class="badge badge-primary" style="background: #0066B3; color: white; padding: 5px 10px; border-radius: 12px; font-size: 12px; margin-right: 5px; display: inline-block; margin-bottom: 3px;">
+                            🏢 {{ sede_obj.nombre }}
+                        </span>
+                        {% endfor %}
                     {% else %}
-                    <span style="color: #999;">-</span>
+                        <span style="color: #999;">Sin sede asignada</span>
                     {% endif %}
-                </td>
                 <td>
                     <span class="badge badge-{{ 'activo' if usuario.activo else 'inactivo' }}" id="estado-{{ usuario.id }}">
                         {{ 'Activo' if usuario.activo else 'Inactivo' }}
@@ -255,6 +265,9 @@ tr:hover {
                 <td class="fecha-creacion">{{ usuario.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}</td>
                 <td>
                     <div class="acciones">
+                        <button class="btn-accion btn-editar" onclick="window.location.href='/admin/usuarios/editar/{{ usuario.id }}'" style="background: #8b5cf6; color: white;">
+                            ✏️ Editar
+                        </button>
                         <button class="btn-accion btn-toggle" onclick="toggleUsuario({{ usuario.id }}, '{{ usuario.username }}', {{ 'true' if usuario.activo else 'false' }})">
                             {{ 'Desactivar' if usuario.activo else 'Activar' }}
                         </button>

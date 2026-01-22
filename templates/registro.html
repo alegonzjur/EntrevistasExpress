@@ -94,8 +94,8 @@
                             type="checkbox" 
                             name="sedes[]" 
                             value="{{ sede }}" 
-                            id="sede_{{ loop.index }}"
-                            {% if usuario and sede in [s.nombre for s in usuario.sedes] %}checked{% endif %}>
+                            id="sede_{{ loop.index }}">
+                        <br>
                         <label class="form-check-label" for="sede_{{ loop.index }}">
                             🏢 {{ sede }}
                         </label>

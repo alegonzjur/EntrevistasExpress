@@ -56,23 +56,26 @@
                 </select>
             </div>
             
-            <!-- ✅ Campo de Sede -->
+            <!-- ✅ Campo de Sedes con Checkboxes -->
             <div class="form-group" id="sedes-group" style="margin-bottom: 20px;">
-                <label for="sedes" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                <label style="font-weight: 600; margin-bottom: 8px; display: block;">
                     Sedes Asignadas * <small style="color: #666; font-weight: normal;">(Selecciona una o más)</small>
                 </label>
                 
                 <div style="border: 2px solid #e0e0e0; border-radius: 8px; padding: 15px;">
-                    {% for sede in sedes %}
+                    {% for sede in todas_sedes %}
                     <div class="form-check" style="margin-bottom: 10px;">
                         <input class="form-check-input" 
                             type="checkbox" 
-                            name="sedes[]" 
-                            value="{{ sede }}" 
-                            id="sede_{{ loop.index }}"
-                            {% if usuario and sede in [s.nombre for s in usuario.sedes] %}checked{% endif %}>
-                        <label class="form-check-label" for="sede_{{ loop.index }}">
-                            🏢 {{ sede }}
+                            name="sedes" 
+                            value="{{ sede.nombre }}" 
+                            id="sede_{{ sede.id }}"
+                            {% for sede_usuario in usuario.sedes %}
+                                {% if sede_usuario.id == sede.id %}checked{% endif %}
+                            {% endfor %}
+                            style="margin-right: 8px;">
+                        <label class="form-check-label" for="sede_{{ sede.id }}" style="cursor: pointer;">
+                            🏢 {{ sede.nombre }}
                         </label>
                     </div>
                     {% endfor %}
@@ -109,10 +112,11 @@ function toggleSedeField() {
     } else {
         sedesGroup.style.display = 'none';
         // Desmarcar todos los checkboxes
-        document.querySelectorAll('input[name="sedes[]"]').forEach(cb => cb.checked = false);
+        document.querySelectorAll('input[name="sedes"]').forEach(cb => cb.checked = false);
     }
 }
 
+// Ejecutar al cargar la página
 window.onload = toggleSedeField;
 </script>
 {% endblock %}
