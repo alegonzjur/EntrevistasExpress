@@ -1052,6 +1052,14 @@ def logout():
     flash('Sesión cerrada correctamente', 'success')
     return redirect(url_for('login'))
 
+@app.route('/guia-uso')
+@login_required
+def guia_uso():
+    """Página con guía de uso del sistema para profesores"""
+    return render_template('guia_uso.html',
+                         username=session['username'],
+                         rol=session['rol'])
+
 @app.route('/registro', methods=['GET', 'POST'])
 @admin_required
 def registro():
