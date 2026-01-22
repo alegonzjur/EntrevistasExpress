@@ -615,14 +615,14 @@ def generar_email_candidato(asignacion):
                                 </p>
                                 <ul style="margin: 0; padding-left: 20px; color: #856404;">
                                     {"<li style='margin: 5px 0;'>Accede al enlace de videollamada <strong>5 minutos antes</strong> de la hora indicada.</li>" if enlace_videollamada else "<li style='margin: 5px 0;'>Por favor, llegue <strong>10 minutos antes</strong> de la hora indicada.</li>"}
-                                    <li style="margin: 5px 0;">Para realizar la prueba de nivel de inglés online deberá acceder a través del siguiente enlace:  http://www.comillas.edu/ingleseuef indicando su usuario seguido de @alu.comillas.edu (ejemplo: 202300000@alu.comillas.edu).</li>
+                                    <li style="margin: 5px 0;">Para realizar la prueba de nivel de inglés online deberá acceder a través del siguiente enlace:  <strong>http://www.comillas.edu/ingleseuef</strong> indicando su usuario seguido de @alu.comillas.edu (ejemplo: 202300000@alu.comillas.edu).</li>
                                 </ul>
                             </div>
                             
                             <!-- Nota adicional -->
                             <p style="font-size: 14px; color: #999999; line-height: 1.6; margin: 0 0 20px 0;">
-                                Si no puede asistir a la entrevista, por favor envíe un correo a entrevistas@comillas.edu
-                                o llame al 987654321 con la mayor brevedad posible para poder reasignar la cita.
+                                Si no puede asistir a la entrevista, por favor envíe un correo a enfermeriafisioterapia@comillas.edu
+                                con la mayor brevedad posible para poder reasignar la cita.
                             </p>
                             
                             <!-- Firma -->
@@ -632,7 +632,7 @@ def generar_email_candidato(asignacion):
                                 </p>
                                 <p style="margin: 0; font-size: 14px; color: #666666;">
                                     Sistema de Gestión de Entrevistas<br>
-                                    {entrevistador.email if entrevistador and entrevistador.email else 'entrevistas@comillas.edu'}
+                                    Escuela Universitaria de Enfermería y Fisioterapia - Comillas ICAI-ICADE
                                 </p>
                             </div>
                             
@@ -735,7 +735,7 @@ def generar_email_entrevistador(entrevistador, asignaciones):
         </tr>
         """
         
-        # Filas adicionales del mismo día
+        # ✅ CORREGIDO: Filas adicionales del mismo día
         for asig in asigs_dia[1:]:
             hora = asig.hora_exacta.strftime('%H:%M') if asig.hora_exacta else asig.reserva.hora_inicio.strftime('%H:%M')
             candidato = asig.candidato
@@ -744,13 +744,11 @@ def generar_email_entrevistador(entrevistador, asignaciones):
             filas_html += f"""
         <tr style="border-bottom: 1px solid #e0e0e0;">
             <td style="padding: 15px; font-weight: 600; color: #4472C4;">{hora}</td>
-            <td style="padding: 15px;">{asig.candidato.nombre} {asig.candidato.apellidos}</td>
             <td style="padding: 15px;">
                 <strong>{candidato.nombre} {candidato.apellidos}</strong><br>
                 <small style="color: #666;">📧 {email_candidato}</small><br>
                 <small style="color: #666;">📞 {telefono_candidato}</small>
             </td>
-            <td style="padding: 15px; text-align: center;">
             <td style="padding: 15px; font-size: 12px; color: #666;">
                 {asig.candidato.primera_opcion[:50] + '...' if asig.candidato.primera_opcion and len(asig.candidato.primera_opcion) > 50 else asig.candidato.primera_opcion or '-'}
             </td>
@@ -851,7 +849,7 @@ def generar_email_entrevistador(entrevistador, asignaciones):
                         <td bgcolor="#f8f9fa" style="padding: 20px 30px; text-align: center; border-radius: 0 0 8px 8px;">
                             <p style="margin: 0; font-size: 12px; color: #999999; line-height: 1.5;">
                                 Este es un mensaje automático del sistema de gestión de entrevistas.<br>
-                                Para consultas, responda a este correo.
+                                Para consultas, contacte con secretaría o el administrador del sistema.
                             </p>
                         </td>
                     </tr>
