@@ -30,7 +30,7 @@
         }
         
         /* ========================================
-           NAVBAR MEJORADO - TODO EN UNA LÍNEA
+           NAVBAR CON LOGO INTEGRADO
         ======================================== */
         .navbar {
             background: linear-gradient(135deg, #0066B3 0%, #003D7A 100%);
@@ -51,20 +51,39 @@
             height: 60px; /* Altura fija del navbar */
         }
         
-        .nav-brand {
-            color: white;
-            text-decoration: none;
-            font-size: 20px;
-            font-weight: 700;
-            white-space: nowrap;
-            padding: 0 15px 0 0;
+        /* ✅ Logo + Brand Container */
+        .nav-brand-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding-right: 20px;
             border-right: 2px solid rgba(255,255,255,0.2);
             margin-right: 20px;
+            text-decoration: none;
+            transition: all 0.3s ease;
         }
         
-        .nav-brand:hover {
-            color: #FFF;
-            text-decoration: none;
+        .nav-brand-container:hover {
+            opacity: 0.9;
+        }
+        
+        .nav-logo {
+            height: 45px;
+            width: auto;
+            object-fit: contain;
+            transition: transform 0.3s ease;
+        }
+        
+        .nav-brand-container:hover .nav-logo {
+            transform: scale(1.05);
+        }
+        
+        .nav-brand-text {
+            color: white;
+            font-size: 18px;
+            font-weight: 700;
+            white-space: nowrap;
+            line-height: 1.2;
         }
         
         .nav-links {
@@ -229,6 +248,28 @@
             max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
+            position: relative;
+            min-height: calc(100vh - 60px); /* Altura mínima para que se vea el fondo */
+        }
+        
+        /* ========================================
+           LOGO COMO MARCA DE AGUA DE FONDO
+        ======================================== */
+        .container::before {
+            content: '';
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            height: 600px;
+            background-image: url("{{ url_for('static', filename='images/logo.jpg') }}");
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            opacity: 0.1; /* Muy transparente para no molestar */
+            z-index: -1;
+            pointer-events: none; /* No interfiere con clicks */
         }
         
         /* Flash Messages */
@@ -386,7 +427,14 @@
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <a href="{{ url_for('index') }}" class="nav-brand">📅 Sistema de Reservas</a>
+            <!-- ✅ Logo + Brand integrados -->
+            <a href="{{ url_for('index') }}" class="nav-brand-container">
+                <img src="{{ url_for('static', filename='images/logo.jpg') }}" 
+                     alt="Logo Institucional" 
+                     class="nav-logo">
+                <span class="nav-brand-text">Sistema de<br>Reservas</span>
+            </a>
+            
             <div class="nav-links">
                 {% if session.get('user_id') %}
                     <a href="{{ url_for('reservas') }}">📅 Reservar</a>
