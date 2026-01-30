@@ -1539,7 +1539,11 @@ def editar_usuario(usuario_id):
     if request.method == 'POST':
         email_nuevo = request.form.get('email')
         rol_nuevo = request.form.get('rol')
-        sedes_seleccionadas = request.form.getlist('sedes')  # ✅ CAMBIO: obtener lista de sedes
+        sedes_seleccionadas = request.form.getlist('sedes')
+        
+        # ✅ NUEVO: Obtener datos de contraseña
+        nueva_contrasena = request.form.get('nueva_contrasena', '').strip()
+        confirmar_contrasena = request.form.get('confirmar_contrasena', '').strip()
         
         # Guardar valores anteriores para el log
         datos_anteriores = {
@@ -1548,47 +1552,88 @@ def editar_usuario(usuario_id):
             'sedes': [s.nombre for s in usuario.sedes]
         }
         
+        # ========================================
+        # VALIDACIÓN DE CONTRASEÑA
+        # ========================================
+        if nueva_contrasena or confirmar_contrasena:
+            # Si se proporcionó alguna contraseña, validar
+            if not nueva_contrasena or not confirmar_contrasena:
+                flash('Debes completar ambos campos de contraseña', 'error')
+                todas_sedes = Sede.query.filter_by(activa=True).all()
+                return render_template('editar_usuario.html', 
+                                     usuario=usuario, 
+                                     username=session['username'],
+                                     todas_sedes=todas_sedes)
+            
+            if nueva_contrasena != confirmar_contrasena:
+                flash('Las contraseñas no coinciden', 'error')
+                todas_sedes = Sede.query.filter_by(activa=True).all()
+                return render_template('editar_usuario.html', 
+                                     usuario=usuario, 
+                                     username=session['username'],
+                                     todas_sedes=todas_sedes)
+            
+            if len(nueva_contrasena) < 6:
+                flash('La contraseña debe tener al menos 6 caracteres', 'error')
+                todas_sedes = Sede.query.filter_by(activa=True).all()
+                return render_template('editar_usuario.html', 
+                                     usuario=usuario, 
+                                     username=session['username'],
+                                     todas_sedes=todas_sedes)
+            
+            # ✅ Cambiar contraseña
+            from werkzeug.security import generate_password_hash
+            usuario.password = generate_password_hash(nueva_contrasena)
+            datos_anteriores['cambio_contrasena'] = False
+            
+            print(f"✅ Contraseña cambiada para usuario: {usuario.username}")
+        
         # Actualizar email y rol
         usuario.email = email_nuevo
         usuario.rol = rol_nuevo
         
-        # ✅ CAMBIO: Actualizar sedes (relación muchos-a-muchos)
+        # Actualizar sedes (relación muchos-a-muchos)
         if rol_nuevo == 'profesor' and sedes_seleccionadas:
-            # Limpiar sedes actuales
             usuario.sedes = []
-            
-            # Añadir las nuevas sedes seleccionadas
             for sede_nombre in sedes_seleccionadas:
                 sede = Sede.query.filter_by(nombre=sede_nombre).first()
                 if sede:
                     usuario.sedes.append(sede)
         else:
-            # Si es admin, limpiar sedes
             usuario.sedes = []
         
         db.session.commit()
         
-        # ✅ Registrar cambio
+        # ✅ Registrar cambio en logs
         datos_nuevos = {
             'email': email_nuevo,
             'rol': rol_nuevo,
             'sedes': [s.nombre for s in usuario.sedes] if rol_nuevo == 'profesor' else []
         }
         
+        # Añadir info de cambio de contraseña al log
+        if nueva_contrasena:
+            datos_nuevos['cambio_contrasena'] = True
+        
         registrar_log(
             accion='modificar',
             entidad='usuario',
             entidad_id=usuario.id,
-            descripcion=f'Usuario modificado: {usuario.username}',
+            descripcion=f'Usuario modificado: {usuario.username}' + (' (contraseña cambiada)' if nueva_contrasena else ''),
             datos_anteriores=datos_anteriores,
             datos_nuevos=datos_nuevos,
             nivel='info'
         )
         
-        flash(f'Usuario {usuario.username} actualizado correctamente', 'success')
+        # ✅ Mensaje de éxito
+        mensaje_exito = f'Usuario {usuario.username} actualizado correctamente'
+        if nueva_contrasena:
+            mensaje_exito += '. Contraseña cambiada exitosamente'
+        
+        flash(mensaje_exito, 'success')
         return redirect(url_for('admin_usuarios'))
     
-    # ✅ CAMBIO: Pasar todas las sedes disponibles
+    # GET: Mostrar formulario
     todas_sedes = Sede.query.filter_by(activa=True).all()
     
     return render_template('editar_usuario.html', 

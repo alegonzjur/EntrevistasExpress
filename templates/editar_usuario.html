@@ -15,8 +15,12 @@
         {% endif %}
     {% endwith %}
     
-    <div class="card" style="background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+    <div class="card" style="background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px;">
         <form method="POST">
+            <h3 style="color: #0066B3; margin: 0 0 20px 0; padding-bottom: 15px; border-bottom: 2px solid #e0e0e0;">
+                📋 Información Básica
+            </h3>
+            
             <div class="form-group" style="margin-bottom: 20px;">
                 <label style="font-weight: 600; margin-bottom: 8px; display: block;">
                     Usuario
@@ -86,6 +90,60 @@
                 </small>
             </div>
             
+            <!-- ========================================
+                 ✅ NUEVA SECCIÓN: CAMBIAR CONTRASEÑA
+            ======================================== -->
+            <div style="margin-top: 30px; padding-top: 30px; border-top: 2px solid #e0e0e0;">
+                <h3 style="color: #0066B3; margin: 0 0 15px 0; display: flex; align-items: center; gap: 10px;">
+                    🔐 Cambiar Contraseña
+                    <small style="color: #666; font-weight: normal; font-size: 14px;">(Opcional)</small>
+                </h3>
+                
+                <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px 15px; margin-bottom: 20px; border-radius: 4px;">
+                    <small style="color: #856404; line-height: 1.5; display: block;">
+                        💡 <strong>Nota:</strong> Deja estos campos en blanco si NO deseas cambiar la contraseña del usuario.
+                    </small>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label for="nueva_contrasena" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                        Nueva Contraseña
+                    </label>
+                    <input type="password" 
+                           id="nueva_contrasena" 
+                           name="nueva_contrasena"
+                           placeholder="Dejar en blanco para no cambiar"
+                           oninput="verificarFortaleza()"
+                           style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                    
+                    <!-- Indicador de fortaleza -->
+                    <div id="strength-container" style="margin-top: 8px; display: none;">
+                        <div style="height: 4px; background: #e0e0e0; border-radius: 2px; overflow: hidden;">
+                            <div id="strength-bar" style="height: 100%; width: 0%; transition: all 0.3s;"></div>
+                        </div>
+                        <small id="strength-text" style="display: block; margin-top: 5px; font-size: 12px;"></small>
+                    </div>
+                    
+                    <small style="color: #666; display: block; margin-top: 5px;">
+                        Mínimo 6 caracteres. Se recomienda usar letras, números y símbolos.
+                    </small>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label for="confirmar_contrasena" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                        Confirmar Nueva Contraseña
+                    </label>
+                    <input type="password" 
+                           id="confirmar_contrasena" 
+                           name="confirmar_contrasena"
+                           placeholder="Repetir la nueva contraseña"
+                           oninput="verificarCoincidencia()"
+                           style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                    
+                    <small id="match-text" style="display: none; margin-top: 5px; font-size: 12px;"></small>
+                </div>
+            </div>
+            
             <div style="display: flex; gap: 10px; margin-top: 30px;">
                 <button type="submit" 
                         class="btn btn-primary" 
@@ -113,6 +171,79 @@ function toggleSedeField() {
         sedesGroup.style.display = 'none';
         // Desmarcar todos los checkboxes
         document.querySelectorAll('input[name="sedes"]').forEach(cb => cb.checked = false);
+    }
+}
+
+// ========================================
+// VALIDACIÓN DE CONTRASEÑA
+// ========================================
+
+function verificarFortaleza() {
+    const password = document.getElementById('nueva_contrasena').value;
+    const strengthBar = document.getElementById('strength-bar');
+    const strengthText = document.getElementById('strength-text');
+    const strengthContainer = document.getElementById('strength-container');
+    
+    if (password.length === 0) {
+        strengthContainer.style.display = 'none';
+        return;
+    }
+    
+    strengthContainer.style.display = 'block';
+    
+    let strength = 0;
+    let label = '';
+    let color = '';
+    
+    // Calcular fortaleza
+    if (password.length >= 6) strength += 25;
+    if (password.length >= 8) strength += 25;
+    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength += 25;
+    if (/\d/.test(password)) strength += 15;
+    if (/[@$!%*?&#]/.test(password)) strength += 10;
+    
+    // Determinar nivel
+    if (strength < 40) {
+        label = '❌ Débil';
+        color = '#ef4444';
+    } else if (strength < 60) {
+        label = '⚠️ Media';
+        color = '#f59e0b';
+    } else if (strength < 80) {
+        label = '✅ Buena';
+        color = '#3b82f6';
+    } else {
+        label = '✅ Fuerte';
+        color = '#10b981';
+    }
+    
+    strengthBar.style.width = strength + '%';
+    strengthBar.style.backgroundColor = color;
+    strengthText.textContent = label;
+    strengthText.style.color = color;
+    
+    // También verificar coincidencia si hay texto en confirmar
+    verificarCoincidencia();
+}
+
+function verificarCoincidencia() {
+    const password = document.getElementById('nueva_contrasena').value;
+    const confirm = document.getElementById('confirmar_contrasena').value;
+    const matchText = document.getElementById('match-text');
+    
+    if (confirm.length === 0) {
+        matchText.style.display = 'none';
+        return;
+    }
+    
+    matchText.style.display = 'block';
+    
+    if (password === confirm) {
+        matchText.textContent = '✅ Las contraseñas coinciden';
+        matchText.style.color = '#10b981';
+    } else {
+        matchText.textContent = '❌ Las contraseñas no coinciden';
+        matchText.style.color = '#ef4444';
     }
 }
 
