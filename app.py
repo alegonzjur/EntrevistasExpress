@@ -4212,9 +4212,24 @@ def eliminar_log_asignacion(log_id):
 # ====================================================================
 
 if __name__ == '__main__':
+    """
+    Modo de desarrollo: Ejecuta el servidor Flask integrado con debug=True
+    Solo se ejecuta cuando se llama directamente: python app.py
+    """
+    
+    print("=" * 70)
+    print("🔧 MODO DESARROLLO - SERVIDOR FLASK")
+    print("=" * 70)
+    print("⚠️  Este modo es SOLO para desarrollo")
+    print("⚠️  Para producción, usa: python serve.py")
+    print("=" * 70)
+    
     with app.app_context():
+        # Crear tablas si no existen
         db.create_all()
+        print("✅ Tablas verificadas")
         
+        # Crear usuario admin si no existe
         admin = Usuario.query.filter_by(username='admin').first()
         if not admin:
             hashed_password = generate_password_hash('admin123')
@@ -4225,8 +4240,9 @@ if __name__ == '__main__':
                 rol='admin'
             )
             db.session.add(admin)
-            print("✓ Usuario administrador creado: admin / admin123")
+            print("✅ Usuario administrador creado: admin / admin123")
         
+        # Crear espacios (días) si no existen
         if Espacio.query.count() == 0:
             dias_semana = [
                 Espacio(nombre='Lunes', descripcion='Primer día de la semana', color='#667eea'),
@@ -4237,8 +4253,13 @@ if __name__ == '__main__':
             ]
             for dia in dias_semana:
                 db.session.add(dia)
-            print("✓ Días de la semana creados correctamente")
+            print("✅ Días de la semana creados")
         
         db.session.commit()
     
-    app.run(debug=True)
+    print("=" * 70)
+    print("🚀 Iniciando servidor de desarrollo...")
+    print("=" * 70)
+    
+    # Ejecutar servidor Flask de desarrollo
+    app.run(debug=True, host='0.0.0.0', port=5000)
