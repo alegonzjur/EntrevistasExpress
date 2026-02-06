@@ -10,7 +10,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 # Configuración (usa la misma que tu app.py)
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://usuario:usuario@localhost/reservas_db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Ba$eDeD4t0s@localhost/entrevistas_db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -36,7 +36,7 @@ if __name__ == '__main__':
             exit(1)
         
         # Nueva contraseña
-        nueva_password = 'adminr€s3rv4s'
+        nueva_password = 'admin123'
         
         # Generar hash
         hashed_password = generate_password_hash(nueva_password)

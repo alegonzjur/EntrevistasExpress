@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from urllib.parse import quote_plus
 import pandas as pd
 import hashlib
 import subprocess
@@ -28,7 +29,14 @@ import unicodedata
 
 app = Flask(__name__)
 app.secret_key = 'a4f8d9e3b2c1a7f6e5d4c3b2a1f9e8d7c6b5a4f3e2d1c9b8a7f6e5d4c3b2a1f0'  # Secret Key de la app (NO MOSTRAR)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:eebormujos?@localhost/reservas_db' # Conexión a la base de datos (AJUSTAR SEGÚN ENTORNO)
+
+DB_USER = 'postgres'
+DB_PASSWORD = 'Ba$eDeD4t0s'
+DB_HOST = 'localhost'
+DB_PORT = '5432'
+DB_NAME = 'entrevistas_db'
+
+app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}' # Conexión a la base de datos (AJUSTAR SEGÚN ENTORNO)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAIL_SERVER'] = 'smtp.office365.com'
 app.config['MAIL_PORT'] = 587
