@@ -176,7 +176,7 @@ class Reserva(db.Model):
 class Candidato(db.Model):
     __tablename__ = 'candidatos'
     
-    id = db.Column(db.Integer, primary_key=True)
+    clave_academica = db.Column(db.String(20), primary_key=True, nullable=False)
     solicitud = db.Column(db.Integer, nullable=False)
     apellidos = db.Column(db.String(150), nullable=False)
     nombre = db.Column(db.String(100), nullable=False)
@@ -189,6 +189,11 @@ class Candidato(db.Model):
     fecha_carga = db.Column(db.DateTime, default=datetime.utcnow)
     semana_carga = db.Column(db.String(20))
     archivo_origen = db.Column(db.String(255))
+
+    # Franjas de disponibilidad.
+    franjas_disponibilidad = db.Column(db.Text, nullable=True)  # Texto raw del Excel
+    franjas_parseadas = db.Column(db.Text, nullable=True)  # JSON con franjas procesadas
+    tiene_preferencias = db.Column(db.Boolean, default=False)  # Flag para priorización
     
     asignacion = db.relationship('Asignacion', backref='candidato', uselist=False, cascade='all, delete-orphan')
     
@@ -206,7 +211,7 @@ class Candidato(db.Model):
     
     def to_dict(self):
         return {
-            'id': self.id,
+            'clave_academica': self.clave_academica,
             'solicitud': self.solicitud,
             'nombre_completo': self.nombre_completo,
             'email': self.email,
@@ -215,15 +220,36 @@ class Candidato(db.Model):
             'estado': self.estado,
             'primera_opcion': self.primera_opcion,
             'sede': self.sede,
-            'sedes': [s.nombre for s in self.sedes]
+            'sedes': [s.nombre for s in self.sedes], 
+            'tiene_preferencias': self.tiene_preferencias,
+            'franjas_disponibilidad': self.franjas_disponibilidad
         }
+    
+    def obtener_franjas_preferidas(self):
+        """
+        Devuelve lista de franjas preferidas parseadas
+        
+        Returns:
+            List[dict]: [{'dia': 'Martes', 'turno': 'Mañana', 'hora_inicio': '10:00', 'hora_fin': '11:00'}, ...]
+        """
+        if not self.franjas_parseadas:
+            return []
+        
+        try:
+            import json
+            return json.loads(self.franjas_parseadas)
+        except:
+            return []
 
 
 class Asignacion(db.Model):
     __tablename__ = 'asignaciones'
     
     id = db.Column(db.Integer, primary_key=True)
-    candidato_id = db.Column(db.Integer, db.ForeignKey('candidatos.id', ondelete='CASCADE'), nullable=False, unique=True)
+    candidato_clave = db.Column(db.String(20), 
+                                 db.ForeignKey('candidatos.clave_academica', ondelete='CASCADE'), 
+                                 nullable=False, 
+                                 unique=True)
     reserva_id = db.Column(db.Integer, db.ForeignKey('reservas.id', ondelete='CASCADE'), nullable=False)
     entrevistador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
     posicion = db.Column(db.SmallInteger, nullable=False)
