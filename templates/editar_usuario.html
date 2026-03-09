@@ -159,7 +159,7 @@
         </form>
     </div>
 </div>
-
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 function toggleSedeField() {
     const rol = document.getElementById('rol').value;
@@ -247,7 +247,44 @@ function verificarCoincidencia() {
     }
 }
 
+
 // Ejecutar al cargar la página
 window.onload = toggleSedeField;
 </script>
+<script>
+    // ========================================
+    // MOSTRAR FLASH MESSAGES CON SWEETALERT
+    // ========================================
+    document.addEventListener('DOMContentLoaded', function() {
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    // Determinar icono y título según categoría
+                    let icon = 'info';
+                    let title = 'Información';
+                    
+                    if ('{{ category }}' === 'success') {
+                        icon = 'success';
+                        title = '¡Éxito!';
+                    } else if ('{{ category }}' === 'error') {
+                        icon = 'error';
+                        title = 'Error';
+                    } else if ('{{ category }}' === 'warning') {
+                        icon = 'warning';
+                        title = 'Advertencia';
+                    }
+                    
+                    // Mostrar SweetAlert
+                    Swal.fire({
+                        icon: icon,
+                        title: title,
+                        text: '{{ message }}',
+                        confirmButtonText: 'Aceptar',
+                        confirmButtonColor: '#4472C4'
+                    });
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    });
+    </script>
 {% endblock %}

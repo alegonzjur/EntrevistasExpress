@@ -305,9 +305,9 @@
         <div id="lista-candidatos">
             {% for candidato in candidatos %}
             <div class="candidato-item {{ candidato.estado }}" 
-                 data-candidato-id="{{ candidato.id }}"
+                 data-candidato-id="{{ candidato.clave_candidato }}"
                  data-estado="{{ candidato.estado }}"
-                 onclick="seleccionarCandidato({{ candidato.id }}, '{{ candidato.nombre }} {{ candidato.apellidos }}', {{ candidato.media_estudios }}, '{{ candidato.estado }}')">
+                 onclick="seleccionarCandidato({{ candidato.clave_academica }}, '{{ candidato.nombre }} {{ candidato.apellidos }}', {{ candidato.media_estudios }}, '{{ candidato.estado }}')">
                 <div class="candidato-nombre">
                     {{ candidato.nombre }} {{ candidato.apellidos }}
                     {% if candidato.estado == 'asignado' %}
@@ -410,7 +410,8 @@
 let candidatoSeleccionado = null;
 let reservaSeleccionada = null;
 
-function seleccionarCandidato(id, nombre, nota, estado) {
+// ✅ CORREGIDO: Cambiar parámetro 'id' por 'clave'
+function seleccionarCandidato(clave, nombre, nota, estado) {
     if (estado === 'asignado') {
         if (!confirm(`${nombre} ya está asignado. ¿Deseas reasignarlo?`)) {
             return;
@@ -425,7 +426,15 @@ function seleccionarCandidato(id, nombre, nota, estado) {
     // Seleccionar nuevo
     event.currentTarget.classList.add('seleccionado');
     
-    candidatoSeleccionado = { id, nombre, nota, estado };
+    // ✅ CORREGIDO: Guardar clave_academica en lugar de id
+    candidatoSeleccionado = { 
+        clave_academica: String(clave),  // ✅ Cambiado de 'id' a 'clave_academica' y a String.
+        nombre: nombre, 
+        nota: nota, 
+        estado: estado 
+    };
+    
+    console.log('Candidato seleccionado:', candidatoSeleccionado); // Debug
     actualizarPanelAccion();
 }
 
@@ -444,6 +453,7 @@ function seleccionarReserva(id, fecha, hora, espacios_libres) {
     event.currentTarget.style.outline = '3px solid #28a745';
     
     reservaSeleccionada = { id, fecha, hora, espacios_libres };
+    console.log('Reserva seleccionada:', reservaSeleccionada); // Debug
     actualizarPanelAccion();
 }
 
@@ -456,7 +466,8 @@ function actualizarPanelAccion() {
         panel.style.display = 'block';
         info.innerHTML = `
             <strong>Candidato:</strong> ${candidatoSeleccionado.nombre}<br>
-            <strong>Nota:</strong> ${candidatoSeleccionado.nota.toFixed(2)}<br>
+            <strong>Nota:</strong> ${candidatoSeleccionado.nota}<br>
+            <strong>Clave:</strong> ${candidatoSeleccionado.clave_academica}<br>
             <hr style="margin: 10px 0;">
             <strong>Reserva:</strong> ${reservaSeleccionada.fecha} a las ${reservaSeleccionada.hora}<br>
             <strong>Espacios libres:</strong> ${reservaSeleccionada.espacios_libres}/2
@@ -466,7 +477,8 @@ function actualizarPanelAccion() {
         panel.style.display = 'block';
         info.innerHTML = `
             <strong>Candidato seleccionado:</strong><br>
-            ${candidatoSeleccionado.nombre} (${candidatoSeleccionado.nota.toFixed(2)})<br>
+            ${candidatoSeleccionado.nombre} (${candidatoSeleccionado.nota})<br>
+            <strong>Clave:</strong> ${candidatoSeleccionado.clave_academica}<br>
             <br>
             <em style="color: #666;">Ahora selecciona una reserva →</em>
         `;
@@ -501,6 +513,7 @@ function cancelarSeleccion() {
 }
 
 async function confirmarAsignacion() {
+    // ✅ Validación básica
     if (!candidatoSeleccionado || !reservaSeleccionada) {
         Swal.fire({
             icon: 'warning',
@@ -511,8 +524,61 @@ async function confirmarAsignacion() {
         return;
     }
     
+    // ✅ Calcular posición disponible
     const posicion = reservaSeleccionada.espacios_libres === 2 ? 1 : 2;
     
+    // ✅ DEBUG: Verificar datos ANTES de enviar
+    console.log("=" . repeat(50));
+    console.log("📤 DATOS A ENVIAR:");
+    console.log("Candidato seleccionado:", candidatoSeleccionado);
+    console.log("Reserva seleccionada:", reservaSeleccionada);
+    console.log("Posición calculada:", posicion);
+    
+    // ✅ Construir payload con TODOS los campos necesarios
+    const payload = {
+        candidato_clave: String(candidatoSeleccionado.clave_academica),
+        reserva_id: reservaSeleccionada.id,
+        posicion: posicion
+    };
+    
+    console.log("Payload final:", JSON.stringify(payload, null, 2));
+    console.log("=" . repeat(50));
+    
+    // ✅ Verificar que los campos existen
+    if (!payload.candidato_clave) {
+        console.error("❌ ERROR: candidato_clave está vacío o undefined");
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'No se pudo obtener la clave del candidato',
+            confirmButtonColor: '#dc3545'
+        });
+        return;
+    }
+    
+    if (!payload.reserva_id) {
+        console.error("❌ ERROR: reserva_id está vacío o undefined");
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'No se pudo obtener el ID de la reserva',
+            confirmButtonColor: '#dc3545'
+        });
+        return;
+    }
+    
+    if (!payload.posicion) {
+        console.error("❌ ERROR: posicion está vacío o undefined");
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'No se pudo calcular la posición',
+            confirmButtonColor: '#dc3545'
+        });
+        return;
+    }
+    
+    // Mostrar loading
     Swal.fire({
         title: 'Asignando candidato...',
         allowOutsideClick: false,
@@ -523,50 +589,57 @@ async function confirmarAsignacion() {
     });
     
     try {
+        console.log("🌐 Enviando petición a /admin/candidatos/asignar-manual");
+        
         const response = await fetch('/admin/candidatos/asignar-manual', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                candidato_id: candidatoSeleccionado.id,
-                reserva_id: reservaSeleccionada.id,
-                posicion: posicion
-            })
+            body: JSON.stringify(payload)
         });
         
+        console.log("📥 Respuesta recibida:");
+        console.log("Status:", response.status);
+        console.log("Status text:", response.statusText);
+        
         const data = await response.json();
+        console.log("Data:", data);
+        
         Swal.close();
         
         if (response.ok) {
+            console.log("✅ Asignación exitosa");
             await Swal.fire({
                 icon: 'success',
                 title: '¡Asignado!',
-                text: data.mensaje,
+                text: data.mensaje || 'Candidato asignado correctamente',
                 confirmButtonColor: '#28a745',
                 timer: 2000,
                 timerProgressBar: true
             });
             location.reload();
         } else {
+            console.error("❌ Error del servidor:", data.error);
             Swal.fire({
                 icon: 'error',
                 title: 'Error',
-                text: data.error,
+                text: data.error || 'Error al asignar candidato',
                 confirmButtonColor: '#dc3545'
             });
         }
     } catch (error) {
+        console.error("💥 Excepción en confirmarAsignacion:", error);
         Swal.close();
         Swal.fire({
             icon: 'error',
-            title: 'Error',
-            text: 'Error al asignar candidato',
+            title: 'Error de conexión',
+            text: 'No se pudo conectar con el servidor: ' + error.message,
             confirmButtonColor: '#dc3545'
         });
-        console.error(error);
     }
 }
+
 async function desasignarCandidato(asignacionId, nombreCandidato) {
     const result = await Swal.fire({
         icon: 'warning',

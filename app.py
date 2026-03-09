@@ -25,6 +25,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import csv
 import json
 import unicodedata
+import re
 
 
 app = Flask(__name__)
@@ -181,7 +182,6 @@ class Candidato(db.Model):
     apellidos = db.Column(db.String(150), nullable=False)
     nombre = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), nullable=True)
-    telefono = db.Column(db.String(20), nullable=True)
     media_estudios = db.Column(db.Numeric(4, 2), nullable=False)
     primera_opcion = db.Column(db.Text)
     sede = db.Column(db.String(50), nullable=True)
@@ -204,10 +204,6 @@ class Candidato(db.Model):
     @property
     def tiene_email(self):
         return self.email is not None and self.email.strip() != ''
-
-    @property
-    def tiene_telefono(self): 
-        return self.telefono is not None and self.telefono.strip() != ''
     
     def to_dict(self):
         return {
@@ -215,7 +211,6 @@ class Candidato(db.Model):
             'solicitud': self.solicitud,
             'nombre_completo': self.nombre_completo,
             'email': self.email,
-            'telefono': self.telefono,
             'media_estudios': float(self.media_estudios) if self.media_estudios else None,
             'estado': self.estado,
             'primera_opcion': self.primera_opcion,
@@ -451,7 +446,198 @@ def obtener_semanas_disponibles():
         })
     
     return semanas
+# ====================================================================
+#  FUNCIONES AUXILIARES PARA FRANJAS: PARSEO DE FRANJAS DE DISPONIBILIDAD
+# ====================================================================
+# ====================================================================
+# FUNCIÓN PARA PARSEAR FRANJAS DE DISPONIBILIDAD
+# Añadir a app.py en la sección de funciones auxiliares
+# ====================================================================
 
+import re
+import json
+
+def parsear_franjas_disponibilidad(texto_franjas):
+    """
+    Parsea el texto de franjas de disponibilidad del Excel
+    
+    Formato de entrada:
+        • Martes - Mañana - de 10 a 11
+        • Miércoles - Tarde - de 15 a 16
+        • Jueves - Mañana - de 11 a 12
+    
+    Args:
+        texto_franjas (str): Texto con las franjas del Excel
+    
+    Returns:
+        list: Lista de diccionarios con franjas parseadas
+        [
+            {
+                'dia': 'Martes',
+                'turno': 'Mañana',
+                'hora_inicio': '10:00',
+                'hora_fin': '11:00',
+                'dia_numero': 1  # 0=Lunes, 1=Martes, etc.
+            },
+            ...
+        ]
+    """
+    
+    if not texto_franjas or pd.isna(texto_franjas) or str(texto_franjas).strip() == '':
+        return []
+    
+    franjas_parseadas = []
+    
+    # Mapeo de días a números (para ordenar y buscar)
+    dias_map = {
+        'LUNES': 0,
+        'MARTES': 1,
+        'MIERCOLES': 2,
+        'MIÉRCOLES': 2,
+        'JUEVES': 3,
+        'VIERNES': 4,
+        'SABADO': 5,
+        'SÁBADO': 5,
+        'DOMINGO': 6
+    }
+    
+    # Normalizar texto
+    texto = str(texto_franjas)
+    
+    # Dividir por líneas y bullets
+    lineas = re.split(r'[•\n]', texto)
+    
+    for linea in lineas:
+        linea = linea.strip()
+        if not linea:
+            continue
+        
+        # Patrón: "Martes - Mañana - de 10 a 11"
+        # Formato flexible para capturar diferentes variaciones
+        patron = r'(\w+)\s*-\s*(Mañana|Tarde|mañana|tarde)\s*-\s*de\s*(\d{1,2})\s*a\s*(\d{1,2})'
+        
+        match = re.search(patron, linea, re.IGNORECASE)
+        
+        if match:
+            dia = match.group(1).strip().upper()
+            turno = match.group(2).strip().capitalize()
+            hora_inicio = int(match.group(3))
+            hora_fin = int(match.group(4))
+            
+            # Normalizar día (quitar acentos)
+            dia_normalizado = dia.replace('É', 'E').replace('Á', 'A')
+            
+            # Obtener número del día
+            dia_numero = dias_map.get(dia_normalizado)
+            
+            if dia_numero is not None:
+                franja = {
+                    'dia': dia.capitalize(),
+                    'dia_normalizado': dia_normalizado,
+                    'dia_numero': dia_numero,
+                    'turno': turno,
+                    'hora_inicio': f"{hora_inicio:02d}:00",
+                    'hora_fin': f"{hora_fin:02d}:00"
+                }
+                
+                franjas_parseadas.append(franja)
+    
+    return franjas_parseadas
+
+
+def franja_coincide_con_reserva(franja_parseada, reserva, espacio):
+    """
+    Verifica si una franja de preferencia del candidato coincide con una reserva
+    
+    Args:
+        franja_parseada (dict): Franja del candidato parseada
+        reserva (Reserva): Objeto reserva de la BD
+        espacio (Espacio): Objeto espacio (día de la semana)
+    
+    Returns:
+        bool: True si coincide, False si no
+    """
+    
+    # Mapeo de espacios (días) a números
+    espacios_map = {
+        'Lunes': 0,
+        'Martes': 1,
+        'Miércoles': 2,
+        'Jueves': 3,
+        'Viernes': 4
+    }
+    
+    # Verificar que el día coincide
+    dia_reserva = espacios_map.get(espacio.nombre)
+    
+    if dia_reserva != franja_parseada['dia_numero']:
+        return False
+    
+    # Verificar que la hora coincide
+    hora_inicio_reserva = reserva.hora_inicio.strftime('%H:%M')
+    hora_fin_reserva = reserva.hora_fin.strftime('%H:%M')
+    
+    # Comparar horas (exactas o dentro del rango)
+    if hora_inicio_reserva == franja_parseada['hora_inicio']:
+        return True
+    
+    # Alternativa: verificar si la reserva está dentro del rango de la franja
+    # (útil si las franjas del Excel son de 1 hora pero las reservas de 30 min)
+    try:
+        from datetime import datetime, time
+        
+        hora_ini_franja = datetime.strptime(franja_parseada['hora_inicio'], '%H:%M').time()
+        hora_fin_franja = datetime.strptime(franja_parseada['hora_fin'], '%H:%M').time()
+        
+        # Verificar si la hora de inicio de la reserva está dentro de la franja
+        if hora_ini_franja <= reserva.hora_inicio < hora_fin_franja:
+            return True
+    except:
+        pass
+    
+    return False
+
+
+def calcular_score_candidato(candidato, reserva, espacio):
+    """
+    Calcula un score de prioridad para asignar un candidato a una reserva
+    
+    Score más alto = mayor prioridad
+    
+    Args:
+        candidato (Candidato): Candidato a evaluar
+        reserva (Reserva): Reserva disponible
+        espacio (Espacio): Día de la semana
+    
+    Returns:
+        int: Score de prioridad (0-1000)
+    """
+    
+    score = 0
+    
+    # PRIORIDAD 1: Tiene preferencias y coincide con alguna (MÁXIMA PRIORIDAD)
+    if candidato.tiene_preferencias:
+        franjas = candidato.obtener_franjas_preferidas()
+        
+        for franja in franjas:
+            if franja_coincide_con_reserva(franja, reserva, espacio):
+                score += 500  # Bonus enorme por coincidencia de preferencia
+                break
+    
+    # PRIORIDAD 2: Nota más baja (para ser justos)
+    # Escala de 0 a 10 → invertir para que nota baja = score alto
+    if candidato.media_estudios:
+        nota_invertida = 10 - float(candidato.media_estudios)
+        score += int(nota_invertida * 20)  # Hasta 200 puntos
+    
+    # PRIORIDAD 3: Sede coincidente (si el entrevistador tiene sede específica)
+    if candidato.sede and reserva.usuario:
+        entrevistador = reserva.usuario
+        
+        if entrevistador.puede_atender_sede(candidato.sede):
+            score += 100  # Bonus por coincidencia de sede
+    
+    return score
 # ====================================================================
 # FUNCIONES AUXILIARES PARA CANDIDATOS
 # ====================================================================
@@ -749,7 +935,6 @@ def generar_email_entrevistador(entrevistador, asignaciones):
 
         candidato = primera_asig.candidato
         email_candidato = candidato.email or 'No disponible'
-        telefono_candidato = candidato.telefono or 'No disponible'
         
         filas_html += f"""
         <tr style="border-bottom: 1px solid #e0e0e0;">
@@ -761,7 +946,7 @@ def generar_email_entrevistador(entrevistador, asignaciones):
             <td style="padding: 15px;">
                 <strong>{candidato.nombre} {candidato.apellidos}</strong><br>
                 <small style="color: #666;">📧 {email_candidato}</small><br>
-                <small style="color: #666;">📞 {telefono_candidato}</small>
+                
             </td>
             <td style="padding: 15px; font-size: 12px; color: #666;">
                 {primera_asig.candidato.primera_opcion[:50] + '...' if primera_asig.candidato.primera_opcion and len(primera_asig.candidato.primera_opcion) > 50 else primera_asig.candidato.primera_opcion or '-'}
@@ -774,14 +959,14 @@ def generar_email_entrevistador(entrevistador, asignaciones):
             hora = asig.hora_exacta.strftime('%H:%M') if asig.hora_exacta else asig.reserva.hora_inicio.strftime('%H:%M')
             candidato = asig.candidato
             email_candidato = candidato.email or 'No disponible'
-            telefono_candidato = candidato.telefono or 'No disponible'
+    
             filas_html += f"""
         <tr style="border-bottom: 1px solid #e0e0e0;">
             <td style="padding: 15px; font-weight: 600; color: #4472C4;">{hora}</td>
             <td style="padding: 15px;">
                 <strong>{candidato.nombre} {candidato.apellidos}</strong><br>
                 <small style="color: #666;">📧 {email_candidato}</small><br>
-                <small style="color: #666;">📞 {telefono_candidato}</small>
+                
             </td>
             <td style="padding: 15px; font-size: 12px; color: #666;">
                 {asig.candidato.primera_opcion[:50] + '...' if asig.candidato.primera_opcion and len(asig.candidato.primera_opcion) > 50 else asig.candidato.primera_opcion or '-'}
@@ -1105,69 +1290,103 @@ def registro():
         rol = request.form.get('rol', 'profesor')
         sedes_seleccionadas = request.form.getlist('sedes[]')
         
-        # Validaciones
+        # ========================================
+        # VALIDACIONES
+        # ========================================
+        
+        # Validar longitud de contraseña
         if len(password) < 6:
             flash('La contraseña debe tener al menos 6 caracteres', 'error')
-            return render_template('registro.html', sedes=SEDES_DISPONIBLES)  # ✅ MODIFICADO
+            return render_template('registro.html', 
+                                 username=session['username'],
+                                 sedes=SEDES_DISPONIBLES)
         
+        # Validar que las contraseñas coincidan
         if password != confirm_password:
             flash('Las contraseñas no coinciden', 'error')
-            return render_template('registro.html', sedes=SEDES_DISPONIBLES)
+            return render_template('registro.html', 
+                                 username=session['username'],
+                                 sedes=SEDES_DISPONIBLES)
         
-        # Verificar si ya existe
+        # ✅ Verificar si ya existe el username
         if Usuario.query.filter_by(username=username).first():
-            flash('El nombre de usuario ya existe', 'error')
-            return render_template('registro.html', sedes=SEDES_DISPONIBLES)  # ✅ MODIFICADO
+            flash(f'El nombre de usuario "{username}" ya está en uso', 'error')
+            return render_template('registro.html', 
+                                 username=session['username'],
+                                 sedes=SEDES_DISPONIBLES)
         
+        # ✅ Verificar si ya existe el email
         if Usuario.query.filter_by(email=email).first():
-            flash('El email ya está registrado', 'error')
-            return render_template('registro.html', sedes=SEDES_DISPONIBLES)  # ✅ MODIFICADO
+            flash(f'El email "{email}" ya está registrado', 'error')
+            return render_template('registro.html', 
+                                 username=session['username'],
+                                 sedes=SEDES_DISPONIBLES)
         
-        # ✅ NUEVO: Validar sede si es profesor
+        # ✅ Validar sede si es profesor
         if rol == 'profesor' and not sedes_seleccionadas:
             flash('Debes seleccionar al menos una sede para el profesor', 'error')
             return render_template('registro.html', 
                                  username=session['username'],
                                  sedes=SEDES_DISPONIBLES)
         
-        # Crear usuario
-        nuevo_usuario = Usuario(
-            username=username,
-            email=email,
-            password=generate_password_hash(password),
-            rol=rol,
-            sede=sedes_seleccionadas[0] if sedes_seleccionadas else None  # Primera como principal
-        )
-        
-        db.session.add(nuevo_usuario)
-        db.session.flush()  # Para obtener el ID
-        
-        # ✅ NUEVO: Asignar sedes al profesor
-        if rol == 'profesor' and sedes_seleccionadas:
-            for sede_nombre in sedes_seleccionadas:
-                sede = Sede.query.filter_by(nombre=sede_nombre).first()
-                if sede:
-                    nuevo_usuario.sedes.append(sede)
-        
-        db.session.commit()
-        
-        # Registrar en logs
-        registrar_log(
-            accion='crear',
-            entidad='usuario',
-            entidad_id=nuevo_usuario.id,
-            descripcion=f'Usuario creado: {username} ({rol}) - Sedes: {", ".join(sedes_seleccionadas)}',
-            datos_nuevos={
-                'username': username,
-                'email': email,
-                'rol': rol,
-                'sedes': sedes_seleccionadas
-            },
-            nivel='info'
-        )
-        
-        flash(f'Usuario {username} creado correctamente', 'success')
-        return redirect(url_for('admin_usuarios'))
+        # ========================================
+        # CREAR USUARIO
+        # ========================================
+        try:
+            nuevo_usuario = Usuario(
+                username=username,
+                email=email,
+                password=generate_password_hash(password),
+                rol=rol,
+                sede=sedes_seleccionadas[0] if sedes_seleccionadas else None
+            )
+            
+            db.session.add(nuevo_usuario)
+            db.session.flush()  # Para obtener el ID
+            
+            # Asignar sedes al profesor
+            if rol == 'profesor' and sedes_seleccionadas:
+                for sede_nombre in sedes_seleccionadas:
+                    sede = Sede.query.filter_by(nombre=sede_nombre).first()
+                    if sede:
+                        nuevo_usuario.sedes.append(sede)
+            
+            db.session.commit()
+            
+            # Registrar en logs
+            registrar_log(
+                accion='crear',
+                entidad='usuario',
+                entidad_id=nuevo_usuario.id,
+                descripcion=f'Usuario creado: {username} ({rol}) - Sedes: {", ".join(sedes_seleccionadas)}',
+                datos_nuevos={
+                    'username': username,
+                    'email': email,
+                    'rol': rol,
+                    'sedes': sedes_seleccionadas
+                },
+                nivel='info'
+            )
+            
+            flash(f'Usuario {username} creado correctamente', 'success')
+            return redirect(url_for('admin_usuarios'))
+            
+        except Exception as e:
+            db.session.rollback()
+            
+            # ✅ Capturar errores de unicidad
+            error_msg = str(e).lower()
+            
+            if 'usuarios_username_key' in error_msg or 'username' in error_msg:
+                flash(f'El nombre de usuario "{username}" ya está en uso', 'error')
+            elif 'usuarios_email_key' in error_msg or 'email' in error_msg:
+                flash(f'El email "{email}" ya está registrado', 'error')
+            else:
+                flash(f'Error al crear usuario: {str(e)}', 'error')
+            
+            return render_template('registro.html', 
+                                 username=session['username'],
+                                 sedes=SEDES_DISPONIBLES)
     
     return render_template('registro.html', 
                          username=session['username'], 
@@ -1575,7 +1794,6 @@ def editar_usuario(usuario_id):
         rol_nuevo = request.form.get('rol')
         sedes_seleccionadas = request.form.getlist('sedes')
         
-        # ✅ NUEVO: Obtener datos de contraseña
         nueva_contrasena = request.form.get('nueva_contrasena', '').strip()
         confirmar_contrasena = request.form.get('confirmar_contrasena', '').strip()
         
@@ -1590,7 +1808,6 @@ def editar_usuario(usuario_id):
         # VALIDACIÓN DE CONTRASEÑA
         # ========================================
         if nueva_contrasena or confirmar_contrasena:
-            # Si se proporcionó alguna contraseña, validar
             if not nueva_contrasena or not confirmar_contrasena:
                 flash('Debes completar ambos campos de contraseña', 'error')
                 todas_sedes = Sede.query.filter_by(activa=True).all()
@@ -1615,12 +1832,27 @@ def editar_usuario(usuario_id):
                                      username=session['username'],
                                      todas_sedes=todas_sedes)
             
-            # ✅ Cambiar contraseña
-            from werkzeug.security import generate_password_hash
+            # Cambiar contraseña
             usuario.password = generate_password_hash(nueva_contrasena)
             datos_anteriores['cambio_contrasena'] = False
+        
+        # ========================================
+        # ✅ VALIDACIÓN DE EMAIL DUPLICADO
+        # ========================================
+        if email_nuevo != usuario.email:
+            # Verificar si el email ya existe en otro usuario
+            email_existente = Usuario.query.filter(
+                Usuario.email == email_nuevo,
+                Usuario.id != usuario_id
+            ).first()
             
-            print(f"✅ Contraseña cambiada para usuario: {usuario.username}")
+            if email_existente:
+                flash(f'El email {email_nuevo} ya está en uso por otro usuario', 'error')
+                todas_sedes = Sede.query.filter_by(activa=True).all()
+                return render_template('editar_usuario.html', 
+                                     usuario=usuario, 
+                                     username=session['username'],
+                                     todas_sedes=todas_sedes)
         
         # Actualizar email y rol
         usuario.email = email_nuevo
@@ -1636,36 +1868,54 @@ def editar_usuario(usuario_id):
         else:
             usuario.sedes = []
         
-        db.session.commit()
-        
-        # ✅ Registrar cambio en logs
-        datos_nuevos = {
-            'email': email_nuevo,
-            'rol': rol_nuevo,
-            'sedes': [s.nombre for s in usuario.sedes] if rol_nuevo == 'profesor' else []
-        }
-        
-        # Añadir info de cambio de contraseña al log
-        if nueva_contrasena:
-            datos_nuevos['cambio_contrasena'] = True
-        
-        registrar_log(
-            accion='modificar',
-            entidad='usuario',
-            entidad_id=usuario.id,
-            descripcion=f'Usuario modificado: {usuario.username}' + (' (contraseña cambiada)' if nueva_contrasena else ''),
-            datos_anteriores=datos_anteriores,
-            datos_nuevos=datos_nuevos,
-            nivel='info'
-        )
-        
-        # ✅ Mensaje de éxito
-        mensaje_exito = f'Usuario {usuario.username} actualizado correctamente'
-        if nueva_contrasena:
-            mensaje_exito += '. Contraseña cambiada exitosamente'
-        
-        flash(mensaje_exito, 'success')
-        return redirect(url_for('admin_usuarios'))
+        # ========================================
+        # ✅ GUARDAR CON MANEJO DE ERRORES
+        # ========================================
+        try:
+            db.session.commit()
+            
+            # Registrar cambio en logs
+            datos_nuevos = {
+                'email': email_nuevo,
+                'rol': rol_nuevo,
+                'sedes': [s.nombre for s in usuario.sedes] if rol_nuevo == 'profesor' else []
+            }
+            
+            if nueva_contrasena:
+                datos_nuevos['cambio_contrasena'] = True
+            
+            registrar_log(
+                accion='modificar',
+                entidad='usuario',
+                entidad_id=usuario.id,
+                descripcion=f'Usuario modificado: {usuario.username}' + (' (contraseña cambiada)' if nueva_contrasena else ''),
+                datos_anteriores=datos_anteriores,
+                datos_nuevos=datos_nuevos,
+                nivel='info'
+            )
+            
+            # Mensaje de éxito
+            mensaje_exito = f'Usuario {usuario.username} actualizado correctamente'
+            if nueva_contrasena:
+                mensaje_exito += '. Contraseña cambiada exitosamente'
+            
+            flash(mensaje_exito, 'success')
+            return redirect(url_for('admin_usuarios'))
+            
+        except Exception as e:
+            db.session.rollback()
+            
+            # ✅ Capturar error de email duplicado específicamente
+            if 'usuarios_email_key' in str(e) or 'duplicate key' in str(e).lower():
+                flash(f'El email {email_nuevo} ya está en uso por otro usuario', 'error')
+            else:
+                flash(f'Error al actualizar usuario: {str(e)}', 'error')
+            
+            todas_sedes = Sede.query.filter_by(activa=True).all()
+            return render_template('editar_usuario.html', 
+                                 usuario=usuario, 
+                                 username=session['username'],
+                                 todas_sedes=todas_sedes)
     
     # GET: Mostrar formulario
     todas_sedes = Sede.query.filter_by(activa=True).all()
@@ -1799,7 +2049,7 @@ def admin_candidatos():
     from sqlalchemy import func
     semanas_con_candidatos = db.session.query(
         Candidato.semana_carga,
-        func.count(Candidato.id).label('total'),
+        func.count(Candidato.clave_academica).label('total'),
         func.sum(db.case((Candidato.estado == 'pendiente', 1), else_=0)).label('pendientes'),
         func.sum(db.case((Candidato.estado == 'asignado', 1), else_=0)).label('asignados')
     ).group_by(Candidato.semana_carga)\
@@ -1829,7 +2079,14 @@ def admin_candidatos():
 @app.route('/admin/candidatos/ejecutar-asignacion', methods=['POST'])
 @admin_required
 def ejecutar_asignacion():
-    """Ejecuta el algoritmo de asignación automática con filtrado por sedes"""
+    """
+    Ejecuta el algoritmo de asignación automática MEJORADO
+    
+    PRIORIZACIÓN:
+    1. Candidatos CON preferencias que coinciden con reservas disponibles
+    2. Candidatos SIN preferencias (asignación por nota)
+    3. Candidatos CON preferencias pero sin coincidencias (asignación por nota)
+    """
     
     try:
         data = request.json
@@ -1846,11 +2103,11 @@ def ejecutar_asignacion():
         semana_entrevistas = siguiente_lunes.strftime('%Y-W%W')
         
         # Verificar candidatos pendientes
-        candidatos_pendientes = Candidato.query\
+        candidatos_total = Candidato.query\
             .filter_by(semana_carga=semana_carga, estado='pendiente')\
             .count()
         
-        if candidatos_pendientes == 0:
+        if candidatos_total == 0:
             return jsonify({
                 'error': f'No hay candidatos pendientes para la semana {semana_carga}',
                 'candidatos_pendientes': 0
@@ -1862,53 +2119,56 @@ def ejecutar_asignacion():
         viernes_ent = primer_dia_ent + timedelta(days=4)
         
         # Verificar reservas disponibles
-        reservas = Reserva.query\
+        reservas_count = Reserva.query\
             .filter(Reserva.fecha >= primer_dia_ent)\
             .filter(Reserva.fecha <= viernes_ent)\
             .count()
         
-        if reservas == 0:
+        if reservas_count == 0:
             return jsonify({
-                'error': f'No hay reservas para la semana de entrevistas {semana_entrevistas} ({primer_dia_ent.strftime("%d/%m")} - {viernes_ent.strftime("%d/%m")})',
+                'error': f'No hay reservas para la semana de entrevistas {semana_entrevistas}',
                 'reservas_disponibles': 0
             }), 400
         
         inicio = datetime.now()
         
-        # Obtener candidatos ordenados por nota
-        candidatos = Candidato.query\
+        # ========================================
+        # FASE 1: OBTENER CANDIDATOS Y CLASIFICAR
+        # ========================================
+        
+        # Obtener TODOS los candidatos pendientes
+        candidatos_todos = Candidato.query\
             .filter_by(semana_carga=semana_carga, estado='pendiente')\
             .order_by(Candidato.media_estudios.asc())\
             .all()
         
-        # ✅ Agrupar candidatos por sede
-        candidatos_por_sede = {}
-        candidatos_sin_sede = []
+        # ✅ CLASIFICAR candidatos
+        candidatos_con_preferencias = [c for c in candidatos_todos if c.tiene_preferencias]
+        candidatos_sin_preferencias = [c for c in candidatos_todos if not c.tiene_preferencias]
         
-        for candidato in candidatos:
-            if candidato.sede:
-                if candidato.sede not in candidatos_por_sede:
-                    candidatos_por_sede[candidato.sede] = []
-                candidatos_por_sede[candidato.sede].append(candidato)
-            else:
-                candidatos_sin_sede.append(candidato)
+        print(f"📊 Candidatos totales: {len(candidatos_todos)}")
+        print(f"   - Con preferencias: {len(candidatos_con_preferencias)}")
+        print(f"   - Sin preferencias: {len(candidatos_sin_preferencias)}")
         
-        # Obtener reservas con espacios
+        # ========================================
+        # FASE 2: OBTENER RESERVAS DISPONIBLES
+        # ========================================
+        
         reservas_obj = Reserva.query\
             .filter(Reserva.fecha >= primer_dia_ent)\
             .filter(Reserva.fecha <= viernes_ent)\
             .order_by(
-                Reserva.prioridad.desc(),  # 'normal' antes que 'secundaria'
+                Reserva.prioridad.desc(),
                 Reserva.fecha, 
                 Reserva.hora_inicio
             )\
             .all()
         
-        # ✅ Agrupar reservas por sede del entrevistador
-        reservas_por_sede = {}
-        reservas_sin_sede = []
+        # Crear estructura de franjas con espacios
+        franjas_disponibles = []
         
         for reserva in reservas_obj:
+            espacio = Espacio.query.get(reserva.espacio_id)
             entrevistador = Usuario.query.get(reserva.usuario_id)
             
             asignaciones_existentes = Asignacion.query.filter_by(reserva_id=reserva.id).count()
@@ -1917,90 +2177,80 @@ def ejecutar_asignacion():
             if espacios_libres > 0:
                 franja_info = {
                     'reserva': reserva,
+                    'espacio': espacio,
                     'espacios_libres': espacios_libres,
                     'asignaciones_actuales': asignaciones_existentes,
-                    'entrevistador_id': reserva.usuario_id
+                    'entrevistador_id': reserva.usuario_id,
+                    'entrevistador': entrevistador
                 }
-                
-                if entrevistador:
-            # Obtener sedes del profesor (usando relación many-to-many)
-                    if entrevistador.sedes:
-                        sedes_profesor = [s.nombre for s in entrevistador.sedes]
-                    elif entrevistador.sede:
-                        sedes_profesor = [entrevistador.sede]
-                    else:
-                        sedes_profesor = []
-                    
-                    if sedes_profesor:
-                        # Añadir esta franja a TODAS las sedes del profesor
-                        for sede_nombre in sedes_profesor:
-                            if sede_nombre not in reservas_por_sede:
-                                reservas_por_sede[sede_nombre] = []
-                            reservas_por_sede[sede_nombre].append(franja_info)
-                    else:
-                        reservas_sin_sede.append(franja_info)
-                else:
-                    reservas_sin_sede.append(franja_info)
+                franjas_disponibles.append(franja_info)
         
-        # Variables para tracking
+        print(f"📅 Franjas disponibles: {len(franjas_disponibles)}")
+        
+        # ========================================
+        # FASE 3: ASIGNACIÓN CON PREFERENCIAS
+        # ========================================
+        
         asignaciones_creadas = []
         asignaciones_por_profesor = {}
-        stats_por_sede = {}
+        candidatos_asignados_con_preferencia = 0
         
-        # ✅ Asignar por sede
-        for sede in SEDES_DISPONIBLES:
-            candidatos_sede = candidatos_por_sede.get(sede, [])
-            franjas_sede = reservas_por_sede.get(sede, [])
-            
-            if not candidatos_sede:
-                stats_por_sede[sede] = {
-                    'total_candidatos': 0,
-                    'asignados': 0,
-                    'sin_asignar': 0
-                }
+        print("\n🎯 FASE 1: Asignando candidatos CON preferencias...")
+        
+        for candidato in candidatos_con_preferencias:
+            if candidato.estado != 'pendiente':
                 continue
             
-            if not franjas_sede:
-                stats_por_sede[sede] = {
-                    'total_candidatos': len(candidatos_sede),
-                    'asignados': 0,
-                    'sin_asignar': len(candidatos_sede)
-                }
-                continue
+            franjas_preferidas = candidato.obtener_franjas_preferidas()
             
-            asignados_sede = 0
-            idx_candidato = 0
-            idx_franja = 0
+            mejor_franja = None
+            mejor_score = -1
             
-            # Asignar candidatos de esta sede
-            while idx_candidato < len(candidatos_sede) and idx_franja < len(franjas_sede):
-                candidato = candidatos_sede[idx_candidato]
-                franja = franjas_sede[idx_franja]
-                reserva = franja['reserva']
-                entrevistador_id = franja['entrevistador_id']
+            # Buscar la mejor coincidencia
+            for franja_info in franjas_disponibles:
+                if franja_info['espacios_libres'] <= 0:
+                    continue
                 
                 # Verificar límite por profesor
                 if max_por_profesor:
-                    actual = asignaciones_por_profesor.get(entrevistador_id, 0)
+                    actual = asignaciones_por_profesor.get(franja_info['entrevistador_id'], 0)
                     if actual >= int(max_por_profesor):
-                        idx_franja += 1
                         continue
                 
-                # Determinar posición y minuto de inicio
-                if franja['asignaciones_actuales'] == 0:
+                # Verificar sede
+                if candidato.sede and franja_info['entrevistador']:
+                    if not franja_info['entrevistador'].puede_atender_sede(candidato.sede):
+                        continue
+                
+                # Calcular score
+                score = 0
+                
+                # Verificar coincidencia con preferencias
+                for franja_pref in franjas_preferidas:
+                    if franja_coincide_con_reserva(franja_pref, franja_info['reserva'], franja_info['espacio']):
+                        score = 1000  # Máxima prioridad
+                        break
+                
+                if score > mejor_score:
+                    mejor_score = score
+                    mejor_franja = franja_info
+            
+            # Si encontró coincidencia, asignar
+            if mejor_franja and mejor_score >= 1000:
+                reserva = mejor_franja['reserva']
+                entrevistador_id = mejor_franja['entrevistador_id']
+                
+                # Determinar posición
+                if mejor_franja['asignaciones_actuales'] == 0:
                     posicion = 1
                     minuto_inicio = 0
                 else:
                     posicion = 2
                     minuto_inicio = 15
                 
-                # Calcular hora exacta
-                hora_base = datetime.combine(reserva.fecha, reserva.hora_inicio)
-                hora_exacta = hora_base + timedelta(minutes=minuto_inicio)
-                
                 # Crear asignación
                 asignacion = Asignacion(
-                    candidato_id=candidato.id,
+                    candidato_clave=candidato.clave_academica,
                     reserva_id=reserva.id,
                     entrevistador_id=entrevistador_id,
                     posicion=posicion,
@@ -2011,77 +2261,73 @@ def ejecutar_asignacion():
                 )
                 
                 db.session.add(asignacion)
-                
-                # Intentar asignar hora_exacta si existe como columna
-                try:
-                    if hasattr(type(asignacion), 'hora_exacta'):
-                        attr = getattr(type(asignacion), 'hora_exacta')
-                        if not isinstance(attr, property):
-                            asignacion.hora_exacta = hora_exacta.time()
-                except Exception as e:
-                    print(f"Advertencia: No se pudo asignar hora_exacta: {e}")
-                
-                asignaciones_creadas.append({
-                    'candidato_id': candidato.id,
-                    'reserva_id': reserva.id,
-                    'sede': sede
-                })
-                
-                # Actualizar estado del candidato
                 candidato.estado = 'asignado'
                 
-                # Actualizar contadores
+                asignaciones_creadas.append({
+                    'candidato_clave': candidato.clave_academica,
+                    'reserva_id': reserva.id,
+                    'tipo': 'con_preferencia'
+                })
+                
                 asignaciones_por_profesor[entrevistador_id] = asignaciones_por_profesor.get(entrevistador_id, 0) + 1
-                franja['espacios_libres'] -= 1
-                franja['asignaciones_actuales'] += 1
-                asignados_sede += 1
-                
-                idx_candidato += 1
-                
-                if franja['espacios_libres'] == 0:
-                    idx_franja += 1
-            
-            # Guardar estadísticas de esta sede
-            stats_por_sede[sede] = {
-                'total_candidatos': len(candidatos_sede),
-                'asignados': asignados_sede,
-                'sin_asignar': len(candidatos_sede) - asignados_sede
-            }
+                mejor_franja['espacios_libres'] -= 1
+                mejor_franja['asignaciones_actuales'] += 1
+                candidatos_asignados_con_preferencia += 1
         
-        # ✅ Asignar candidatos sin sede a reservas sin sede (fallback)
-        if candidatos_sin_sede and reservas_sin_sede:
-            asignados_sin_sede = 0
-            idx_candidato = 0
-            idx_franja = 0
+        print(f"   ✅ Asignados con preferencia: {candidatos_asignados_con_preferencia}")
+        
+        # ========================================
+        # FASE 4: ASIGNACIÓN SIN PREFERENCIAS
+        # ========================================
+        
+        print("\n📝 FASE 2: Asignando candidatos SIN preferencias...")
+        
+        # Combinar candidatos sin preferencias + candidatos con preferencias no asignados
+        candidatos_restantes = [c for c in candidatos_todos if c.estado == 'pendiente']
+        candidatos_restantes.sort(key=lambda x: x.media_estudios)  # Ordenar por nota
+        
+        candidatos_asignados_sin_preferencia = 0
+        
+        for candidato in candidatos_restantes:
+            if candidato.estado != 'pendiente':
+                continue
             
-            while idx_candidato < len(candidatos_sin_sede) and idx_franja < len(reservas_sin_sede):
-                candidato = candidatos_sin_sede[idx_candidato]
-                franja = reservas_sin_sede[idx_franja]
-                reserva = franja['reserva']
-                entrevistador_id = franja['entrevistador_id']
+            # Buscar primera franja disponible compatible con sede
+            franja_asignada = None
+            
+            for franja_info in franjas_disponibles:
+                if franja_info['espacios_libres'] <= 0:
+                    continue
                 
                 # Verificar límite por profesor
                 if max_por_profesor:
-                    actual = asignaciones_por_profesor.get(entrevistador_id, 0)
+                    actual = asignaciones_por_profesor.get(franja_info['entrevistador_id'], 0)
                     if actual >= int(max_por_profesor):
-                        idx_franja += 1
                         continue
                 
-                # Determinar posición y minuto de inicio
-                if franja['asignaciones_actuales'] == 0:
+                # Verificar sede
+                if candidato.sede and franja_info['entrevistador']:
+                    if not franja_info['entrevistador'].puede_atender_sede(candidato.sede):
+                        continue
+                
+                franja_asignada = franja_info
+                break
+            
+            if franja_asignada:
+                reserva = franja_asignada['reserva']
+                entrevistador_id = franja_asignada['entrevistador_id']
+                
+                # Determinar posición
+                if franja_asignada['asignaciones_actuales'] == 0:
                     posicion = 1
                     minuto_inicio = 0
                 else:
                     posicion = 2
                     minuto_inicio = 15
                 
-                # Calcular hora exacta
-                hora_base = datetime.combine(reserva.fecha, reserva.hora_inicio)
-                hora_exacta = hora_base + timedelta(minutes=minuto_inicio)
-                
                 # Crear asignación
                 asignacion = Asignacion(
-                    candidato_id=candidato.id,
+                    candidato_clave=candidato.clave_academica,
                     reserva_id=reserva.id,
                     entrevistador_id=entrevistador_id,
                     posicion=posicion,
@@ -2092,82 +2338,61 @@ def ejecutar_asignacion():
                 )
                 
                 db.session.add(asignacion)
-                
-                try:
-                    if hasattr(type(asignacion), 'hora_exacta'):
-                        attr = getattr(type(asignacion), 'hora_exacta')
-                        if not isinstance(attr, property):
-                            asignacion.hora_exacta = hora_exacta.time()
-                except Exception as e:
-                    print(f"Advertencia: No se pudo asignar hora_exacta: {e}")
+                candidato.estado = 'asignado'
                 
                 asignaciones_creadas.append({
-                    'candidato_id': candidato.id,
+                    'candidato_clave': candidato.clave_academica,
                     'reserva_id': reserva.id,
-                    'sede': 'Sin sede'
+                    'tipo': 'sin_preferencia' if not candidato.tiene_preferencias else 'con_preferencia_sin_match'
                 })
                 
-                candidato.estado = 'asignado'
                 asignaciones_por_profesor[entrevistador_id] = asignaciones_por_profesor.get(entrevistador_id, 0) + 1
-                franja['espacios_libres'] -= 1
-                franja['asignaciones_actuales'] += 1
-                asignados_sin_sede += 1
-                
-                idx_candidato += 1
-                
-                if franja['espacios_libres'] == 0:
-                    idx_franja += 1
-            
-            # Estadísticas de candidatos sin sede
-            stats_por_sede['Sin sede'] = {
-                'total_candidatos': len(candidatos_sin_sede),
-                'asignados': asignados_sin_sede,
-                'sin_asignar': len(candidatos_sin_sede) - asignados_sin_sede
-            }
-        elif candidatos_sin_sede:
-            # Hay candidatos sin sede pero no hay reservas sin sede
-            stats_por_sede['Sin sede'] = {
-                'total_candidatos': len(candidatos_sin_sede),
-                'asignados': 0,
-                'sin_asignar': len(candidatos_sin_sede)
-            }
+                franja_asignada['espacios_libres'] -= 1
+                franja_asignada['asignaciones_actuales'] += 1
+                candidatos_asignados_sin_preferencia += 1
         
-        # Guardar cambios
+        print(f"   ✅ Asignados sin preferencia: {candidatos_asignados_sin_preferencia}")
+        
+        # ========================================
+        # FASE 5: GUARDAR Y REPORTAR
+        # ========================================
+        
         db.session.flush()
         
-        # Crear log
         tiempo_total = (datetime.now() - inicio).total_seconds()
         
+        # Crear log
         log = LogAsignacion(
             fecha_ejecucion=datetime.now(),
             semana_objetivo=semana_carga,
-            candidatos_procesados=len(candidatos),
+            candidatos_procesados=len(candidatos_todos),
             candidatos_filtrados=0,
             candidatos_asignados=len(asignaciones_creadas),
-            candidatos_sin_asignar=len(candidatos) - len(asignaciones_creadas),
+            candidatos_sin_asignar=len(candidatos_todos) - len(asignaciones_creadas),
             franjas_utilizadas=len(set([a['reserva_id'] for a in asignaciones_creadas])),
-            algoritmo_usado='asignacion_por_sedes',
+            algoritmo_usado='asignacion_con_preferencias_v2',
             tiempo_ejecucion_segundos=round(tiempo_total, 2),
-            estado='exito' if len(asignaciones_creadas) == len(candidatos) else 'parcial',
-            mensaje=f'Asignación por sedes. Candidatos W{semana_carga.split("-W")[1]} → Entrevistas W{semana_entrevistas.split("-W")[1]}',
+            estado='exito' if len(asignaciones_creadas) == len(candidatos_todos) else 'parcial',
+            mensaje=f'Asignación con preferencias. {candidatos_asignados_con_preferencia} con match, {candidatos_asignados_sin_preferencia} sin preferencia/match',
             ejecutado_por_usuario_id=session['user_id']
         )
         
         db.session.add(log)
         db.session.commit()
         
-        # Registrar en logs de auditoría
+        # Registrar en logs
         registrar_log(
             accion='asignacion_automatica',
             entidad='sistema',
             entidad_id=None,
-            descripcion=f'Asignación automática por sedes ejecutada: {len(asignaciones_creadas)} candidatos asignados',
+            descripcion=f'Asignación con preferencias: {len(asignaciones_creadas)} asignados ({candidatos_asignados_con_preferencia} con match)',
             datos_nuevos={
                 'semana_carga': semana_carga,
                 'semana_entrevistas': semana_entrevistas,
-                'candidatos_asignados': len(asignaciones_creadas),
-                'candidatos_sin_asignar': len(candidatos) - len(asignaciones_creadas),
-                'stats_por_sede': stats_por_sede,
+                'total_asignados': len(asignaciones_creadas),
+                'con_preferencia_match': candidatos_asignados_con_preferencia,
+                'sin_preferencia': candidatos_asignados_sin_preferencia,
+                'sin_asignar': len(candidatos_todos) - len(asignaciones_creadas),
                 'tiempo_segundos': round(tiempo_total, 2)
             },
             nivel='info'
@@ -2177,12 +2402,13 @@ def ejecutar_asignacion():
             'success': True,
             'mensaje': f'{len(asignaciones_creadas)} candidatos asignados correctamente',
             'candidatos_asignados': len(asignaciones_creadas),
-            'candidatos_sin_asignar': len(candidatos) - len(asignaciones_creadas),
+            'candidatos_sin_asignar': len(candidatos_todos) - len(asignaciones_creadas),
+            'con_preferencia_match': candidatos_asignados_con_preferencia,
+            'sin_preferencia_o_sin_match': candidatos_asignados_sin_preferencia,
             'franjas_utilizadas': len(set([a['reserva_id'] for a in asignaciones_creadas])),
             'semana_carga': semana_carga,
             'semana_entrevistas': semana_entrevistas,
-            'tiempo_segundos': round(tiempo_total, 2),
-            'stats_por_sede': stats_por_sede
+            'tiempo_segundos': round(tiempo_total, 2)
         })
         
     except Exception as e:
@@ -2196,7 +2422,6 @@ def ejecutar_asignacion():
 def cargar_excel_candidatos():
     """Procesa y carga un archivo Excel de candidatos"""
     
-    # Verificar que se subió un archivo
     if 'archivo' not in request.files:
         return jsonify({'error': 'No se ha seleccionado ningún archivo'}), 400
     
@@ -2233,7 +2458,7 @@ def cargar_excel_candidatos():
         # Verificar si ya se cargó este archivo
         carga_existente = CargaExcel.query.filter_by(archivo_hash=archivo_hash).first()
         if carga_existente:
-            os.remove(filepath)  # Eliminar archivo duplicado
+            os.remove(filepath)
             return jsonify({
                 'error': f'Este archivo ya fue cargado el {carga_existente.fecha_carga.strftime("%d/%m/%Y %H:%M")}',
                 'duplicado': True
@@ -2242,45 +2467,85 @@ def cargar_excel_candidatos():
         # Procesar Excel
         df = pd.read_excel(filepath, header=23)  # Fila 24 = índice 23
         
-        # Verificar columnas necesarias
-        columnas_necesarias = ['Solicitud', 'Apellidos', 'Nombre', 'Media estudios realizados', 'Primera opción','Email','Telefono']
+        # ✅ COLUMNAS ACTUALIZADAS:
+        # - "Correo electrónico" en lugar de "Email"
+        # - "Entrevistas" en lugar de "Franjas de disponibilidad..."
+        columnas_necesarias = [
+            'Clave académica',
+            'Solicitud', 
+            'Apellidos', 
+            'Nombre', 
+            'Correo electrónico',
+            'Media estudios realizados', 
+            'Primera opción'
+        ]
+        
+        # Columnas opcionales
+        columnas_opcionales = ['Entrevistas']  # ✅ Nombre real en Excel
+        
+        # Verificar columnas obligatorias
         columnas_faltantes = [col for col in columnas_necesarias if col not in df.columns]
         
         if columnas_faltantes:
             os.remove(filepath)
             return jsonify({'error': f'Columnas faltantes: {", ".join(columnas_faltantes)}'}), 400
         
-        # Procesar datos
-        df_procesado = df[columnas_necesarias].copy()
-        df_procesado.columns = [
-            'solicitud',
-            'apellidos',
-            'nombre',
-            'media_estudios',
-            'primera_opcion',
-            'email',
-            'telefono'
-        ]
+        # Seleccionar columnas (obligatorias + opcionales que existan)
+        columnas_a_usar = columnas_necesarias.copy()
+        for col in columnas_opcionales:
+            if col in df.columns:
+                columnas_a_usar.append(col)
+        
+        df_procesado = df[columnas_a_usar].copy()
+        
+        # ✅ MAPEO DE COLUMNAS ACTUALIZADO
+        mapeo_columnas = {
+            'Clave académica': 'clave_academica',
+            'Solicitud': 'solicitud',
+            'Apellidos': 'apellidos',
+            'Nombre': 'nombre',
+            'Correo electrónico': 'email',  # ✅ Cambiado
+            'Media estudios realizados': 'media_estudios',
+            'Primera opción': 'primera_opcion',
+            'Entrevistas': 'franjas_disponibilidad'  # ✅ Cambiado
+        }
+        
+        df_procesado.rename(columns=mapeo_columnas, inplace=True)
         
         # Limpiar datos
-        df_procesado = df_procesado.dropna(subset=['solicitud', 'apellidos', 'nombre', 'media_estudios'])
+        df_procesado = df_procesado.dropna(subset=['clave_academica', 'apellidos', 'nombre', 'media_estudios'])
         df_procesado['solicitud'] = pd.to_numeric(df_procesado['solicitud'], errors='coerce')
         df_procesado['media_estudios'] = pd.to_numeric(df_procesado['media_estudios'], errors='coerce')
         df_procesado = df_procesado.dropna(subset=['solicitud', 'media_estudios'])
         
-        # Convertir teléfono a string
-        df_procesado['telefono'] = df_procesado['telefono'].apply(
-            lambda x: str(int(x)) if pd.notna(x) and x != '' else None
-        )
+        # Convertir clave_academica a string
+        df_procesado['clave_academica'] = df_procesado['clave_academica'].astype(str).str.strip()
         
-        # ✅ CORRECCIÓN: Detectar sede AQUÍ en df_procesado (antes de filtrar)
+        # ❌ ELIMINADO: Procesamiento de teléfono
+        
+        # ✅ Detectar sede desde primera_opcion
         df_procesado['sede'] = df_procesado['primera_opcion'].apply(detectar_sede_desde_primera_opcion)
         
         total_leidos = len(df)
         total_validos = len(df_procesado)
         
-        # Filtrar por umbral (AHORA df_filtrado ya tiene la columna 'sede')
+        # Filtrar por umbral
         df_filtrado = df_procesado[df_procesado['media_estudios'] < umbral].copy()
+        
+        # ✅ PARSEAR FRANJAS DE DISPONIBILIDAD
+        if 'franjas_disponibilidad' in df_filtrado.columns:
+            df_filtrado['tiene_preferencias'] = df_filtrado['franjas_disponibilidad'].notna() & \
+                                                (df_filtrado['franjas_disponibilidad'].astype(str).str.strip() != '')
+            
+            # Parsear franjas
+            df_filtrado['franjas_parseadas'] = df_filtrado['franjas_disponibilidad'].apply(
+                lambda x: json.dumps(parsear_franjas_disponibilidad(x), ensure_ascii=False) 
+                if pd.notna(x) and str(x).strip() != '' else None
+            )
+        else:
+            df_filtrado['tiene_preferencias'] = False
+            df_filtrado['franjas_parseadas'] = None
+            df_filtrado['franjas_disponibilidad'] = None
         
         # Añadir campos de gestión
         df_filtrado['estado'] = 'pendiente'
@@ -2298,7 +2563,7 @@ def cargar_excel_candidatos():
                 'total_validos': int(total_validos)
             }), 400
         
-        # ✅ Contar candidatos por sede - CONVERTIR A TIPOS NATIVOS
+        # Estadísticas por sede
         candidatos_por_sede_raw = df_filtrado['sede'].value_counts().to_dict()
         candidatos_por_sede = {
             str(k) if k is not None else 'Sin detectar': int(v) 
@@ -2306,45 +2571,48 @@ def cargar_excel_candidatos():
         }
         candidatos_sin_sede = int(df_filtrado['sede'].isna().sum())
         
-        # Verificar duplicados antes de insertar
-        solicitudes_en_df = df_filtrado['solicitud'].tolist()
+        # Estadísticas de preferencias
+        candidatos_con_preferencias = int(df_filtrado['tiene_preferencias'].sum())
+        candidatos_sin_preferencias = candidatos_finales - candidatos_con_preferencias
+        
+        # Verificar duplicados (por clave_academica)
+        claves_en_df = df_filtrado['clave_academica'].tolist()
         candidatos_existentes = Candidato.query.filter(
-            Candidato.solicitud.in_(solicitudes_en_df),
-            Candidato.semana_carga == semana
+            Candidato.clave_academica.in_(claves_en_df)
         ).all()
         
         candidatos_duplicados = len(candidatos_existentes)
         
         if candidatos_duplicados > 0:
-            # Obtener solicitudes duplicadas
-            solicitudes_duplicadas = [c.solicitud for c in candidatos_existentes]
-            
-            # Filtrar el DataFrame para excluir duplicados
-            df_filtrado = df_filtrado[~df_filtrado['solicitud'].isin(solicitudes_duplicadas)].copy()
-            
+            claves_duplicadas = [c.clave_academica for c in candidatos_existentes]
+            df_filtrado = df_filtrado[~df_filtrado['clave_academica'].isin(claves_duplicadas)].copy()
             candidatos_finales = len(df_filtrado)
             
             if candidatos_finales == 0:
                 os.remove(filepath)
                 return jsonify({
-                    'error': f'Todos los candidatos ({candidatos_duplicados}) ya están cargados en la semana {semana}',
+                    'error': f'Todos los candidatos ({candidatos_duplicados}) ya están cargados',
                     'duplicados': candidatos_duplicados,
                     'total_leidos': int(total_leidos)
                 }), 400
             
-            # ✅ Recalcular estadísticas después de eliminar duplicados
+            # Recalcular estadísticas
             candidatos_por_sede_raw = df_filtrado['sede'].value_counts().to_dict()
             candidatos_por_sede = {
                 str(k) if k is not None else 'Sin detectar': int(v) 
                 for k, v in candidatos_por_sede_raw.items()
             }
             candidatos_sin_sede = int(df_filtrado['sede'].isna().sum())
+            candidatos_con_preferencias = int(df_filtrado['tiene_preferencias'].sum())
+            candidatos_sin_preferencias = candidatos_finales - candidatos_con_preferencias
         
         # Codificar campos de texto
-        for col in ['apellidos', 'nombre', 'primera_opcion', 'archivo_origen', 'email', 'telefono', 'sede']:
+        for col in ['apellidos', 'nombre', 'primera_opcion', 'archivo_origen', 'email', 'sede', 
+                    'franjas_disponibilidad', 'franjas_parseadas']:
             if col in df_filtrado.columns:
                 df_filtrado[col] = df_filtrado[col].apply(
-                    lambda x: str(x).encode('utf-8', 'ignore').decode('utf-8') if x is not None and str(x) not in ['nan', 'None'] else None
+                    lambda x: str(x).encode('utf-8', 'ignore').decode('utf-8') 
+                    if x is not None and str(x) not in ['nan', 'None'] else None
                 )
         
         # Guardar en base de datos
@@ -2366,7 +2634,7 @@ def cargar_excel_candidatos():
         db.session.add(carga)
         db.session.commit()
         
-        # ✅ Registrar en logs de auditoría
+        # Registrar en logs
         registrar_log(
             accion='cargar_excel',
             entidad='candidatos',
@@ -2378,12 +2646,14 @@ def cargar_excel_candidatos():
                 'candidatos_importados': candidatos_finales,
                 'candidatos_duplicados': candidatos_duplicados,
                 'umbral': umbral,
-                'candidatos_por_sede': candidatos_por_sede
+                'candidatos_por_sede': candidatos_por_sede,
+                'con_preferencias': candidatos_con_preferencias,
+                'sin_preferencias': candidatos_sin_preferencias
             },
             nivel='info'
         )
         
-        # Mensaje con información de sedes
+        # Mensajes informativos
         mensaje_sedes = ''
         if candidatos_por_sede:
             mensaje_sedes = '<br><strong>📍 Por sede:</strong><br>'
@@ -2392,7 +2662,12 @@ def cargar_excel_candidatos():
         if candidatos_sin_sede > 0:
             mensaje_sedes += f'• ⚠️ Sin sede detectada: {candidatos_sin_sede}<br>'
         
-        # Advertencia sobre duplicados
+        mensaje_preferencias = ''
+        if candidatos_con_preferencias > 0:
+            mensaje_preferencias = f'<br><strong>🕐 Preferencias de horario:</strong><br>'
+            mensaje_preferencias += f'• Con preferencias: {candidatos_con_preferencias}<br>'
+            mensaje_preferencias += f'• Sin preferencias: {candidatos_sin_preferencias}<br>'
+        
         mensaje_duplicados = ''
         if candidatos_duplicados > 0:
             mensaje_duplicados = f'<br><strong>⚠️ Duplicados omitidos:</strong> {candidatos_duplicados} candidatos ya existían<br>'
@@ -2400,7 +2675,6 @@ def cargar_excel_candidatos():
         # Eliminar archivo temporal
         os.remove(filepath)
         
-        # ✅ CRÍTICO: Convertir TODOS los valores a tipos nativos de Python
         return jsonify({
             'success': True,
             'mensaje': f'{candidatos_finales} candidatos importados correctamente',
@@ -2412,7 +2686,10 @@ def cargar_excel_candidatos():
             'semana': str(semana),
             'candidatos_por_sede': candidatos_por_sede,
             'candidatos_sin_sede': int(candidatos_sin_sede),
+            'candidatos_con_preferencias': int(candidatos_con_preferencias),
+            'candidatos_sin_preferencias': int(candidatos_sin_preferencias),
             'mensaje_sedes': mensaje_sedes,
+            'mensaje_preferencias': mensaje_preferencias,
             'mensaje_duplicados': mensaje_duplicados
         })
         
@@ -2541,7 +2818,7 @@ def enviar_emails_semana(semana):
                     registrar_log(
                         accion='enviar_email',
                         entidad='candidato',
-                        entidad_id=asignacion.candidato.id,
+                        entidad_id=asignacion.candidato.clave_academica,
                         descripcion=f'Email enviado a: {asignacion.candidato.nombre} {asignacion.candidato.apellidos} ({asignacion.candidato.email})',
                         nivel='info',
                         metadata={'tipo': 'confirmacion_entrevista', 'asignacion_id': asignacion.id}
@@ -2556,7 +2833,7 @@ def enviar_emails_semana(semana):
                     registrar_log(
                         accion='enviar_email',
                         entidad='candidato',
-                        entidad_id=asignacion.candidato.id,
+                        entidad_id=asignacion.candidato.clave_academica,
                         descripcion=f'Error al enviar email a: {asignacion.candidato.email} - {str(e)}',
                         nivel='error'
                     )
@@ -2774,46 +3051,81 @@ def asignar_candidato_manual():
     
     try:
         data = request.json
-        candidato_id = data.get('candidato_id')
-        reserva_id = data.get('reserva_id')
-        posicion = data.get('posicion')  # 1 o 2
         
-        if not all([candidato_id, reserva_id, posicion]):
-            return jsonify({'error': 'Faltan datos requeridos'}), 400
+        # ✅ DEBUG: Imprimir datos recibidos
+        print("=" * 50)
+        print("📥 DATOS RECIBIDOS EN ASIGNAR MANUAL:")
+        print(f"Data completo: {data}")
+        print(f"candidato_clave: {data.get('candidato_clave')}")
+        print(f"reserva_id: {data.get('reserva_id')}")
+        print(f"posicion: {data.get('posicion')}")
+        print("=" * 50)
+        
+        # Obtener datos
+        candidato_clave = data.get('candidato_clave')
+        reserva_id = data.get('reserva_id')
+        posicion = data.get('posicion')
+        
+        # ✅ Validación detallada
+        errores = []
+        
+        if not candidato_clave:
+            errores.append('candidato_clave es requerido')
+        
+        if not reserva_id:
+            errores.append('reserva_id es requerido')
+        
+        if not posicion:
+            errores.append('posicion es requerido')
+        
+        if errores:
+            error_msg = f"Faltan datos requeridos: {', '.join(errores)}"
+            print(f"❌ ERROR: {error_msg}")
+            return jsonify({'error': error_msg}), 400
         
         # Validar candidato
-        candidato = Candidato.query.get(candidato_id)
+        candidato = Candidato.query.get(candidato_clave)
         if not candidato:
-            return jsonify({'error': 'Candidato no encontrado'}), 404
+            print(f"❌ ERROR: Candidato con clave '{candidato_clave}' no encontrado")
+            return jsonify({'error': f'Candidato con clave {candidato_clave} no encontrado'}), 404
+        
+        print(f"✅ Candidato encontrado: {candidato.nombre} {candidato.apellidos}")
         
         # Validar reserva
         reserva = Reserva.query.get(reserva_id)
         if not reserva:
+            print(f"❌ ERROR: Reserva {reserva_id} no encontrada")
             return jsonify({'error': 'Reserva no encontrada'}), 404
         
+        print(f"✅ Reserva encontrada: {reserva.fecha} {reserva.hora_inicio}")
+        
         # Verificar que el candidato no tenga ya una asignación
-        asignacion_existente = Asignacion.query.filter_by(candidato_id=candidato_id).first()
+        asignacion_existente = Asignacion.query.filter_by(candidato_clave=candidato_clave).first()
         if asignacion_existente:
-            return jsonify({
-                'error': f'El candidato ya tiene una asignación en {asignacion_existente.reserva.fecha.strftime("%d/%m/%Y")} a las {asignacion_existente.hora_exacta.strftime("%H:%M") if asignacion_existente.hora_exacta else "N/A"}'
-            }), 400
+            error_msg = f'El candidato ya tiene una asignación'
+            print(f"❌ ERROR: {error_msg}")
+            return jsonify({'error': error_msg}), 400
         
         # Verificar espacios disponibles
         asignaciones_actuales = Asignacion.query.filter_by(reserva_id=reserva_id).count()
         if asignaciones_actuales >= 2:
+            print(f"❌ ERROR: Reserva completa ({asignaciones_actuales}/2)")
             return jsonify({'error': 'Esta reserva ya tiene 2 asignaciones'}), 400
         
         # Verificar que la posición no esté ocupada
         posicion_ocupada = Asignacion.query.filter_by(reserva_id=reserva_id, posicion=posicion).first()
         if posicion_ocupada:
+            print(f"❌ ERROR: Posición {posicion} ocupada")
             return jsonify({'error': f'La posición {posicion} ya está ocupada'}), 400
         
-        # Calcular minuto de inicio según posición
+        # Calcular minuto de inicio
         minuto_inicio = 0 if posicion == 1 else 15
+        
+        print(f"✅ Creando asignación: posición={posicion}, minuto_inicio={minuto_inicio}")
         
         # Crear asignación
         asignacion = Asignacion(
-            candidato_id=candidato_id,
+            candidato_clave=candidato_clave,
             reserva_id=reserva_id,
             entrevistador_id=reserva.usuario_id,
             posicion=posicion,
@@ -2830,33 +3142,38 @@ def asignar_candidato_manual():
         
         db.session.commit()
         
+        print(f"✅ Asignación creada exitosamente: ID={asignacion.id}")
+        
+        # Registrar en logs
         registrar_log(
             accion='asignar',
             entidad='asignacion',
             entidad_id=asignacion.id,
-            descripcion=f'Asignación manual: {candidato.nombre} {candidato.apellidos} → {reserva.fecha.strftime("%d/%m/%Y")} {reserva.hora_inicio.strftime("%H:%M")}',
+            descripcion=f'Asignación manual: {candidato.nombre} {candidato.apellidos}',
             datos_nuevos={
-                'candidato': f"{candidato.nombre} {candidato.apellidos}",
-                'candidato_nota': float(candidato.media_estudios) if candidato.media_estudios else None,
-                'fecha': reserva.fecha.strftime('%d/%m/%Y'),
-                'hora': asignacion.hora_exacta.strftime('%H:%M') if asignacion.hora_exacta else None,
-                'entrevistador': reserva.usuario.username,
+                'candidato_clave': candidato_clave,
+                'reserva_id': reserva_id,
                 'posicion': posicion
             },
-            nivel='info',
-            metadata={'tipo': 'manual'}
+            nivel='info'
         )
 
         return jsonify({
             'success': True,
             'mensaje': f'Candidato {candidato.nombre} {candidato.apellidos} asignado correctamente',
-            'asignacion_id': asignacion.id,
-            'hora_exacta': asignacion.hora_exacta.strftime('%H:%M') if asignacion.hora_exacta else None
+            'asignacion_id': asignacion.id
         })
         
     except Exception as e:
         db.session.rollback()
-
+        
+        print("=" * 50)
+        print(f"💥 EXCEPCIÓN EN ASIGNAR MANUAL:")
+        print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        print("=" * 50)
+        
         registrar_log(
             accion='asignar',
             entidad='asignacion',
@@ -2864,8 +3181,7 @@ def asignar_candidato_manual():
             descripcion=f'Error al asignar candidato: {str(e)}',
             nivel='error'
         )
-        import traceback
-        traceback.print_exc()
+        
         return jsonify({'error': f'Error al asignar candidato: {str(e)}'}), 500
 
 
@@ -2900,7 +3216,7 @@ def desasignar_candidato_manual():
         return jsonify({
             'success': True,
             'mensaje': f'Asignación de {candidato_nombre} eliminada correctamente',
-            'candidato_id': candidato.id
+            'candidato_id': candidato.clave_academica
         })
         
     except Exception as e:
@@ -3047,7 +3363,7 @@ def exportar_candidatos_xlsx(candidatos, semana):
     )
     
     # Encabezados
-    headers = ['#', 'Solicitud', 'Apellidos', 'Nombre', 'Email','Telefono', 'Nota Media', 'Sede','Primera Opción', 'Estado', 'Fecha Carga']
+    headers = ['#', 'Solicitud', 'Apellidos', 'Nombre', 'Email', 'Nota Media', 'Sede', 'Primera Opción', 'Estado', 'Fecha Carga']
     ws.append(headers)
     
     # Aplicar estilos a encabezados
@@ -3065,7 +3381,6 @@ def exportar_candidatos_xlsx(candidatos, semana):
             candidato.apellidos,
             candidato.nombre,
             candidato.email or 'N/A',
-            candidato.telefono or 'N/A',
             float(candidato.media_estudios) if candidato.media_estudios else 0,
             candidato.sede or 'Sin detectar',
             candidato.primera_opcion or '',
@@ -3305,7 +3620,6 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
             hora_exacta,
             f"{candidato.nombre} {candidato.apellidos}",
             candidato.email or 'N/A',
-            candidato.telefono or 'N/A',
             float(candidato.media_estudios) if candidato.media_estudios else 0,
             entrevistador.username if entrevistador else 'N/A',
             reserva.espacio.nombre if reserva.espacio else 'N/A',
@@ -3400,7 +3714,6 @@ def exportar_asignaciones_csv(asignaciones, semana):
             hora_exacta,
             f"{candidato.nombre} {candidato.apellidos}",
             candidato.email or 'N/A',
-            candidato.telefono or 'N/A',
             float(candidato.media_estudios) if candidato.media_estudios else 0,
             entrevistador.username if entrevistador else 'N/A',
             reserva.espacio.nombre if reserva.espacio else 'N/A',
@@ -4017,8 +4330,8 @@ def eliminar_carga(carga_id):
         num_candidatos = len(candidatos)
         
         # Verificar si hay asignaciones
-        candidatos_ids = [c.id for c in candidatos]
-        asignaciones = Asignacion.query.filter(Asignacion.candidato_id.in_(candidatos_ids)).all()
+        candidatos_claves = [c.clave_academica for c in candidatos]
+        asignaciones = Asignacion.query.filter(Asignacion.candidato_clave.in_(candidatos_claves)).all()
         num_asignaciones = len(asignaciones)
         
         # Eliminar asignaciones primero (por FK)
@@ -4075,8 +4388,8 @@ def eliminar_candidatos_semana(semana):
             return jsonify({'error': 'No hay candidatos en esta semana'}), 404
         
         # Obtener asignaciones
-        candidatos_ids = [c.id for c in candidatos]
-        asignaciones = Asignacion.query.filter(Asignacion.candidato_id.in_(candidatos_ids)).all()
+        candidatos_claves = [c.clave_academica for c in candidatos]
+        asignaciones = Asignacion.query.filter(Asignacion.candidato_clave.in_(candidatos_claves)).all()
         num_asignaciones = len(asignaciones)
         
         # Eliminar asignaciones primero
@@ -4124,7 +4437,7 @@ def eliminar_candidato(candidato_id):
         candidato = Candidato.query.get_or_404(candidato_id)
         
         # Eliminar asignación si existe
-        asignacion = Asignacion.query.filter_by(candidato_id=candidato_id).first()
+        asignacion = Asignacion.query.filter_by(candidato_clave=candidato_id).first()
         if asignacion:
             db.session.delete(asignacion)
         
@@ -4166,10 +4479,10 @@ def eliminar_asignaciones_semana(semana):
     try:
         # Obtener candidatos de la semana
         candidatos = Candidato.query.filter_by(semana_carga=semana).all()
-        candidatos_ids = [c.id for c in candidatos]
+        candidatos_claves = [c.clave_academica for c in candidatos]
         
         # Obtener asignaciones
-        asignaciones = Asignacion.query.filter(Asignacion.candidato_id.in_(candidatos_ids)).all()
+        asignaciones = Asignacion.query.filter(Asignacion.candidato_clave.in_(candidatos_claves)).all()
         num_asignaciones = len(asignaciones)
         
         if num_asignaciones == 0:
