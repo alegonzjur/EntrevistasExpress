@@ -2086,6 +2086,8 @@ def ejecutar_asignacion():
     1. Candidatos CON preferencias que coinciden con reservas disponibles
     2. Candidatos SIN preferencias (asignación por nota)
     3. Candidatos CON preferencias pero sin coincidencias (asignación por nota)
+    
+    MEJORA: Prioriza profesores con menos sedes asignadas
     """
     
     try:
@@ -2188,7 +2190,7 @@ def ejecutar_asignacion():
         print(f"📅 Franjas disponibles: {len(franjas_disponibles)}")
         
         # ========================================
-        # FASE 3: ASIGNACIÓN CON PREFERENCIAS
+        # FASE 3: ASIGNACIÓN CON PREFERENCIAS (MEJORADA)
         # ========================================
         
         asignaciones_creadas = []
@@ -2203,10 +2205,10 @@ def ejecutar_asignacion():
             
             franjas_preferidas = candidato.obtener_franjas_preferidas()
             
-            mejor_franja = None
-            mejor_score = -1
+            # ✅ NUEVO: Lista de franjas candidatas con sus scores
+            franjas_candidatas = []
             
-            # Buscar la mejor coincidencia
+            # Buscar todas las coincidencias posibles
             for franja_info in franjas_disponibles:
                 if franja_info['espacios_libres'] <= 0:
                     continue
@@ -2222,18 +2224,54 @@ def ejecutar_asignacion():
                     if not franja_info['entrevistador'].puede_atender_sede(candidato.sede):
                         continue
                 
-                # Calcular score
+                # Calcular score base
                 score = 0
                 
                 # Verificar coincidencia con preferencias
+                coincide_horario = False
                 for franja_pref in franjas_preferidas:
                     if franja_coincide_con_reserva(franja_pref, franja_info['reserva'], franja_info['espacio']):
-                        score = 1000  # Máxima prioridad
+                        score = 1000  # Máxima prioridad por coincidencia de horario
+                        coincide_horario = True
                         break
                 
-                if score > mejor_score:
-                    mejor_score = score
-                    mejor_franja = franja_info
+                # ✅ NUEVO: Si coincide el horario, añadir a candidatas
+                if coincide_horario:
+                    # Calcular número de sedes del entrevistador
+                    num_sedes = len(franja_info['entrevistador'].sedes)
+                    
+                    franjas_candidatas.append({
+                        'franja': franja_info,
+                        'score': score,
+                        'num_sedes': num_sedes
+                    })
+            
+            # ✅ NUEVO: Si hay franjas candidatas, elegir la mejor
+            mejor_franja = None
+            mejor_score = -1
+            
+            if franjas_candidatas:
+                # Ordenar por:
+                # 1. Score (descendente) - prioridad de coincidencia
+                # 2. Número de sedes (ascendente) - menos sedes = mejor
+                # 3. ID de reserva (para consistencia)
+                franjas_candidatas.sort(
+                    key=lambda x: (
+                        -x['score'],           # Mayor score primero
+                        x['num_sedes'],        # Menos sedes primero
+                        x['franja']['reserva'].id  # ID menor primero (desempate)
+                    )
+                )
+                
+                mejor_candidata = franjas_candidatas[0]
+                mejor_franja = mejor_candidata['franja']
+                mejor_score = mejor_candidata['score']
+                
+                # ✅ DEBUG: Mostrar decisión (solo si hay múltiples opciones)
+                if len(franjas_candidatas) > 1:
+                    print(f"   📋 Candidato: {candidato.nombre} {candidato.apellidos} (Sede: {candidato.sede})")
+                    print(f"      Opciones compatibles: {len(franjas_candidatas)}")
+                    print(f"      → Elegido: {mejor_franja['entrevistador'].username} ({mejor_candidata['num_sedes']} sede(s))")
             
             # Si encontró coincidencia, asignar
             if mejor_franja and mejor_score >= 1000:
@@ -2277,7 +2315,7 @@ def ejecutar_asignacion():
         print(f"   ✅ Asignados con preferencia: {candidatos_asignados_con_preferencia}")
         
         # ========================================
-        # FASE 4: ASIGNACIÓN SIN PREFERENCIAS
+        # FASE 4: ASIGNACIÓN SIN PREFERENCIAS (MEJORADA)
         # ========================================
         
         print("\n📝 FASE 2: Asignando candidatos SIN preferencias...")
@@ -2292,8 +2330,8 @@ def ejecutar_asignacion():
             if candidato.estado != 'pendiente':
                 continue
             
-            # Buscar primera franja disponible compatible con sede
-            franja_asignada = None
+            # ✅ NUEVO: Buscar TODAS las franjas compatibles y elegir la mejor
+            franjas_compatibles = []
             
             for franja_info in franjas_disponibles:
                 if franja_info['espacios_libres'] <= 0:
@@ -2310,8 +2348,34 @@ def ejecutar_asignacion():
                     if not franja_info['entrevistador'].puede_atender_sede(candidato.sede):
                         continue
                 
-                franja_asignada = franja_info
-                break
+                # ✅ Añadir a franjas compatibles
+                num_sedes = len(franja_info['entrevistador'].sedes)
+                franjas_compatibles.append({
+                    'franja': franja_info,
+                    'num_sedes': num_sedes
+                })
+            
+            # ✅ Si hay franjas compatibles, elegir la mejor
+            franja_asignada = None
+            
+            if franjas_compatibles:
+                # Ordenar por:
+                # 1. Número de sedes (menos sedes = mejor)
+                # 2. Fecha más temprana
+                # 3. Hora más temprana
+                franjas_compatibles.sort(key=lambda x: (
+                    x['num_sedes'],                # Menos sedes primero
+                    x['franja']['reserva'].fecha,  # Fecha más temprana
+                    x['franja']['reserva'].hora_inicio  # Hora más temprana
+                ))
+                
+                franja_asignada = franjas_compatibles[0]['franja']
+                
+                # ✅ DEBUG: Mostrar decisión (solo si hay múltiples opciones)
+                if len(franjas_compatibles) > 1:
+                    print(f"   📋 Candidato: {candidato.nombre} {candidato.apellidos} (Sede: {candidato.sede})")
+                    print(f"      Opciones compatibles: {len(franjas_compatibles)}")
+                    print(f"      → Elegido: {franja_asignada['entrevistador'].username} ({franjas_compatibles[0]['num_sedes']} sede(s))")
             
             if franja_asignada:
                 reserva = franja_asignada['reserva']
@@ -2370,10 +2434,10 @@ def ejecutar_asignacion():
             candidatos_asignados=len(asignaciones_creadas),
             candidatos_sin_asignar=len(candidatos_todos) - len(asignaciones_creadas),
             franjas_utilizadas=len(set([a['reserva_id'] for a in asignaciones_creadas])),
-            algoritmo_usado='asignacion_con_preferencias_v2',
+            algoritmo_usado='asignacion_pref_sedes_v3',
             tiempo_ejecucion_segundos=round(tiempo_total, 2),
             estado='exito' if len(asignaciones_creadas) == len(candidatos_todos) else 'parcial',
-            mensaje=f'Asignación con preferencias. {candidatos_asignados_con_preferencia} con match, {candidatos_asignados_sin_preferencia} sin preferencia/match',
+            mensaje=f'Asignación con preferencias y priorización por sedes. {candidatos_asignados_con_preferencia} con match, {candidatos_asignados_sin_preferencia} sin preferencia/match',
             ejecutado_por_usuario_id=session['user_id']
         )
         
@@ -2385,7 +2449,7 @@ def ejecutar_asignacion():
             accion='asignacion_automatica',
             entidad='sistema',
             entidad_id=None,
-            descripcion=f'Asignación con preferencias: {len(asignaciones_creadas)} asignados ({candidatos_asignados_con_preferencia} con match)',
+            descripcion=f'Asignación con preferencias y priorización por sedes: {len(asignaciones_creadas)} asignados ({candidatos_asignados_con_preferencia} con match)',
             datos_nuevos={
                 'semana_carga': semana_carga,
                 'semana_entrevistas': semana_entrevistas,
@@ -2397,6 +2461,12 @@ def ejecutar_asignacion():
             },
             nivel='info'
         )
+        
+        print(f"\n✅ ASIGNACIÓN COMPLETADA:")
+        print(f"   Total asignados: {len(asignaciones_creadas)}/{len(candidatos_todos)}")
+        print(f"   Con preferencia match: {candidatos_asignados_con_preferencia}")
+        print(f"   Sin preferencia/sin match: {candidatos_asignados_sin_preferencia}")
+        print(f"   Tiempo: {round(tiempo_total, 2)}s")
         
         return jsonify({
             'success': True,
