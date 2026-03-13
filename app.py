@@ -749,12 +749,18 @@ def generar_email_candidato(asignacion):
         seccion_videollamada = f"""
                                         <p style="margin: 0 0 15px 0; font-size: 16px; color: #333333;">
                                             <span style="font-size: 20px;">🎥</span> 
-                                            <strong>Enlace de Videollamada:</strong><br>
+                                            <strong>Enlace entrevista:</strong><br>
                                             <span style="margin-left: 30px;">
                                                 <a href="{enlace_videollamada}" 
                                                    style="color: #0066B3; text-decoration: none; font-weight: 600;"
                                                    target="_blank">
-                                                    Unirse a la entrevista virtual
+                                                    Únete en la web
+                                                </a>
+                                                <br>
+                                                <a href="http://www.comillas.edu/ingleseuef" 
+                                                   style="color: #0066B3; text-decoration: none; font-weight: 600;"
+                                                   target="_blank">
+                                                    Enlace a prueba de inglés
                                                 </a>
                                             </span>
                                         </p>
@@ -769,6 +775,7 @@ def generar_email_candidato(asignacion):
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f4f4;">
     <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f4f4f4">
+    
         <tr>
             <td align="center" style="padding: 40px 20px;">
                 
@@ -776,12 +783,26 @@ def generar_email_candidato(asignacion):
                 <table width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" 
                        style="border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                     
-                    <!-- Header -->
+                    <!-- HEADER CON LOGO -->
                     <tr>
-                        <td bgcolor="#4472C4" style="padding: 40px 30px; text-align: center; border-radius: 8px 8px 0 0;">
-                            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">
-                                📋 Confirmación de Entrevista
-                            </h1>
+                        <td style="background-color: #00A1DF; padding: 40px 20px; text-align: center;">
+                                <!-- COMILLAS (gris claro) -->
+                                <div style="font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 12px; color: #ffffff; letter-spacing: 3px; font-weight: 300; margin-bottom: 8px;">
+                                    COMILLAS
+                                </div>
+                                        
+                                        <!-- ESCUELA DE ENFERMERÍA Y FISIOTERAPIA (azul claro) -->
+                                <div style="font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 20px; font-weight: bold; color: #ffffff; letter-spacing: 1.5px; line-height: 1.2; margin-bottom: 20px;">
+                                    ESCUELA DE ENFERMERÍA<br>Y FISIOTERAPIA
+                                </div>
+                                        
+                                <!-- Línea separadora decorativa -->
+                                <div style="width: 100px; height: 3px; background: linear-gradient(to right, transparent, #00A1DF, transparent); margin: 0 auto 20px auto;"></div>
+                                        
+                                
+                                <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600; text-shadow: 0 2px 4px rgba(0,0,0,0.2); font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;">
+                                    Confirmación de Entrevista
+                                </h1>
                         </td>
                     </tr>
                     
@@ -794,9 +815,9 @@ def generar_email_candidato(asignacion):
                             </p>
                             
                             <p style="font-size: 16px; color: #666666; line-height: 1.6; margin: 0 0 30px 0;">
-                                Como ya le hemos informado por teléfono, para poder valorar su admisión en los estudios de GRADO EN ENFERMERÍA, además de su expediente académico tendrá que realizar una entrevista personal y una prueba de nivel de inglés. De no realizar alguna de estas pruebas su solicitud no podrá ser valorada.
+                                Para poder valorar su admisión en los estudios GRADO EN ENFERMERIA, además de su expediente académico tendrá que realizar una entrevista personal y una prueba de nivel de inglés.
                             <br>
-                                A continuación le indicamos día, hora y el enlace para realizar la entrevista personal online. La plataforma a través de la cual se realiza es por Comillas Class. Es recomendable que utilice <strong>CHROME</strong> como navegador y lo haga desde un ordenador.
+                                A continuación le indicamos día, hora y el enlace para realizar la entrevista personal online.
 
                             </p>
                             
@@ -834,8 +855,9 @@ def generar_email_candidato(asignacion):
                                     ⚠️ Instrucciones importantes:
                                 </p>
                                 <ul style="margin: 0; padding-left: 20px; color: #856404;">
-                                    {"<li style='margin: 5px 0;'>Accede al enlace de videollamada <strong>5 minutos antes</strong> de la hora indicada.</li>" if enlace_videollamada else "<li style='margin: 5px 0;'>Por favor, llegue <strong>10 minutos antes</strong> de la hora indicada.</li>"}
-                                    <li style="margin: 5px 0;">Para realizar la prueba de nivel de inglés online deberá acceder a través del siguiente enlace:  <strong>http://www.comillas.edu/ingleseuef</strong> indicando su usuario seguido de @alu.comillas.edu (ejemplo: 202300000@alu.comillas.edu).</li>
+                                    <li style="margin: 5px 0;">Es recomendable que utilice <strong>CHROME</strong> como navegador y lo haga desde un ordenador.</li>
+                                    {"<li style='margin: 5px 0;'>Haz click sobre el icono “únete en la web” e indica tu nombre cuando te pida “indica tu nombre”.</li>" if enlace_videollamada else "<li style='margin: 5px 0;'>Por favor, llegue <strong>10 minutos antes</strong> de la hora indicada.</li>"}
+                                    <li style="margin: 5px 0;">Para realizar la prueba de nivel de inglés online deberá acceder a través del enlace proporcionado anteriormente indicando su usuario seguido de @alu.comillas.edu (ejemplo: 202300000@alu.comillas.edu).</li>
                                 </ul>
                             </div>
                             
@@ -848,12 +870,9 @@ def generar_email_candidato(asignacion):
                             <!-- Firma -->
                             <div style="border-top: 2px solid #e0e0e0; padding-top: 20px; margin-top: 30px;">
                                 <p style="margin: 0 0 5px 0; font-size: 16px; color: #333333; font-weight: 600;">
-                                    Atentamente,
+                                    Atentamente
                                 </p>
-                                <p style="margin: 0; font-size: 14px; color: #666666;">
-                                    Sistema de Gestión de Entrevistas<br>
-                                    Escuela Universitaria de Enfermería y Fisioterapia - Comillas ICAI-ICADE
-                                </p>
+
                             </div>
                             
                         </td>
@@ -864,7 +883,7 @@ def generar_email_candidato(asignacion):
                         <td bgcolor="#f8f9fa" style="padding: 20px 30px; text-align: center; border-radius: 0 0 8px 8px;">
                             <p style="margin: 0; font-size: 12px; color: #999999; line-height: 1.5;">
                                 Este es un mensaje automático, por favor no responda directamente a este correo.<br>
-                                Para cualquier consulta, contacte con el entrevistador indicado.
+                                Para cualquier consulta, contacte con el correo indicado anteriormente.
                             </p>
                         </td>
                     </tr>
@@ -909,11 +928,18 @@ def generar_email_entrevistador(entrevistador, asignaciones):
         primera_fecha = min(a.reserva.fecha for a in asignaciones)
         semana_num = primera_fecha.isocalendar()[1]
         año = primera_fecha.year
+        meses_esp = {
+        1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
+        5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
+        9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
+        }
+        mes_nombre = meses_esp[primera_fecha.month]
     else:
         semana_num = 0
-        año = 2025
+        mes_nombre = 'Enero'
+        año = 2026
     
-    subject = f"Calendario de Entrevistas - Semana {semana_num}"
+    subject = f"Calendario de Entrevistas - {mes_nombre} {año}"
     
     # Generar filas de la tabla
     filas_html = ""
@@ -939,8 +965,8 @@ def generar_email_entrevistador(entrevistador, asignaciones):
         filas_html += f"""
         <tr style="border-bottom: 1px solid #e0e0e0;">
             <td rowspan="{len(asigs_dia)}" style="padding: 15px; background-color: #f8f9fa; font-weight: 600; text-align: center; border-right: 2px solid #dee2e6;">
-                {dia_semana}<br>
-                <span style="font-size: 12px; color: #666; font-weight: normal;">{fecha_str}</span>
+                <strong>{dia_semana}</strong><br>
+                <span style="font-size: 12px; color: #666; font-weight: normal;"><strong>{fecha_str}</strong></span>
             </td>
             <td style="padding: 15px; font-weight: 600; color: #4472C4;">{hora}</td>
             <td style="padding: 15px;">
@@ -954,7 +980,7 @@ def generar_email_entrevistador(entrevistador, asignaciones):
         </tr>
         """
         
-        # ✅ CORREGIDO: Filas adicionales del mismo día
+        
         for asig in asigs_dia[1:]:
             hora = asig.hora_exacta.strftime('%H:%M') if asig.hora_exacta else asig.reserva.hora_inicio.strftime('%H:%M')
             candidato = asig.candidato
@@ -989,15 +1015,37 @@ def generar_email_entrevistador(entrevistador, asignaciones):
                 <table width="800" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" 
                        style="border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                     
-                    <!-- Header -->
+                    <!-- HEADER CON LOGO -->
                     <tr>
-                        <td bgcolor="#70AD47" style="padding: 40px 30px; text-align: center; border-radius: 8px 8px 0 0;">
-                            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">
-                                📅 Calendario de Entrevistas
-                            </h1>
-                            <p style="color: #ffffff; margin: 10px 0 0 0; font-size: 18px;">
-                                Semana {semana_num} - {año}
-                            </p>
+                        <td style="background-color: #00A1DF; padding: 40px 20px; text-align: center;">
+                            
+                            <!-- Logo en texto con mejor tipografía -->
+                            <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                                <tr>
+                                    <td align="center">
+                                        
+                                        <!-- COMILLAS (gris claro) -->
+                                        <div style="font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 12px; color: #ffffff;; letter-spacing: 3px; font-weight: 300; margin-bottom: 8px;">
+                                            COMILLAS
+                                        </div>
+                                        
+                                        <!-- ESCUELA DE ENFERMERÍA Y FISIOTERAPIA (azul claro) -->
+                                        <div style="font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 20px; font-weight: bold; color: #ffffff;; letter-spacing: 1.5px; line-height: 1.2; margin-bottom: 20px;">
+                                            ESCUELA DE ENFERMERÍA<br>Y FISIOTERAPIA
+                                        </div>
+                                        
+                                        <!-- Línea separadora decorativa -->
+                                        <div style="width: 100px; height: 3px; background: linear-gradient(to right, transparent, #00A1DF, transparent); margin: 0 auto 20px auto;"></div>
+                                        
+                                        <!-- Título del email -->
+                                        <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600; text-shadow: 0 2px 4px rgba(0,0,0,0.2); font-family: 'Segoe UI', Arial, sans-serif;">
+                                            Calendario de Entrevistas - {mes_nombre} {año} 
+                                        </h1>
+                                        
+                                    </td>
+                                </tr>
+                            </table>
+                            
                         </td>
                     </tr>
                     
@@ -1006,7 +1054,7 @@ def generar_email_entrevistador(entrevistador, asignaciones):
                         <td style="padding: 40px 30px;">
                             
                             <p style="font-size: 16px; color: #333333; line-height: 1.6; margin: 0 0 10px 0;">
-                                Hola <strong>{entrevistador.username}</strong>,
+                                Estimado <strong>{entrevistador.username}</strong>,
                             </p>
                             
                             <p style="font-size: 16px; color: #666666; line-height: 1.6; margin: 0 0 30px 0;">
@@ -1019,7 +1067,7 @@ def generar_email_entrevistador(entrevistador, asignaciones):
                                    style="border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden;">
                                 
                                 <!-- Header de tabla -->
-                                <tr style="background-color: #70AD47; color: white;">
+                                <tr style="background-color: #FFB81C; color: black;">
                                     <th style="padding: 15px; text-align: center; font-weight: 600;">Día</th>
                                     <th style="padding: 15px; text-align: left; font-weight: 600;">Hora</th>
                                     <th style="padding: 15px; text-align: left; font-weight: 600;">Candidato</th>
@@ -1039,24 +1087,19 @@ def generar_email_entrevistador(entrevistador, asignaciones):
                                 <ul style="margin: 0; padding-left: 20px; color: #1565c0; line-height: 1.8;">
                                     <li>Total de entrevistas: <strong>{len(asignaciones)}</strong></li>
                                     <li>Días con entrevistas: <strong>{len(fechas_ordenadas)}</strong></li>
-                                    <li>Primera entrevista: <strong>{fechas_ordenadas[0].strftime('%d/%m/%Y') if fechas_ordenadas else '-'}</strong></li>
-                                    <li>Última entrevista: <strong>{fechas_ordenadas[-1].strftime('%d/%m/%Y') if fechas_ordenadas else '-'}</strong></li>
                                 </ul>
                             </div>
                             
                             <!-- Nota -->
                             <p style="font-size: 14px; color: #999999; line-height: 1.6; margin: 30px 0 0 0;">
                                 Si tiene alguna duda o necesita realizar cambios en el calendario, 
-                                por favor contacte con el administrador del sistema.
+                                por favor contacte con <strong>enfermeriafisioterapia@comillas.edu</strong>.
                             </p>
                             
                             <!-- Firma -->
                             <div style="border-top: 2px solid #e0e0e0; padding-top: 20px; margin-top: 30px;">
                                 <p style="margin: 0 0 5px 0; font-size: 16px; color: #333333; font-weight: 600;">
-                                    Saludos cordiales,
-                                </p>
-                                <p style="margin: 0; font-size: 14px; color: #666666;">
-                                    Sistema de Gestión de Entrevistas
+                                    Atentamente
                                 </p>
                             </div>
                             
@@ -1068,7 +1111,7 @@ def generar_email_entrevistador(entrevistador, asignaciones):
                         <td bgcolor="#f8f9fa" style="padding: 20px 30px; text-align: center; border-radius: 0 0 8px 8px;">
                             <p style="margin: 0; font-size: 12px; color: #999999; line-height: 1.5;">
                                 Este es un mensaje automático del sistema de gestión de entrevistas.<br>
-                                Para consultas, contacte con secretaría o el administrador del sistema.
+                                Para consultas, contacte con el correo mencionado anteriormente.
                             </p>
                         </td>
                     </tr>
