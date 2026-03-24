@@ -20,15 +20,15 @@ from email.mime.multipart import MIMEMultipart
 # ====================================================================
 
 # Configuración de email con Office 365
-app.config['MAIL_SERVER'] = 'smtp.office365.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USE_SSL'] = False
-app.config['MAIL_USERNAME'] = 'tu_email@tuuniversidad.edu'  # ← CAMBIAR
-app.config['MAIL_PASSWORD'] = 'tu_contraseña'  # ← CAMBIAR
-app.config['MAIL_DEFAULT_SENDER'] = 'tu_email@tuuniversidad.edu'  # ← CAMBIAR
-app.config['MAIL_MAX_EMAILS'] = 50  # Máximo 50 emails por conexión
-app.config['MAIL_ASCII_ATTACHMENTS'] = False
+app.config["MAIL_SERVER"] = "smtp.office365.com"
+app.config["MAIL_PORT"] = 587
+app.config["MAIL_USE_TLS"] = True
+app.config["MAIL_USE_SSL"] = False
+app.config["MAIL_USERNAME"] = "tu_email@tuuniversidad.edu"  # ← CAMBIAR
+app.config["MAIL_PASSWORD"] = "tu_contraseña"  # ← CAMBIAR
+app.config["MAIL_DEFAULT_SENDER"] = "tu_email@tuuniversidad.edu"  # ← CAMBIAR
+app.config["MAIL_MAX_EMAILS"] = 50  # Máximo 50 emails por conexión
+app.config["MAIL_ASCII_ATTACHMENTS"] = False
 
 # Inicializar Flask-Mail
 mail = Mail(app)
@@ -37,6 +37,7 @@ mail = Mail(app)
 # ====================================================================
 # PARTE 2: FUNCIONES AUXILIARES
 # ====================================================================
+
 
 def enviar_email_async(app, msg):
     """Envía email en background (opcional, para no bloquear)"""
@@ -52,56 +53,69 @@ def enviar_email_async(app, msg):
 def validar_email(email):
     """Valida que un email tenga formato correcto"""
     import re
+
     if not email:
         return False
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
     return re.match(pattern, email) is not None
 
 
 def generar_email_candidato(asignacion):
     """
     Genera el HTML del email para un candidato
-    
+
     Args:
         asignacion: Objeto Asignacion con candidato, reserva, entrevistador
-    
+
     Returns:
         tuple: (subject, html_body)
     """
     candidato = asignacion.candidato
     reserva = asignacion.reserva
     entrevistador = asignacion.entrevistador
-    
+
     # Formatear fecha
-    fecha_str = reserva.fecha.strftime('%A %d de %B de %Y')
+    fecha_str = reserva.fecha.strftime("%A %d de %B de %Y")
     # Traducir día de la semana al español
     dias = {
-        'Monday': 'Lunes',
-        'Tuesday': 'Martes', 
-        'Wednesday': 'Miércoles',
-        'Thursday': 'Jueves',
-        'Friday': 'Viernes',
-        'Saturday': 'Sábado',
-        'Sunday': 'Domingo'
+        "Monday": "Lunes",
+        "Tuesday": "Martes",
+        "Wednesday": "Miércoles",
+        "Thursday": "Jueves",
+        "Friday": "Viernes",
+        "Saturday": "Sábado",
+        "Sunday": "Domingo",
     }
     for eng, esp in dias.items():
         fecha_str = fecha_str.replace(eng, esp)
-    
+
     # Meses en español
     meses = {
-        'January': 'enero', 'February': 'febrero', 'March': 'marzo',
-        'April': 'abril', 'May': 'mayo', 'June': 'junio',
-        'July': 'julio', 'August': 'agosto', 'September': 'septiembre',
-        'October': 'octubre', 'November': 'noviembre', 'December': 'diciembre'
+        "January": "enero",
+        "February": "febrero",
+        "March": "marzo",
+        "April": "abril",
+        "May": "mayo",
+        "June": "junio",
+        "July": "julio",
+        "August": "agosto",
+        "September": "septiembre",
+        "October": "octubre",
+        "November": "noviembre",
+        "December": "diciembre",
     }
     for eng, esp in meses.items():
         fecha_str = fecha_str.replace(eng, esp)
-    
+
     # Hora exacta
-    hora_str = asignacion.hora_exacta.strftime('%H:%M') if asignacion.hora_exacta else reserva.hora_inicio.strftime('%H:%M')
-    
+    hora_str = (
+        asignacion.hora_exacta.strftime("%H:%M")
+        if asignacion.hora_exacta
+        else reserva.hora_inicio.strftime("%H:%M")
+    )
+
     subject = f"Confirmación de Entrevista - {candidato.nombre} {candidato.apellidos}"
-    
+
     html = f"""
 <!DOCTYPE html>
 <html lang="es">
@@ -221,33 +235,34 @@ def generar_email_candidato(asignacion):
 </body>
 </html>
     """
-    
+
     return subject, html
 
 
 def generar_email_entrevistador(entrevistador, asignaciones):
     """
     Genera el HTML del email para un entrevistador con su resumen
-    
+
     Args:
         entrevistador: Objeto Usuario (entrevistador)
         asignaciones: Lista de asignaciones del entrevistador
-    
+
     Returns:
         tuple: (subject, html_body)
     """
-    
+
     # Agrupar asignaciones por día
     from collections import defaultdict
+
     por_dia = defaultdict(list)
-    
+
     for asig in asignaciones:
         fecha = asig.reserva.fecha
         por_dia[fecha].append(asig)
-    
+
     # Ordenar fechas
     fechas_ordenadas = sorted(por_dia.keys())
-    
+
     # Calcular semana
     if asignaciones:
         primera_fecha = min(a.reserva.fecha for a in asignaciones)
@@ -256,27 +271,39 @@ def generar_email_entrevistador(entrevistador, asignaciones):
     else:
         semana_num = 0
         año = 2025
-    
+
     subject = f"Calendario de Entrevistas - Semana {semana_num}"
-    
+
     # Generar filas de la tabla
     filas_html = ""
     dias_esp = {
-        0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 
-        3: 'Jueves', 4: 'Viernes', 5: 'Sábado', 6: 'Domingo'
+        0: "Lunes",
+        1: "Martes",
+        2: "Miércoles",
+        3: "Jueves",
+        4: "Viernes",
+        5: "Sábado",
+        6: "Domingo",
     }
-    
+
     for fecha in fechas_ordenadas:
-        asigs_dia = sorted(por_dia[fecha], key=lambda x: x.hora_exacta if x.hora_exacta else x.reserva.hora_inicio)
-        
+        asigs_dia = sorted(
+            por_dia[fecha],
+            key=lambda x: x.hora_exacta if x.hora_exacta else x.reserva.hora_inicio,
+        )
+
         # Nombre del día
         dia_semana = dias_esp[fecha.weekday()]
-        fecha_str = fecha.strftime('%d/%m/%Y')
-        
+        fecha_str = fecha.strftime("%d/%m/%Y")
+
         # Primera fila del día (con rowspan)
         primera_asig = asigs_dia[0]
-        hora = primera_asig.hora_exacta.strftime('%H:%M') if primera_asig.hora_exacta else primera_asig.reserva.hora_inicio.strftime('%H:%M')
-        
+        hora = (
+            primera_asig.hora_exacta.strftime("%H:%M")
+            if primera_asig.hora_exacta
+            else primera_asig.reserva.hora_inicio.strftime("%H:%M")
+        )
+
         filas_html += f"""
         <tr style="border-bottom: 1px solid #e0e0e0;">
             <td rowspan="{len(asigs_dia)}" style="padding: 15px; background-color: #f8f9fa; font-weight: 600; text-align: center; border-right: 2px solid #dee2e6;">
@@ -296,10 +323,14 @@ def generar_email_entrevistador(entrevistador, asignaciones):
             </td>
         </tr>
         """
-        
+
         # Filas adicionales del mismo día
         for asig in asigs_dia[1:]:
-            hora = asig.hora_exacta.strftime('%H:%M') if asig.hora_exacta else asig.reserva.hora_inicio.strftime('%H:%M')
+            hora = (
+                asig.hora_exacta.strftime("%H:%M")
+                if asig.hora_exacta
+                else asig.reserva.hora_inicio.strftime("%H:%M")
+            )
             filas_html += f"""
         <tr style="border-bottom: 1px solid #e0e0e0;">
             <td style="padding: 15px; font-weight: 600; color: #4472C4;">{hora}</td>
@@ -315,7 +346,7 @@ def generar_email_entrevistador(entrevistador, asignaciones):
             </td>
         </tr>
             """
-    
+
     html = f"""
 <!DOCTYPE html>
 <html lang="es">
@@ -440,7 +471,7 @@ def generar_email_entrevistador(entrevistador, asignaciones):
 </body>
 </html>
     """
-    
+
     return subject, html
 
 
@@ -448,180 +479,202 @@ def generar_email_entrevistador(entrevistador, asignaciones):
 # PARTE 3: RUTAS DE ENVÍO
 # ====================================================================
 
-@app.route('/admin/candidatos/enviar-emails/<semana>', methods=['POST'])
+
+@app.route("/admin/candidatos/enviar-emails/<semana>", methods=["POST"])
 @admin_required
 def enviar_emails_semana(semana):
     """
     Envía emails a candidatos y entrevistadores de una semana
-    
+
     POST /admin/candidatos/enviar-emails/2024-W46
     {
         "tipo": "candidatos" | "entrevistadores" | "ambos",
         "reenviar": false  // Si true, reenvía aunque ya se hayan enviado
     }
     """
-    
+
     try:
         data = request.json or {}
-        tipo = data.get('tipo', 'ambos')
-        reenviar = data.get('reenviar', False)
-        
+        tipo = data.get("tipo", "ambos")
+        reenviar = data.get("reenviar", False)
+
         resultados = {
-            'candidatos_enviados': 0,
-            'candidatos_error': 0,
-            'entrevistadores_enviados': 0,
-            'entrevistadores_error': 0,
-            'errores': []
+            "candidatos_enviados": 0,
+            "candidatos_error": 0,
+            "entrevistadores_enviados": 0,
+            "entrevistadores_error": 0,
+            "errores": [],
         }
-        
+
         # Obtener asignaciones de la semana
-        asignaciones = Asignacion.query\
-            .join(Candidato)\
-            .filter(Candidato.semana_carga == semana)\
+        asignaciones = (
+            Asignacion.query.join(Candidato)
+            .filter(Candidato.semana_carga == semana)
             .all()
-        
+        )
+
         if not asignaciones:
-            return jsonify({
-                'error': f'No hay asignaciones para la semana {semana}'
-            }), 404
-        
+            return (
+                jsonify({"error": f"No hay asignaciones para la semana {semana}"}),
+                404,
+            )
+
         # ===== ENVÍO A CANDIDATOS =====
-        if tipo in ['candidatos', 'ambos']:
+        if tipo in ["candidatos", "ambos"]:
             for asignacion in asignaciones:
                 # Saltar si ya se envió (a menos que sea reenvío)
                 if asignacion.enviado_email and not reenviar:
                     continue
-                
+
                 try:
                     # Validar email
                     if not validar_email(asignacion.candidato.email):
-                        resultados['errores'].append({
-                            'candidato': f"{asignacion.candidato.nombre} {asignacion.candidato.apellidos}",
-                            'error': 'Email inválido o vacío'
-                        })
-                        resultados['candidatos_error'] += 1
+                        resultados["errores"].append(
+                            {
+                                "candidato": f"{asignacion.candidato.nombre} {asignacion.candidato.apellidos}",
+                                "error": "Email inválido o vacío",
+                            }
+                        )
+                        resultados["candidatos_error"] += 1
                         continue
-                    
+
                     # Generar email
                     subject, html = generar_email_candidato(asignacion)
-                    
+
                     # Crear mensaje
                     msg = Message(
                         subject=subject,
                         recipients=[asignacion.candidato.email],
-                        html=html
+                        html=html,
                     )
-                    
+
                     # Enviar
                     mail.send(msg)
-                    
+
                     # Marcar como enviado
                     asignacion.enviado_email = True
                     asignacion.fecha_envio_email = datetime.now()
-                    
-                    resultados['candidatos_enviados'] += 1
-                    
+
+                    resultados["candidatos_enviados"] += 1
+
                 except Exception as e:
-                    resultados['candidatos_error'] += 1
-                    resultados['errores'].append({
-                        'candidato': f"{asignacion.candidato.nombre} {asignacion.candidato.apellidos}",
-                        'error': str(e)
-                    })
+                    resultados["candidatos_error"] += 1
+                    resultados["errores"].append(
+                        {
+                            "candidato": f"{asignacion.candidato.nombre} {asignacion.candidato.apellidos}",
+                            "error": str(e),
+                        }
+                    )
                     print(f"Error enviando a {asignacion.candidato.email}: {e}")
-        
+
         # ===== ENVÍO A ENTREVISTADORES =====
-        if tipo in ['entrevistadores', 'ambos']:
+        if tipo in ["entrevistadores", "ambos"]:
             # Agrupar asignaciones por entrevistador
             from collections import defaultdict
+
             por_entrevistador = defaultdict(list)
-            
+
             for asignacion in asignaciones:
                 if asignacion.entrevistador:
                     por_entrevistador[asignacion.entrevistador.id].append(asignacion)
-            
+
             # Enviar a cada entrevistador
             for entrevistador_id, asigs_entrevistador in por_entrevistador.items():
                 try:
                     entrevistador = Usuario.query.get(entrevistador_id)
-                    
+
                     # Validar email
                     if not validar_email(entrevistador.email):
-                        resultados['errores'].append({
-                            'entrevistador': entrevistador.username,
-                            'error': 'Email inválido o vacío'
-                        })
-                        resultados['entrevistadores_error'] += 1
+                        resultados["errores"].append(
+                            {
+                                "entrevistador": entrevistador.username,
+                                "error": "Email inválido o vacío",
+                            }
+                        )
+                        resultados["entrevistadores_error"] += 1
                         continue
-                    
+
                     # Generar email
-                    subject, html = generar_email_entrevistador(entrevistador, asigs_entrevistador)
-                    
+                    subject, html = generar_email_entrevistador(
+                        entrevistador, asigs_entrevistador
+                    )
+
                     # Crear mensaje
                     msg = Message(
-                        subject=subject,
-                        recipients=[entrevistador.email],
-                        html=html
+                        subject=subject, recipients=[entrevistador.email], html=html
                     )
-                    
+
                     # Enviar
                     mail.send(msg)
-                    
-                    resultados['entrevistadores_enviados'] += 1
-                    
+
+                    resultados["entrevistadores_enviados"] += 1
+
                 except Exception as e:
-                    resultados['entrevistadores_error'] += 1
-                    resultados['errores'].append({
-                        'entrevistador': entrevistador.username if 'entrevistador' in locals() else 'Desconocido',
-                        'error': str(e)
-                    })
+                    resultados["entrevistadores_error"] += 1
+                    resultados["errores"].append(
+                        {
+                            "entrevistador": (
+                                entrevistador.username
+                                if "entrevistador" in locals()
+                                else "Desconocido"
+                            ),
+                            "error": str(e),
+                        }
+                    )
                     print(f"Error enviando a entrevistador {entrevistador_id}: {e}")
-        
+
         # Guardar cambios en BD
         db.session.commit()
-        
+
         # Preparar respuesta
-        return jsonify({
-            'success': True,
-            'mensaje': f'Emails enviados correctamente',
-            'candidatos_enviados': resultados['candidatos_enviados'],
-            'candidatos_error': resultados['candidatos_error'],
-            'entrevistadores_enviados': resultados['entrevistadores_enviados'],
-            'entrevistadores_error': resultados['entrevistadores_error'],
-            'total_enviados': resultados['candidatos_enviados'] + resultados['entrevistadores_enviados'],
-            'errores': resultados['errores']
-        })
-        
+        return jsonify(
+            {
+                "success": True,
+                "mensaje": f"Emails enviados correctamente",
+                "candidatos_enviados": resultados["candidatos_enviados"],
+                "candidatos_error": resultados["candidatos_error"],
+                "entrevistadores_enviados": resultados["entrevistadores_enviados"],
+                "entrevistadores_error": resultados["entrevistadores_error"],
+                "total_enviados": resultados["candidatos_enviados"]
+                + resultados["entrevistadores_enviados"],
+                "errores": resultados["errores"],
+            }
+        )
+
     except Exception as e:
         db.session.rollback()
         import traceback
+
         traceback.print_exc()
-        return jsonify({
-            'error': f'Error al enviar emails: {str(e)}'
-        }), 500
+        return jsonify({"error": f"Error al enviar emails: {str(e)}"}), 500
 
 
-@app.route('/admin/candidatos/test-email', methods=['POST'])
+@app.route("/admin/candidatos/test-email", methods=["POST"])
 @admin_required
 def test_email():
     """
     Envía un email de prueba al administrador
-    
+
     POST /admin/candidatos/test-email
     {
         "email": "tu_email@test.com"
     }
     """
-    
+
     try:
         data = request.json or {}
-        email_destino = data.get('email') or session.get('email') or app.config['MAIL_DEFAULT_SENDER']
-        
+        email_destino = (
+            data.get("email")
+            or session.get("email")
+            or app.config["MAIL_DEFAULT_SENDER"]
+        )
+
         if not validar_email(email_destino):
-            return jsonify({'error': 'Email inválido'}), 400
-        
+            return jsonify({"error": "Email inválido"}), 400
+
         # Crear mensaje de prueba
         msg = Message(
-            subject='🧪 Test de Configuración de Email',
+            subject="🧪 Test de Configuración de Email",
             recipients=[email_destino],
             html="""
             <html>
@@ -638,20 +691,21 @@ def test_email():
                 <p style="color: #666;">Este es un email de prueba automático del Sistema de Gestión de Entrevistas.</p>
             </body>
             </html>
-            """
+            """,
         )
-        
+
         # Enviar
         mail.send(msg)
-        
-        return jsonify({
-            'success': True,
-            'mensaje': f'Email de prueba enviado correctamente a {email_destino}'
-        })
-        
+
+        return jsonify(
+            {
+                "success": True,
+                "mensaje": f"Email de prueba enviado correctamente a {email_destino}",
+            }
+        )
+
     except Exception as e:
         import traceback
+
         traceback.print_exc()
-        return jsonify({
-            'error': f'Error al enviar email de prueba: {str(e)}'
-        }), 500
+        return jsonify({"error": f"Error al enviar email de prueba: {str(e)}"}), 500

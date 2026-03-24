@@ -10,14 +10,17 @@ from flask_sqlalchemy import SQLAlchemy
 
 # Configuración (usa la misma que tu app.py)
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Ba$eDeD4t0s@localhost/entrevistas_db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config["SQLALCHEMY_DATABASE_URI"] = (
+    "postgresql://postgres:Ba$eDeD4t0s@localhost/entrevistas_db"
+)
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
+
 # Modelo Usuario (simplificado)
 class Usuario(db.Model):
-    __tablename__ = 'usuarios'
+    __tablename__ = "usuarios"
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
@@ -25,26 +28,27 @@ class Usuario(db.Model):
     rol = db.Column(db.String(20))
     activo = db.Column(db.Boolean)
 
+
 # Script principal
-if __name__ == '__main__':
+if __name__ == "__main__":
     with app.app_context():
         # Buscar el usuario admin
-        admin = Usuario.query.filter_by(username='admin').first()
-        
+        admin = Usuario.query.filter_by(username="admin").first()
+
         if not admin:
             print("❌ Usuario 'admin' no encontrado en la base de datos")
             exit(1)
-        
+
         # Nueva contraseña
-        nueva_password = 'admin123'
-        
+        nueva_password = "admin123"
+
         # Generar hash
         hashed_password = generate_password_hash(nueva_password)
-        
+
         # Actualizar en la base de datos
         admin.password = hashed_password
         db.session.commit()
-        
+
         print("✅ Contraseña actualizada correctamente!")
         print(f"   Usuario: {admin.username}")
         print(f"   Nueva contraseña: {nueva_password}")
