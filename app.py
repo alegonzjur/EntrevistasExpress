@@ -3933,13 +3933,13 @@ def info_reserva(reserva_id):
 @admin_required
 def exportar_candidatos(semana, formato):
     """Exporta candidatos de una semana en diferentes formatos"""
-
+ 
     candidatos = (
         Candidato.query.filter_by(semana_carga=semana)
-        .order_by(Candidato.media_estudios.asc())
+        .order_by(Candidato.media_estudios.desc())  
         .all()
     )
-
+ 
     if formato == "xlsx":
         return exportar_candidatos_xlsx(candidatos, semana)
     elif formato == "pdf":
@@ -3955,15 +3955,15 @@ def exportar_candidatos_xlsx(candidatos, semana):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from io import BytesIO
-
+ 
     wb = Workbook()
     ws = wb.active
     ws.title = f"Candidatos S{semana.split('-W')[1]}"
-
+ 
     # Estilos
     header_font = Font(bold=True, color="FFFFFF", size=12)
     header_fill = PatternFill(
-        start_color="0066B3", end_color="0066B3", fill_type="solid"
+        start_color="0B5394", end_color="0B5394", fill_type="solid"  # ✅ Color actualizado
     )
     border = Border(
         left=Side(style="thin"),
@@ -3971,10 +3971,11 @@ def exportar_candidatos_xlsx(candidatos, semana):
         top=Side(style="thin"),
         bottom=Side(style="thin"),
     )
-
-    # Encabezados
+ 
+    # Encabezados ✅ ACTUALIZADO
     headers = [
         "#",
+        "Clave Académica",  # ✅ NUEVO
         "Solicitud",
         "Apellidos",
         "Nombre",
@@ -3986,18 +3987,19 @@ def exportar_candidatos_xlsx(candidatos, semana):
         "Fecha Carga",
     ]
     ws.append(headers)
-
+ 
     # Aplicar estilos a encabezados
     for cell in ws[1]:
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = border
-
-    # Datos
+ 
+    # Datos ✅ ACTUALIZADO
     for idx, candidato in enumerate(candidatos, start=1):
         row = [
             idx,
+            candidato.clave_academica,  # ✅ NUEVO
             candidato.solicitud,
             candidato.apellidos,
             candidato.nombre,
@@ -4009,56 +4011,57 @@ def exportar_candidatos_xlsx(candidatos, semana):
             candidato.fecha_carga.strftime("%d/%m/%Y %H:%M"),
         ]
         ws.append(row)
-
-        # Colorear según nota
+ 
+        # Colorear según nota (columna 7 ahora, antes era 6)
         nota = float(candidato.media_estudios) if candidato.media_estudios else 0
         color = "FFC7CE" if nota < 5.5 else "FFEB9C" if nota < 6.5 else "C6EFCE"
-        ws.cell(row=idx + 1, column=6).fill = PatternFill(
+        ws.cell(row=idx + 1, column=7).fill = PatternFill(  # ✅ Columna 7
             start_color=color, end_color=color, fill_type="solid"
         )
-
+ 
+        # Colorear sede (columna 8)
         if candidato.sede:
             color_sede = "D1ECF1"  # Azul claro
             ws.cell(row=idx + 1, column=8).fill = PatternFill(
                 start_color=color_sede, end_color=color_sede, fill_type="solid"
             )
             ws.cell(row=idx + 1, column=8).font = Font(bold=True)
-
-        # Colorear según estado
+ 
+        # Colorear según estado (columna 10)
         if candidato.estado == "asignado":
-            ws.cell(row=idx + 1, column=8).fill = PatternFill(
-                start_color="D1ECF1", end_color="D1ECF1", fill_type="solid"
+            ws.cell(row=idx + 1, column=10).fill = PatternFill(  # ✅ Columna 10
+                start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"
             )
-            ws.cell(row=idx + 1, column=8).font = Font(bold=True, color="0C5460")
+            ws.cell(row=idx + 1, column=10).font = Font(bold=True, color="006100")
         elif candidato.estado == "pendiente":
-            ws.cell(row=idx + 1, column=8).fill = PatternFill(
-                start_color="FFF3CD", end_color="FFF3CD", fill_type="solid"
+            ws.cell(row=idx + 1, column=10).fill = PatternFill(  # ✅ Columna 10
+                start_color="FFEB9C", end_color="FFEB9C", fill_type="solid"
             )
-            ws.cell(row=idx + 1, column=8).font = Font(bold=True, color="856404")
-
+            ws.cell(row=idx + 1, column=10).font = Font(bold=True, color="9C6500")
+ 
         # Aplicar bordes
         for cell in ws[idx + 1]:
             cell.border = border
             cell.alignment = Alignment(vertical="center")
-
-    # Ajustar anchos de columna
-    ws.column_dimensions["A"].width = 5
-    ws.column_dimensions["B"].width = 10
-    ws.column_dimensions["C"].width = 20
-    ws.column_dimensions["D"].width = 15
-    ws.column_dimensions["E"].width = 25
-    ws.column_dimensions["F"].width = 15
-    ws.column_dimensions["G"].width = 12
-    ws.column_dimensions["H"].width = 18
-    ws.column_dimensions["I"].width = 40
-    ws.column_dimensions["J"].width = 12
-    ws.column_dimensions["K"].width = 18
-
+ 
+    # Ajustar anchos de columna ✅ ACTUALIZADO
+    ws.column_dimensions["A"].width = 5   # #
+    ws.column_dimensions["B"].width = 18  # ✅ Clave Académica
+    ws.column_dimensions["C"].width = 10  # Solicitud
+    ws.column_dimensions["D"].width = 20  # Apellidos
+    ws.column_dimensions["E"].width = 15  # Nombre
+    ws.column_dimensions["F"].width = 30  # Email
+    ws.column_dimensions["G"].width = 12  # Nota
+    ws.column_dimensions["H"].width = 15  # Sede
+    ws.column_dimensions["I"].width = 40  # Primera Opción
+    ws.column_dimensions["J"].width = 12  # Estado
+    ws.column_dimensions["K"].width = 18  # Fecha
+ 
     # Guardar en memoria
     output = BytesIO()
     wb.save(output)
     output.seek(0)
-
+ 
     return send_file(
         output,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -4071,41 +4074,45 @@ def exportar_candidatos_csv(candidatos, semana):
     """Exporta candidatos a CSV"""
     from io import StringIO
     import csv
-
+ 
     output = StringIO()
-    writer = csv.writer(output)
-
-    # Encabezados
+    writer = csv.writer(output, delimiter=';')  # ✅ Separador punto y coma
+ 
+    # Encabezados ✅ ACTUALIZADO
     writer.writerow(
         [
+            "Clave Académica",  # ✅ NUEVO
             "Solicitud",
             "Apellidos",
             "Nombre",
             "Email",
             "Nota Media",
+            "Sede",
             "Primera Opción",
             "Estado",
             "Fecha Carga",
         ]
     )
-
-    # Datos
+ 
+    # Datos ✅ ACTUALIZADO
     for candidato in candidatos:
         writer.writerow(
             [
+                candidato.clave_academica,  # ✅ NUEVO
                 candidato.solicitud,
                 candidato.apellidos,
                 candidato.nombre,
                 candidato.email or "N/A",
                 float(candidato.media_estudios) if candidato.media_estudios else 0,
+                candidato.sede or "Sin detectar",
                 candidato.primera_opcion or "",
                 candidato.estado.upper(),
                 candidato.fecha_carga.strftime("%d/%m/%Y %H:%M"),
             ]
         )
-
+ 
     output.seek(0)
-
+ 
     return send_file(
         BytesIO(output.getvalue().encode("utf-8-sig")),  # UTF-8 con BOM para Excel
         mimetype="text/csv",
@@ -4116,37 +4123,37 @@ def exportar_candidatos_csv(candidatos, semana):
 
 def exportar_candidatos_pdf(candidatos, semana):
     """Exporta candidatos a PDF"""
-
+ 
     output = BytesIO()
     doc = SimpleDocTemplate(
         output, pagesize=landscape(A4), topMargin=1 * cm, bottomMargin=1 * cm
     )
     elements = []
     styles = getSampleStyleSheet()
-
+ 
     # Título
     title_style = ParagraphStyle(
         "CustomTitle",
         parent=styles["Heading1"],
         fontSize=18,
-        textColor=colors.HexColor("#0066B3"),
+        textColor=colors.HexColor("#0B5394"),  # ✅ Color actualizado
         spaceAfter=30,
         alignment=1,  # Centrado
     )
-
+ 
     elements.append(
         Paragraph(f"Candidatos - Semana {semana.split('-W')[1]}", title_style)
     )
     elements.append(Spacer(1, 0.5 * cm))
-
-    # Tabla
-    data = [["#", "Solicitud", "Apellidos", "Nombre", "Email", "Nota", "Estado"]]
-
+ 
+    # Tabla ✅ ACTUALIZADO
+    data = [["#", "Clave", "Apellidos", "Nombre", "Email", "Nota", "Sede", "Estado"]]
+ 
     for idx, candidato in enumerate(candidatos, start=1):
         data.append(
             [
                 str(idx),
-                str(candidato.solicitud),
+                candidato.clave_academica[:12],  # ✅ NUEVO (truncado)
                 candidato.apellidos[:15],
                 candidato.nombre[:12],
                 (candidato.email or "N/A")[:20],
@@ -4155,19 +4162,21 @@ def exportar_candidatos_pdf(candidatos, semana):
                     if candidato.media_estudios
                     else "N/A"
                 ),
+                (candidato.sede or "N/A")[:10],
                 candidato.estado.upper(),
             ]
         )
-
+ 
     table = Table(
-        data, colWidths=[1 * cm, 2 * cm, 4 * cm, 3 * cm, 5 * cm, 2 * cm, 2.5 * cm]
+        data, 
+        colWidths=[1*cm, 2.5*cm, 4*cm, 3*cm, 4.5*cm, 1.5*cm, 2*cm, 2*cm]  # ✅ Ajustado
     )
-
+ 
     # Estilos de tabla
     table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0066B3")),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0B5394")),  # ✅ Color actualizado
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
@@ -4181,13 +4190,13 @@ def exportar_candidatos_pdf(candidatos, semana):
             ]
         )
     )
-
+ 
     elements.append(table)
-
+ 
     # Construir PDF
     doc.build(elements)
     output.seek(0)
-
+ 
     return send_file(
         output,
         mimetype="application/pdf",
@@ -4206,18 +4215,19 @@ def exportar_candidatos_pdf(candidatos, semana):
 @admin_required
 def exportar_asignaciones(semana, formato):
     """Exporta asignaciones de una semana en diferentes formatos"""
-
-    # Obtener asignaciones de la semana
+ 
+    # ✅ JOIN ACTUALIZADO
     asignaciones = (
         db.session.query(Asignacion)
-        .join(Candidato)
+        .join(Candidato, Candidato.clave_academica == Asignacion.candidato_clave)  # ✅ CORREGIDO
         .join(Reserva)
         .join(Usuario, Asignacion.entrevistador_id == Usuario.id)
+        .outerjoin(Espacio, Espacio.id == Reserva.espacio_id)  # ✅ Agregado
         .filter(Candidato.semana_carga == semana)
         .order_by(Reserva.fecha, Reserva.hora_inicio, Asignacion.posicion)
         .all()
     )
-
+ 
     if formato == "xlsx":
         return exportar_asignaciones_xlsx(asignaciones, semana)
     elif formato == "pdf":
@@ -4226,19 +4236,19 @@ def exportar_asignaciones(semana, formato):
         return exportar_asignaciones_csv(asignaciones, semana)
     else:
         return jsonify({"error": "Formato no soportado"}), 400
-
-
+ 
+ 
 def exportar_asignaciones_xlsx(asignaciones, semana):
     """Exporta asignaciones a Excel con formato"""
-
+ 
     wb = Workbook()
     ws = wb.active
     ws.title = f"Asignaciones S{semana.split('-W')[1]}"
-
+ 
     # Estilos
     header_font = Font(bold=True, color="FFFFFF", size=12)
     header_fill = PatternFill(
-        start_color="0066B3", end_color="0066B3", fill_type="solid"
+        start_color="0B5394", end_color="0B5394", fill_type="solid"  # ✅ Color actualizado
     )
     border = Border(
         left=Side(style="thin"),
@@ -4246,17 +4256,18 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
         top=Side(style="thin"),
         bottom=Side(style="thin"),
     )
-
-    # Encabezados
+ 
+    # Encabezados ✅ ACTUALIZADO (sin Teléfono, con Clave Académica)
     headers = [
         "#",
+        "Clave Académica",  # ✅ NUEVO
         "Fecha",
         "Día",
         "Hora",
         "Candidato",
         "Email",
-        "Teléfono",
         "Nota",
+        "Sede",  # ✅ NUEVO
         "Entrevistador",
         "Espacio",
         "Pos.",
@@ -4264,14 +4275,14 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
         "Grado Solicitado",
     ]
     ws.append(headers)
-
+ 
     # Aplicar estilos a encabezados
     for cell in ws[1]:
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = border
-
+ 
     # Traducción de días
     dias_esp = {
         0: "Lunes",
@@ -4282,28 +4293,30 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
         5: "Sábado",
         6: "Domingo",
     }
-
-    # Datos
+ 
+    # Datos ✅ ACTUALIZADO
     for idx, asignacion in enumerate(asignaciones, start=1):
         candidato = asignacion.candidato
         reserva = asignacion.reserva
         entrevistador = asignacion.entrevistador
-
+ 
         dia_semana = dias_esp[reserva.fecha.weekday()]
         hora_exacta = (
             asignacion.hora_exacta.strftime("%H:%M")
             if asignacion.hora_exacta
             else reserva.hora_inicio.strftime("%H:%M")
         )
-
+ 
         row = [
             idx,
+            candidato.clave_academica,  # ✅ NUEVO
             reserva.fecha.strftime("%d/%m/%Y"),
             dia_semana,
             hora_exacta,
             f"{candidato.nombre} {candidato.apellidos}",
             candidato.email or "N/A",
             float(candidato.media_estudios) if candidato.media_estudios else 0,
+            candidato.sede or "N/A",  # ✅ NUEVO
             entrevistador.username if entrevistador else "N/A",
             reserva.espacio.nombre if reserva.espacio else "N/A",
             asignacion.posicion,
@@ -4311,58 +4324,59 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
             candidato.primera_opcion[:50] if candidato.primera_opcion else "",
         ]
         ws.append(row)
-
-        # Colorear según nota
+ 
+        # Colorear según nota (ahora columna 8)
         nota = float(candidato.media_estudios) if candidato.media_estudios else 0
         color_nota = "FFC7CE" if nota < 5.5 else "FFEB9C" if nota < 6.5 else "C6EFCE"
-        ws.cell(row=idx + 1, column=8).fill = PatternFill(
+        ws.cell(row=idx + 1, column=8).fill = PatternFill(  # ✅ Columna 8
             start_color=color_nota, end_color=color_nota, fill_type="solid"
         )
         ws.cell(row=idx + 1, column=8).font = Font(bold=True)
-
-        # Colorear según estado
+ 
+        # Colorear según estado (ahora columna 13)
         if asignacion.estado == "confirmado":
-            ws.cell(row=idx + 1, column=12).fill = PatternFill(
-                start_color="D1ECF1", end_color="D1ECF1", fill_type="solid"
+            ws.cell(row=idx + 1, column=13).fill = PatternFill(  # ✅ Columna 13
+                start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"
             )
-            ws.cell(row=idx + 1, column=12).font = Font(bold=True, color="0C5460")
+            ws.cell(row=idx + 1, column=13).font = Font(bold=True, color="006100")
         elif asignacion.estado == "cancelado":
-            ws.cell(row=idx + 1, column=12).fill = PatternFill(
+            ws.cell(row=idx + 1, column=13).fill = PatternFill(  # ✅ Columna 13
                 start_color="F8D7DA", end_color="F8D7DA", fill_type="solid"
             )
-            ws.cell(row=idx + 1, column=12).font = Font(bold=True, color="721C24")
-
+            ws.cell(row=idx + 1, column=13).font = Font(bold=True, color="721C24")
+ 
         # Aplicar bordes
         for cell in ws[idx + 1]:
             cell.border = border
             cell.alignment = Alignment(vertical="center")
-
-    # Ajustar anchos de columna
-    ws.column_dimensions["A"].width = 5
-    ws.column_dimensions["B"].width = 12
-    ws.column_dimensions["C"].width = 12
-    ws.column_dimensions["D"].width = 10
-    ws.column_dimensions["E"].width = 25
-    ws.column_dimensions["F"].width = 25
-    ws.column_dimensions["G"].width = 15
-    ws.column_dimensions["H"].width = 10
-    ws.column_dimensions["I"].width = 18
-    ws.column_dimensions["J"].width = 15
-    ws.column_dimensions["K"].width = 6
-    ws.column_dimensions["L"].width = 12
-    ws.column_dimensions["M"].width = 40
-
+ 
+    # Ajustar anchos de columna ✅ ACTUALIZADO
+    ws.column_dimensions["A"].width = 5   # #
+    ws.column_dimensions["B"].width = 18  # ✅ Clave Académica
+    ws.column_dimensions["C"].width = 12  # Fecha
+    ws.column_dimensions["D"].width = 12  # Día
+    ws.column_dimensions["E"].width = 10  # Hora
+    ws.column_dimensions["F"].width = 30  # Candidato
+    ws.column_dimensions["G"].width = 30  # Email
+    ws.column_dimensions["H"].width = 10  # Nota
+    ws.column_dimensions["I"].width = 15  # ✅ Sede
+    ws.column_dimensions["J"].width = 20  # Entrevistador
+    ws.column_dimensions["K"].width = 20  # Espacio
+    ws.column_dimensions["L"].width = 6   # Pos.
+    ws.column_dimensions["M"].width = 12  # Estado
+    ws.column_dimensions["N"].width = 40  # Grado
+ 
     # Añadir filtros automáticos
     ws.auto_filter.ref = ws.dimensions
-
+ 
     # Congelar primera fila
     ws.freeze_panes = "A2"
-
+ 
     # Guardar en memoria
     output = BytesIO()
     wb.save(output)
     output.seek(0)
-
+ 
     return send_file(
         output,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -4374,8 +4388,8 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
 def exportar_asignaciones_csv(asignaciones, semana):
     """Exporta asignaciones a CSV"""
     output = StringIO()
-    writer = csv.writer(output)
-
+    writer = csv.writer(output, delimiter=';')  # ✅ Separador punto y coma
+ 
     # Traducción de días
     dias_esp = {
         0: "Lunes",
@@ -4386,17 +4400,18 @@ def exportar_asignaciones_csv(asignaciones, semana):
         5: "Sábado",
         6: "Domingo",
     }
-
-    # Encabezados
+ 
+    # Encabezados ✅ ACTUALIZADO (sin Teléfono, con Clave y Sede)
     writer.writerow(
         [
+            "Clave Académica",  # ✅ NUEVO
             "Fecha",
             "Día",
             "Hora",
             "Candidato",
             "Email",
-            "Teléfono",
             "Nota",
+            "Sede",  # ✅ NUEVO
             "Entrevistador",
             "Espacio",
             "Posición",
@@ -4404,28 +4419,30 @@ def exportar_asignaciones_csv(asignaciones, semana):
             "Grado Solicitado",
         ]
     )
-
-    # Datos
+ 
+    # Datos ✅ ACTUALIZADO
     for asignacion in asignaciones:
         candidato = asignacion.candidato
         reserva = asignacion.reserva
         entrevistador = asignacion.entrevistador
-
+ 
         dia_semana = dias_esp[reserva.fecha.weekday()]
         hora_exacta = (
             asignacion.hora_exacta.strftime("%H:%M")
             if asignacion.hora_exacta
             else reserva.hora_inicio.strftime("%H:%M")
         )
-
+ 
         writer.writerow(
             [
+                candidato.clave_academica,  # ✅ NUEVO
                 reserva.fecha.strftime("%d/%m/%Y"),
                 dia_semana,
                 hora_exacta,
                 f"{candidato.nombre} {candidato.apellidos}",
                 candidato.email or "N/A",
                 float(candidato.media_estudios) if candidato.media_estudios else 0,
+                candidato.sede or "N/A",  # ✅ NUEVO
                 entrevistador.username if entrevistador else "N/A",
                 reserva.espacio.nombre if reserva.espacio else "N/A",
                 asignacion.posicion,
@@ -4433,9 +4450,9 @@ def exportar_asignaciones_csv(asignaciones, semana):
                 candidato.primera_opcion if candidato.primera_opcion else "",
             ]
         )
-
+ 
     output.seek(0)
-
+ 
     return send_file(
         BytesIO(output.getvalue().encode("utf-8-sig")),
         mimetype="text/csv",
@@ -4452,50 +4469,50 @@ def exportar_asignaciones_pdf(asignaciones, semana):
     )
     elements = []
     styles = getSampleStyleSheet()
-
+ 
     # Título
     title_style = ParagraphStyle(
         "CustomTitle",
         parent=styles["Heading1"],
         fontSize=18,
-        textColor=colors.HexColor("#0066B3"),
+        textColor=colors.HexColor("#0B5394"),  # ✅ Color actualizado
         spaceAfter=30,
         alignment=1,
     )
-
+ 
     elements.append(
         Paragraph(
             f"Asignaciones de Entrevistas - Semana {semana.split('-W')[1]}", title_style
         )
     )
     elements.append(Spacer(1, 0.5 * cm))
-
+ 
     # Traducción de días
     dias_esp = {0: "Lun", 1: "Mar", 2: "Mié", 3: "Jue", 4: "Vie", 5: "Sáb", 6: "Dom"}
-
-    # Tabla
+ 
+    # Tabla ✅ ACTUALIZADO (con Clave, sin Teléfono)
     data = [
-        ["Fecha", "Día", "Hora", "Candidato", "Email", "Nota", "Entrevistador", "Esp."]
+        ["Clave", "Fecha", "Hora", "Candidato", "Email", "Nota", "Entrevistador", "Esp."]
     ]
-
+ 
     for asignacion in asignaciones:
         candidato = asignacion.candidato
         reserva = asignacion.reserva
         entrevistador = asignacion.entrevistador
-
+ 
         dia_semana = dias_esp[reserva.fecha.weekday()]
         hora_exacta = (
             asignacion.hora_exacta.strftime("%H:%M")
             if asignacion.hora_exacta
             else reserva.hora_inicio.strftime("%H:%M")
         )
-
+ 
         data.append(
             [
+                candidato.clave_academica[:10],  # ✅ NUEVO (truncado)
                 reserva.fecha.strftime("%d/%m"),
-                dia_semana,
                 hora_exacta,
-                f"{candidato.nombre[:12]} {candidato.apellidos[:12]}",
+                f"{candidato.nombre[:10]} {candidato.apellidos[:10]}",
                 (candidato.email or "N/A")[:20],
                 (
                     f"{candidato.media_estudios:.2f}"
@@ -4506,26 +4523,26 @@ def exportar_asignaciones_pdf(asignaciones, semana):
                 (reserva.espacio.nombre if reserva.espacio else "N/A")[:8],
             ]
         )
-
+ 
     table = Table(
         data,
         colWidths=[
-            2 * cm,
-            1.5 * cm,
-            1.5 * cm,
-            4 * cm,
-            4.5 * cm,
-            1.5 * cm,
-            3 * cm,
-            2 * cm,
+            2*cm,    # Clave
+            1.8*cm,  # Fecha
+            1.5*cm,  # Hora
+            3.5*cm,  # Candidato
+            4*cm,    # Email
+            1.5*cm,  # Nota
+            3*cm,    # Entrevistador
+            2*cm,    # Espacio
         ],
     )
-
+ 
     # Estilos de tabla
     table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0066B3")),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0B5394")),  # ✅ Color actualizado
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
@@ -4539,9 +4556,9 @@ def exportar_asignaciones_pdf(asignaciones, semana):
             ]
         )
     )
-
+ 
     elements.append(table)
-
+ 
     # Resumen
     elements.append(Spacer(1, 0.8 * cm))
     resumen_style = ParagraphStyle(
@@ -4556,11 +4573,11 @@ def exportar_asignaciones_pdf(asignaciones, semana):
             resumen_style,
         )
     )
-
+ 
     # Construir PDF
     doc.build(elements)
     output.seek(0)
-
+ 
     return send_file(
         output,
         mimetype="application/pdf",
@@ -4573,38 +4590,38 @@ def exportar_asignaciones_pdf(asignaciones, semana):
 @admin_required
 def exportar_reservas_semana(semana, formato):
     """Exporta reservas de una semana"""
-
+ 
     # Calcular fechas
     año, semana_num = semana.split("-W")
     primer_dia = datetime.strptime(f"{año}-W{semana_num}-1", "%Y-W%W-%w").date()
     viernes = primer_dia + timedelta(days=4)
-
+ 
     reservas = (
         Reserva.query.filter(Reserva.fecha >= primer_dia)
         .filter(Reserva.fecha <= viernes)
         .order_by(Reserva.fecha, Reserva.hora_inicio)
         .all()
     )
-
+ 
     if formato == "xlsx":
         return exportar_reservas_xlsx(reservas, semana)
     elif formato == "pdf":
         return exportar_reservas_pdf(reservas, semana)
     else:
         return jsonify({"error": "Formato no soportado"}), 400
-
-
+ 
+ 
 def exportar_reservas_xlsx(reservas, semana):
     """Exporta reservas a Excel"""
-
+ 
     wb = Workbook()
     ws = wb.active
     ws.title = f"Reservas S{semana.split('-W')[1]}"
-
+ 
     # Estilos
     header_font = Font(bold=True, color="FFFFFF", size=12)
     header_fill = PatternFill(
-        start_color="0066B3", end_color="0066B3", fill_type="solid"
+        start_color="0B5394", end_color="0B5394", fill_type="solid"  # ✅ Color actualizado
     )
     border = Border(
         left=Side(style="thin"),
@@ -4612,7 +4629,7 @@ def exportar_reservas_xlsx(reservas, semana):
         top=Side(style="thin"),
         bottom=Side(style="thin"),
     )
-
+ 
     # Encabezados
     headers = [
         "Fecha",
@@ -4625,22 +4642,22 @@ def exportar_reservas_xlsx(reservas, semana):
         "Notas",
     ]
     ws.append(headers)
-
+ 
     for cell in ws[1]:
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = border
-
+ 
     # Datos
     for idx, reserva in enumerate(reservas, start=2):
         asignaciones = Asignacion.query.filter_by(reserva_id=reserva.id).all()
         num_asignaciones = len(asignaciones)
-
+ 
         candidatos_nombres = ", ".join(
             [f"{a.candidato.nombre} {a.candidato.apellidos}" for a in asignaciones]
         )
-
+ 
         row = [
             reserva.fecha.strftime("%d/%m/%Y"),
             reserva.fecha.strftime("%A"),
@@ -4656,7 +4673,7 @@ def exportar_reservas_xlsx(reservas, semana):
             reserva.notas or "",
         ]
         ws.append(row)
-
+ 
         # Colorear según ocupación
         color = (
             "C6EFCE"
@@ -4670,7 +4687,7 @@ def exportar_reservas_xlsx(reservas, semana):
             )
             cell.border = border
             cell.alignment = Alignment(vertical="center")
-
+ 
     # Ajustar anchos
     ws.column_dimensions["A"].width = 12
     ws.column_dimensions["B"].width = 12
@@ -4680,11 +4697,11 @@ def exportar_reservas_xlsx(reservas, semana):
     ws.column_dimensions["F"].width = 15
     ws.column_dimensions["G"].width = 40
     ws.column_dimensions["H"].width = 25
-
+ 
     output = BytesIO()
     wb.save(output)
     output.seek(0)
-
+ 
     return send_file(
         output,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -4695,35 +4712,35 @@ def exportar_reservas_xlsx(reservas, semana):
 
 def exportar_reservas_pdf(reservas, semana):
     """Exporta reservas a PDF"""
-
+ 
     output = BytesIO()
     doc = SimpleDocTemplate(
         output, pagesize=landscape(A4), topMargin=1 * cm, bottomMargin=1 * cm
     )
     elements = []
     styles = getSampleStyleSheet()
-
+ 
     title_style = ParagraphStyle(
         "CustomTitle",
         parent=styles["Heading1"],
         fontSize=18,
-        textColor=colors.HexColor("#0066B3"),
+        textColor=colors.HexColor("#0B5394"),  # ✅ Color actualizado
         spaceAfter=30,
         alignment=1,
     )
-
+ 
     elements.append(
         Paragraph(
             f"Calendario de Reservas - Semana {semana.split('-W')[1]}", title_style
         )
     )
     elements.append(Spacer(1, 0.5 * cm))
-
+ 
     data = [["Fecha", "Día", "Hora", "Entrevistador", "Espacio", "Ocupación"]]
-
+ 
     for reserva in reservas:
         asignaciones = Asignacion.query.filter_by(reserva_id=reserva.id).count()
-
+ 
         data.append(
             [
                 reserva.fecha.strftime("%d/%m"),
@@ -4734,13 +4751,13 @@ def exportar_reservas_pdf(reservas, semana):
                 f"{asignaciones}/2",
             ]
         )
-
+ 
     table = Table(data, colWidths=[2.5 * cm, 2 * cm, 2 * cm, 4 * cm, 3.5 * cm, 2 * cm])
-
+ 
     table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0066B3")),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0B5394")),  # ✅ Color actualizado
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
@@ -4754,11 +4771,11 @@ def exportar_reservas_pdf(reservas, semana):
             ]
         )
     )
-
+ 
     elements.append(table)
     doc.build(elements)
     output.seek(0)
-
+ 
     return send_file(
         output,
         mimetype="application/pdf",
