@@ -125,6 +125,7 @@ class Usuario(db.Model):
     __tablename__ = "usuarios"
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
+    nombre_completo = db.Column(db.String(150), nullable=True)
     password = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     rol = db.Column(db.String(20), default="profesor")  # 'admin' o 'profesor'
@@ -220,6 +221,7 @@ class Candidato(db.Model):
     apellidos = db.Column(db.String(150), nullable=False)
     nombre = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), nullable=True)
+    telefono = db.Column(db.String(20), nullable=True)
     media_estudios = db.Column(db.Numeric(4, 2), nullable=False)
     primera_opcion = db.Column(db.Text)
     sede = db.Column(db.String(50), nullable=True)
@@ -939,7 +941,7 @@ def generar_email_candidato(asignacion):
                                         <p style="margin: 0; font-size: 16px; color: #333333;">
                                             <span style="font-size: 20px;">👤</span> 
                                             <strong>Entrevistador:</strong><br>
-                                            <span style="color: #666666; margin-left: 30px;">{entrevistador.username if entrevistador else 'A confirmar'}</span>
+                                            <span style="color: #666666; margin-left: 30px;">{entrevistador.nombre_completo if entrevistador else 'A confirmar'}</span>
                                         </p>
                                     </td>
                                 </tr>
@@ -1079,6 +1081,8 @@ def generar_email_entrevistador(entrevistador, asignaciones):
 
         candidato = primera_asig.candidato
         email_candidato = candidato.email or "No disponible"
+        telefono = candidato.telefono or 'No proporcionado'
+
 
         filas_html += f"""
         <tr style="border-bottom: 1px solid #e0e0e0;">
@@ -1090,7 +1094,7 @@ def generar_email_entrevistador(entrevistador, asignaciones):
             <td style="padding: 15px;">
                 <strong>{candidato.nombre} {candidato.apellidos}</strong><br>
                 <small style="color: #666;">📧 {email_candidato}</small><br>
-                
+                <small style="color: #666;">📞 {telefono}</small>
             </td>
             <td style="padding: 15px; font-size: 12px; color: #666;">
                 {primera_asig.candidato.primera_opcion[:50] + '...' if primera_asig.candidato.primera_opcion and len(primera_asig.candidato.primera_opcion) > 50 else primera_asig.candidato.primera_opcion or '-'}
@@ -1106,6 +1110,7 @@ def generar_email_entrevistador(entrevistador, asignaciones):
             )
             candidato = asig.candidato
             email_candidato = candidato.email or "No disponible"
+            telefono = candidato.telefono or 'No proporcionado'  # ✅ AGREGAR ESTA LÍNEA
 
             filas_html += f"""
         <tr style="border-bottom: 1px solid #e0e0e0;">
@@ -1113,7 +1118,7 @@ def generar_email_entrevistador(entrevistador, asignaciones):
             <td style="padding: 15px;">
                 <strong>{candidato.nombre} {candidato.apellidos}</strong><br>
                 <small style="color: #666;">📧 {email_candidato}</small><br>
-                
+                <small style="color: #666;">📞 {telefono}</small>  <!-- ✅ AGREGAR ESTA LÍNEA -->
             </td>
             <td style="padding: 15px; font-size: 12px; color: #666;">
                 {asig.candidato.primera_opcion[:50] + '...' if asig.candidato.primera_opcion and len(asig.candidato.primera_opcion) > 50 else asig.candidato.primera_opcion or '-'}
@@ -2925,7 +2930,7 @@ def cargar_excel_candidatos():
         ]
 
         # Columnas opcionales
-        columnas_opcionales = ["Entrevistas"]  # ✅ Nombre real en Excel
+        columnas_opcionales = ["Entrevistas","Telefono"]  # ✅ Nombre real en Excel
 
         # Verificar columnas obligatorias
         columnas_faltantes = [
@@ -2956,6 +2961,7 @@ def cargar_excel_candidatos():
             "Apellidos": "apellidos",
             "Nombre": "nombre",
             "Correo electrónico": "email",  # ✅ Cambiado
+            "Telefono": "telefono",
             "Media estudios realizados": "media_estudios",
             "Primera opción": "primera_opcion",
             "Entrevistas": "franjas_disponibilidad",  # ✅ Cambiado
@@ -2980,7 +2986,7 @@ def cargar_excel_candidatos():
             df_procesado["clave_academica"].astype(str).str.strip()
         )
 
-        # ❌ ELIMINADO: Procesamiento de teléfono
+        
 
         # ✅ Detectar sede desde primera_opcion
         df_procesado["sede"] = df_procesado["primera_opcion"].apply(
@@ -3096,6 +3102,7 @@ def cargar_excel_candidatos():
             "primera_opcion",
             "archivo_origen",
             "email",
+            "telefono",
             "sede",
             "franjas_disponibilidad",
             "franjas_parseadas",
