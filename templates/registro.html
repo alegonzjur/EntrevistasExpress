@@ -40,7 +40,21 @@
                        placeholder="correo@ejemplo.com"
                        style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
             </div>
-            
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="nombre_completo" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                    Nombre Completo *
+                </label>
+                <input type="text" 
+                    id="nombre_completo" 
+                    name="nombre_completo" 
+                    placeholder="Ej: Juan Pérez García"
+                    required 
+                    maxlength="150"
+                    style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                <small style="color: #666; display: block; margin-top: 5px;">
+                    El nombre que aparecerá en los correos a los candidatos
+                </small>
+            </div>
             <div class="form-group" style="margin-bottom: 20px;">
                 <label for="password" style="font-weight: 600; margin-bottom: 8px; display: block;">
                     Contraseña *

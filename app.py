@@ -1187,7 +1187,12 @@ def generar_email_entrevistador(entrevistador, asignaciones):
                                 Le adjuntamos su calendario de entrevistas para la próxima semana. 
                                 En total tiene <strong>{len(asignaciones)} entrevistas</strong> programadas.
                             </p>
-                            
+                            <!--  Enlace de videollamada del profesor -->
+                            {"<div style='background-color: #e7f3ff; border-left: 4px solid #2196F3; padding: 20px; margin: 0 0 25px 0; border-radius: 4px;'>" if entrevistador.enlace_videollamada_personal else ""}
+                            {f"<p style='margin: 0 0 15px 0; font-size: 16px; color: #0d47a1; font-weight: 600;'>🎥 Tu enlace de videollamada:</p>" if entrevistador.enlace_videollamada_personal else ""}
+                            {f"<p style='margin: 0; font-size: 14px; color: #666;'><a href='{entrevistador.enlace_videollamada_personal}' style='color: #2196F3; text-decoration: none; font-weight: 600; word-break: break-all;' target='_blank'>{entrevistador.enlace_videollamada_personal}</a></p>" if entrevistador.enlace_videollamada_personal else ""}
+                            {"</div>" if entrevistador.enlace_videollamada_personal else ""}
+
                             <!-- Tabla de entrevistas -->
                             <table width="100%" cellpadding="0" cellspacing="0" border="0" 
                                    style="border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden;">
@@ -1484,6 +1489,7 @@ def registro():
     if request.method == "POST":
         username = request.form["username"]
         email = request.form["email"]
+        nombre_completo = request.form.get("nombre_completo", "").strip()  # ✅ NUEVO
         password = request.form["password"]
         confirm_password = request.form["confirm_password"]
         rol = request.form.get("rol", "profesor")
@@ -1492,6 +1498,13 @@ def registro():
         # ========================================
         # VALIDACIONES
         # ========================================
+
+        # ✅ NUEVO: Validar nombre completo
+        if not nombre_completo:
+            flash("El nombre completo es requerido", "error")
+            return render_template(
+                "registro.html", username=session["username"], sedes=SEDES_DISPONIBLES
+            )
 
         # Validar longitud de contraseña
         if len(password) < 6:
@@ -1535,6 +1548,7 @@ def registro():
             nuevo_usuario = Usuario(
                 username=username,
                 email=email,
+                nombre_completo=nombre_completo,  # ✅ NUEVO
                 password=generate_password_hash(password),
                 rol=rol,
                 sede=sedes_seleccionadas[0] if sedes_seleccionadas else None,
@@ -1557,10 +1571,11 @@ def registro():
                 accion="crear",
                 entidad="usuario",
                 entidad_id=nuevo_usuario.id,
-                descripcion=f'Usuario creado: {username} ({rol}) - Sedes: {", ".join(sedes_seleccionadas)}',
+                descripcion=f'Usuario creado: {username} ({nombre_completo}) - Rol: {rol} - Sedes: {", ".join(sedes_seleccionadas)}',  # ✅ ACTUALIZADO
                 datos_nuevos={
                     "username": username,
                     "email": email,
+                    "nombre_completo": nombre_completo,  # ✅ NUEVO
                     "rol": rol,
                     "sedes": sedes_seleccionadas,
                 },
@@ -2038,15 +2053,28 @@ def editar_usuario(usuario_id):
 
     if request.method == "POST":
         email_nuevo = request.form.get("email")
+        nombre_completo_nuevo = request.form.get("nombre_completo", "").strip()  # ✅ NUEVO
         rol_nuevo = request.form.get("rol")
         sedes_seleccionadas = request.form.getlist("sedes")
 
         nueva_contrasena = request.form.get("nueva_contrasena", "").strip()
         confirmar_contrasena = request.form.get("confirmar_contrasena", "").strip()
 
+        # ✅ NUEVO: Validar nombre completo
+        if not nombre_completo_nuevo:
+            flash("El nombre completo es requerido", "error")
+            todas_sedes = Sede.query.filter_by(activa=True).all()
+            return render_template(
+                "editar_usuario.html",
+                usuario=usuario,
+                username=session["username"],
+                todas_sedes=todas_sedes,
+            )
+
         # Guardar valores anteriores para el log
         datos_anteriores = {
             "email": usuario.email,
+            "nombre_completo": usuario.nombre_completo,  # ✅ NUEVO
             "rol": usuario.rol,
             "sedes": [s.nombre for s in usuario.sedes],
         }
@@ -2110,8 +2138,9 @@ def editar_usuario(usuario_id):
                     todas_sedes=todas_sedes,
                 )
 
-        # Actualizar email y rol
+        # Actualizar email, nombre_completo y rol
         usuario.email = email_nuevo
+        usuario.nombre_completo = nombre_completo_nuevo  # ✅ NUEVO
         usuario.rol = rol_nuevo
 
         # Actualizar sedes (relación muchos-a-muchos)
@@ -2133,6 +2162,7 @@ def editar_usuario(usuario_id):
             # Registrar cambio en logs
             datos_nuevos = {
                 "email": email_nuevo,
+                "nombre_completo": nombre_completo_nuevo,  # ✅ NUEVO
                 "rol": rol_nuevo,
                 "sedes": (
                     [s.nombre for s in usuario.sedes] if rol_nuevo == "profesor" else []
@@ -2146,8 +2176,8 @@ def editar_usuario(usuario_id):
                 accion="modificar",
                 entidad="usuario",
                 entidad_id=usuario.id,
-                descripcion=f"Usuario modificado: {usuario.username}"
-                + (" (contraseña cambiada)" if nueva_contrasena else ""),
+                descripcion=f"Usuario modificado: {usuario.username} ({nombre_completo_nuevo})"
+                + (" (contraseña cambiada)" if nueva_contrasena else ""),  # ✅ ACTUALIZADO
                 datos_anteriores=datos_anteriores,
                 datos_nuevos=datos_nuevos,
                 nivel="info",
@@ -2930,7 +2960,7 @@ def cargar_excel_candidatos():
         ]
 
         # Columnas opcionales
-        columnas_opcionales = ["Entrevistas","Telefono"]  # ✅ Nombre real en Excel
+        columnas_opcionales = ["Entrevistas","Tel. Movil"]  # ✅ Nombre real en Excel
 
         # Verificar columnas obligatorias
         columnas_faltantes = [
@@ -2961,7 +2991,7 @@ def cargar_excel_candidatos():
             "Apellidos": "apellidos",
             "Nombre": "nombre",
             "Correo electrónico": "email",  # ✅ Cambiado
-            "Telefono": "telefono",
+            "Tel. Movil": "telefono",
             "Media estudios realizados": "media_estudios",
             "Primera opción": "primera_opcion",
             "Entrevistas": "franjas_disponibilidad",  # ✅ Cambiado
@@ -3655,7 +3685,8 @@ def asignar_candidato_manual():
             return jsonify({"error": error_msg}), 400
 
         # Validar candidato
-        candidato = Candidato.query.get(candidato_clave)
+        candidato_clave = candidato_clave.strip() if candidato_clave else None
+        candidato = Candidato.query.filter_by(clave_academica=candidato_clave).first()
         if not candidato:
             print(f"❌ ERROR: Candidato con clave '{candidato_clave}' no encontrado")
             return (
@@ -3970,7 +4001,7 @@ def exportar_candidatos_xlsx(candidatos, semana):
     # Estilos
     header_font = Font(bold=True, color="FFFFFF", size=12)
     header_fill = PatternFill(
-        start_color="0B5394", end_color="0B5394", fill_type="solid"  # ✅ Color actualizado
+        start_color="0B5394", end_color="0B5394", fill_type="solid"
     )
     border = Border(
         left=Side(style="thin"),
@@ -3979,14 +4010,15 @@ def exportar_candidatos_xlsx(candidatos, semana):
         bottom=Side(style="thin"),
     )
  
-    # Encabezados ✅ ACTUALIZADO
+    # Encabezados ✅ ACTUALIZADO CON TELÉFONO
     headers = [
         "#",
-        "Clave Académica",  # ✅ NUEVO
+        "Clave Académica",
         "Solicitud",
         "Apellidos",
         "Nombre",
         "Email",
+        "Teléfono",  # ✅ NUEVO
         "Nota Media",
         "Sede",
         "Primera Opción",
@@ -4002,15 +4034,16 @@ def exportar_candidatos_xlsx(candidatos, semana):
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = border
  
-    # Datos ✅ ACTUALIZADO
+    # Datos ✅ ACTUALIZADO CON TELÉFONO
     for idx, candidato in enumerate(candidatos, start=1):
         row = [
             idx,
-            candidato.clave_academica,  # ✅ NUEVO
+            candidato.clave_academica,
             candidato.solicitud,
             candidato.apellidos,
             candidato.nombre,
             candidato.email or "N/A",
+            candidato.telefono or "N/A",  # ✅ NUEVO
             float(candidato.media_estudios) if candidato.media_estudios else 0,
             candidato.sede or "Sin detectar",
             candidato.primera_opcion or "",
@@ -4019,32 +4052,32 @@ def exportar_candidatos_xlsx(candidatos, semana):
         ]
         ws.append(row)
  
-        # Colorear según nota (columna 7 ahora, antes era 6)
+        # Colorear según nota (columna 8 ahora) ✅ ACTUALIZADO
         nota = float(candidato.media_estudios) if candidato.media_estudios else 0
         color = "FFC7CE" if nota < 5.5 else "FFEB9C" if nota < 6.5 else "C6EFCE"
-        ws.cell(row=idx + 1, column=7).fill = PatternFill(  # ✅ Columna 7
+        ws.cell(row=idx + 1, column=8).fill = PatternFill(
             start_color=color, end_color=color, fill_type="solid"
         )
  
-        # Colorear sede (columna 8)
+        # Colorear sede (columna 9) ✅ ACTUALIZADO
         if candidato.sede:
-            color_sede = "D1ECF1"  # Azul claro
-            ws.cell(row=idx + 1, column=8).fill = PatternFill(
+            color_sede = "D1ECF1"
+            ws.cell(row=idx + 1, column=9).fill = PatternFill(
                 start_color=color_sede, end_color=color_sede, fill_type="solid"
             )
-            ws.cell(row=idx + 1, column=8).font = Font(bold=True)
+            ws.cell(row=idx + 1, column=9).font = Font(bold=True)
  
-        # Colorear según estado (columna 10)
+        # Colorear según estado (columna 11) ✅ ACTUALIZADO
         if candidato.estado == "asignado":
-            ws.cell(row=idx + 1, column=10).fill = PatternFill(  # ✅ Columna 10
+            ws.cell(row=idx + 1, column=11).fill = PatternFill(
                 start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"
             )
-            ws.cell(row=idx + 1, column=10).font = Font(bold=True, color="006100")
+            ws.cell(row=idx + 1, column=11).font = Font(bold=True, color="006100")
         elif candidato.estado == "pendiente":
-            ws.cell(row=idx + 1, column=10).fill = PatternFill(  # ✅ Columna 10
+            ws.cell(row=idx + 1, column=11).fill = PatternFill(
                 start_color="FFEB9C", end_color="FFEB9C", fill_type="solid"
             )
-            ws.cell(row=idx + 1, column=10).font = Font(bold=True, color="9C6500")
+            ws.cell(row=idx + 1, column=11).font = Font(bold=True, color="9C6500")
  
         # Aplicar bordes
         for cell in ws[idx + 1]:
@@ -4053,16 +4086,17 @@ def exportar_candidatos_xlsx(candidatos, semana):
  
     # Ajustar anchos de columna ✅ ACTUALIZADO
     ws.column_dimensions["A"].width = 5   # #
-    ws.column_dimensions["B"].width = 18  # ✅ Clave Académica
+    ws.column_dimensions["B"].width = 18  # Clave Académica
     ws.column_dimensions["C"].width = 10  # Solicitud
     ws.column_dimensions["D"].width = 20  # Apellidos
     ws.column_dimensions["E"].width = 15  # Nombre
     ws.column_dimensions["F"].width = 30  # Email
-    ws.column_dimensions["G"].width = 12  # Nota
-    ws.column_dimensions["H"].width = 15  # Sede
-    ws.column_dimensions["I"].width = 40  # Primera Opción
-    ws.column_dimensions["J"].width = 12  # Estado
-    ws.column_dimensions["K"].width = 18  # Fecha
+    ws.column_dimensions["G"].width = 15  # ✅ Teléfono NUEVO
+    ws.column_dimensions["H"].width = 12  # Nota
+    ws.column_dimensions["I"].width = 15  # Sede
+    ws.column_dimensions["J"].width = 40  # Primera Opción
+    ws.column_dimensions["K"].width = 12  # Estado
+    ws.column_dimensions["L"].width = 18  # Fecha
  
     # Guardar en memoria
     output = BytesIO()
@@ -4083,16 +4117,17 @@ def exportar_candidatos_csv(candidatos, semana):
     import csv
  
     output = StringIO()
-    writer = csv.writer(output, delimiter=';')  # ✅ Separador punto y coma
+    writer = csv.writer(output, delimiter=';')
  
-    # Encabezados ✅ ACTUALIZADO
+    # Encabezados ✅ ACTUALIZADO CON TELÉFONO
     writer.writerow(
         [
-            "Clave Académica",  # ✅ NUEVO
+            "Clave Académica",
             "Solicitud",
             "Apellidos",
             "Nombre",
             "Email",
+            "Teléfono",  # ✅ NUEVO
             "Nota Media",
             "Sede",
             "Primera Opción",
@@ -4101,15 +4136,16 @@ def exportar_candidatos_csv(candidatos, semana):
         ]
     )
  
-    # Datos ✅ ACTUALIZADO
+    # Datos ✅ ACTUALIZADO CON TELÉFONO
     for candidato in candidatos:
         writer.writerow(
             [
-                candidato.clave_academica,  # ✅ NUEVO
+                candidato.clave_academica,
                 candidato.solicitud,
                 candidato.apellidos,
                 candidato.nombre,
                 candidato.email or "N/A",
+                candidato.telefono or "N/A",  # ✅ NUEVO
                 float(candidato.media_estudios) if candidato.media_estudios else 0,
                 candidato.sede or "Sin detectar",
                 candidato.primera_opcion or "",
@@ -4121,7 +4157,7 @@ def exportar_candidatos_csv(candidatos, semana):
     output.seek(0)
  
     return send_file(
-        BytesIO(output.getvalue().encode("utf-8-sig")),  # UTF-8 con BOM para Excel
+        BytesIO(output.getvalue().encode("utf-8-sig")),
         mimetype="text/csv",
         as_attachment=True,
         download_name=f'candidatos_semana_{semana.split("-W")[1]}.csv',
@@ -4143,9 +4179,9 @@ def exportar_candidatos_pdf(candidatos, semana):
         "CustomTitle",
         parent=styles["Heading1"],
         fontSize=18,
-        textColor=colors.HexColor("#0B5394"),  # ✅ Color actualizado
+        textColor=colors.HexColor("#0B5394"),
         spaceAfter=30,
-        alignment=1,  # Centrado
+        alignment=1,
     )
  
     elements.append(
@@ -4153,17 +4189,18 @@ def exportar_candidatos_pdf(candidatos, semana):
     )
     elements.append(Spacer(1, 0.5 * cm))
  
-    # Tabla ✅ ACTUALIZADO
-    data = [["#", "Clave", "Apellidos", "Nombre", "Email", "Nota", "Sede", "Estado"]]
+    # Tabla ✅ ACTUALIZADO CON TELÉFONO
+    data = [["#", "Clave", "Apellidos", "Nombre", "Email", "Tel.", "Nota", "Sede", "Estado"]]
  
     for idx, candidato in enumerate(candidatos, start=1):
         data.append(
             [
                 str(idx),
-                candidato.clave_academica[:12],  # ✅ NUEVO (truncado)
+                candidato.clave_academica[:12],
                 candidato.apellidos[:15],
                 candidato.nombre[:12],
                 (candidato.email or "N/A")[:20],
+                (candidato.telefono or "N/A")[:12],  # ✅ NUEVO
                 (
                     f"{candidato.media_estudios:.2f}"
                     if candidato.media_estudios
@@ -4174,16 +4211,17 @@ def exportar_candidatos_pdf(candidatos, semana):
             ]
         )
  
+    # ✅ ACTUALIZADO - Anchos ajustados
     table = Table(
         data, 
-        colWidths=[1*cm, 2.5*cm, 4*cm, 3*cm, 4.5*cm, 1.5*cm, 2*cm, 2*cm]  # ✅ Ajustado
+        colWidths=[1*cm, 2.5*cm, 3.5*cm, 2.5*cm, 4*cm, 2.5*cm, 1.5*cm, 1.8*cm, 1.8*cm]
     )
  
     # Estilos de tabla
     table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0B5394")),  # ✅ Color actualizado
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0B5394")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
@@ -4255,7 +4293,7 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
     # Estilos
     header_font = Font(bold=True, color="FFFFFF", size=12)
     header_fill = PatternFill(
-        start_color="0B5394", end_color="0B5394", fill_type="solid"  # ✅ Color actualizado
+        start_color="0B5394", end_color="0B5394", fill_type="solid"
     )
     border = Border(
         left=Side(style="thin"),
@@ -4264,17 +4302,18 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
         bottom=Side(style="thin"),
     )
  
-    # Encabezados ✅ ACTUALIZADO (sin Teléfono, con Clave Académica)
+    # Encabezados ✅ ACTUALIZADO CON TELÉFONO
     headers = [
         "#",
-        "Clave Académica",  # ✅ NUEVO
+        "Clave Académica",
         "Fecha",
         "Día",
         "Hora",
         "Candidato",
         "Email",
+        "Teléfono",  # ✅ NUEVO
         "Nota",
-        "Sede",  # ✅ NUEVO
+        "Sede",
         "Entrevistador",
         "Espacio",
         "Pos.",
@@ -4301,7 +4340,7 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
         6: "Domingo",
     }
  
-    # Datos ✅ ACTUALIZADO
+    # Datos ✅ ACTUALIZADO CON TELÉFONO
     for idx, asignacion in enumerate(asignaciones, start=1):
         candidato = asignacion.candidato
         reserva = asignacion.reserva
@@ -4316,14 +4355,15 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
  
         row = [
             idx,
-            candidato.clave_academica,  # ✅ NUEVO
+            candidato.clave_academica,
             reserva.fecha.strftime("%d/%m/%Y"),
             dia_semana,
             hora_exacta,
             f"{candidato.nombre} {candidato.apellidos}",
             candidato.email or "N/A",
+            candidato.telefono or "N/A",  # ✅ NUEVO
             float(candidato.media_estudios) if candidato.media_estudios else 0,
-            candidato.sede or "N/A",  # ✅ NUEVO
+            candidato.sede or "N/A",
             entrevistador.username if entrevistador else "N/A",
             reserva.espacio.nombre if reserva.espacio else "N/A",
             asignacion.posicion,
@@ -4332,25 +4372,25 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
         ]
         ws.append(row)
  
-        # Colorear según nota (ahora columna 8)
+        # Colorear según nota (columna 9 ahora) ✅ ACTUALIZADO
         nota = float(candidato.media_estudios) if candidato.media_estudios else 0
         color_nota = "FFC7CE" if nota < 5.5 else "FFEB9C" if nota < 6.5 else "C6EFCE"
-        ws.cell(row=idx + 1, column=8).fill = PatternFill(  # ✅ Columna 8
+        ws.cell(row=idx + 1, column=9).fill = PatternFill(
             start_color=color_nota, end_color=color_nota, fill_type="solid"
         )
-        ws.cell(row=idx + 1, column=8).font = Font(bold=True)
+        ws.cell(row=idx + 1, column=9).font = Font(bold=True)
  
-        # Colorear según estado (ahora columna 13)
+        # Colorear según estado (columna 14 ahora) ✅ ACTUALIZADO
         if asignacion.estado == "confirmado":
-            ws.cell(row=idx + 1, column=13).fill = PatternFill(  # ✅ Columna 13
+            ws.cell(row=idx + 1, column=14).fill = PatternFill(
                 start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"
             )
-            ws.cell(row=idx + 1, column=13).font = Font(bold=True, color="006100")
+            ws.cell(row=idx + 1, column=14).font = Font(bold=True, color="006100")
         elif asignacion.estado == "cancelado":
-            ws.cell(row=idx + 1, column=13).fill = PatternFill(  # ✅ Columna 13
+            ws.cell(row=idx + 1, column=14).fill = PatternFill(
                 start_color="F8D7DA", end_color="F8D7DA", fill_type="solid"
             )
-            ws.cell(row=idx + 1, column=13).font = Font(bold=True, color="721C24")
+            ws.cell(row=idx + 1, column=14).font = Font(bold=True, color="721C24")
  
         # Aplicar bordes
         for cell in ws[idx + 1]:
@@ -4359,19 +4399,20 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
  
     # Ajustar anchos de columna ✅ ACTUALIZADO
     ws.column_dimensions["A"].width = 5   # #
-    ws.column_dimensions["B"].width = 18  # ✅ Clave Académica
+    ws.column_dimensions["B"].width = 18  # Clave Académica
     ws.column_dimensions["C"].width = 12  # Fecha
     ws.column_dimensions["D"].width = 12  # Día
     ws.column_dimensions["E"].width = 10  # Hora
     ws.column_dimensions["F"].width = 30  # Candidato
     ws.column_dimensions["G"].width = 30  # Email
-    ws.column_dimensions["H"].width = 10  # Nota
-    ws.column_dimensions["I"].width = 15  # ✅ Sede
-    ws.column_dimensions["J"].width = 20  # Entrevistador
-    ws.column_dimensions["K"].width = 20  # Espacio
-    ws.column_dimensions["L"].width = 6   # Pos.
-    ws.column_dimensions["M"].width = 12  # Estado
-    ws.column_dimensions["N"].width = 40  # Grado
+    ws.column_dimensions["H"].width = 15  # ✅ Teléfono NUEVO
+    ws.column_dimensions["I"].width = 10  # Nota
+    ws.column_dimensions["J"].width = 15  # Sede
+    ws.column_dimensions["K"].width = 20  # Entrevistador
+    ws.column_dimensions["L"].width = 20  # Espacio
+    ws.column_dimensions["M"].width = 6   # Pos.
+    ws.column_dimensions["N"].width = 12  # Estado
+    ws.column_dimensions["O"].width = 40  # Grado
  
     # Añadir filtros automáticos
     ws.auto_filter.ref = ws.dimensions
@@ -4395,7 +4436,7 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
 def exportar_asignaciones_csv(asignaciones, semana):
     """Exporta asignaciones a CSV"""
     output = StringIO()
-    writer = csv.writer(output, delimiter=';')  # ✅ Separador punto y coma
+    writer = csv.writer(output, delimiter=';')
  
     # Traducción de días
     dias_esp = {
@@ -4408,17 +4449,18 @@ def exportar_asignaciones_csv(asignaciones, semana):
         6: "Domingo",
     }
  
-    # Encabezados ✅ ACTUALIZADO (sin Teléfono, con Clave y Sede)
+    # Encabezados ✅ ACTUALIZADO CON TELÉFONO
     writer.writerow(
         [
-            "Clave Académica",  # ✅ NUEVO
+            "Clave Académica",
             "Fecha",
             "Día",
             "Hora",
             "Candidato",
             "Email",
+            "Teléfono",  # ✅ NUEVO
             "Nota",
-            "Sede",  # ✅ NUEVO
+            "Sede",
             "Entrevistador",
             "Espacio",
             "Posición",
@@ -4427,7 +4469,7 @@ def exportar_asignaciones_csv(asignaciones, semana):
         ]
     )
  
-    # Datos ✅ ACTUALIZADO
+    # Datos ✅ ACTUALIZADO CON TELÉFONO
     for asignacion in asignaciones:
         candidato = asignacion.candidato
         reserva = asignacion.reserva
@@ -4442,14 +4484,15 @@ def exportar_asignaciones_csv(asignaciones, semana):
  
         writer.writerow(
             [
-                candidato.clave_academica,  # ✅ NUEVO
+                candidato.clave_academica,
                 reserva.fecha.strftime("%d/%m/%Y"),
                 dia_semana,
                 hora_exacta,
                 f"{candidato.nombre} {candidato.apellidos}",
                 candidato.email or "N/A",
+                candidato.telefono or "N/A",  # ✅ NUEVO
                 float(candidato.media_estudios) if candidato.media_estudios else 0,
-                candidato.sede or "N/A",  # ✅ NUEVO
+                candidato.sede or "N/A",
                 entrevistador.username if entrevistador else "N/A",
                 reserva.espacio.nombre if reserva.espacio else "N/A",
                 asignacion.posicion,
@@ -4482,7 +4525,7 @@ def exportar_asignaciones_pdf(asignaciones, semana):
         "CustomTitle",
         parent=styles["Heading1"],
         fontSize=18,
-        textColor=colors.HexColor("#0B5394"),  # ✅ Color actualizado
+        textColor=colors.HexColor("#0B5394"),
         spaceAfter=30,
         alignment=1,
     )
@@ -4497,9 +4540,9 @@ def exportar_asignaciones_pdf(asignaciones, semana):
     # Traducción de días
     dias_esp = {0: "Lun", 1: "Mar", 2: "Mié", 3: "Jue", 4: "Vie", 5: "Sáb", 6: "Dom"}
  
-    # Tabla ✅ ACTUALIZADO (con Clave, sin Teléfono)
+    # Tabla ✅ ACTUALIZADO CON TELÉFONO
     data = [
-        ["Clave", "Fecha", "Hora", "Candidato", "Email", "Nota", "Entrevistador", "Esp."]
+        ["Clave", "Fecha", "Hora", "Candidato", "Email", "Tel.", "Nota", "Entrev.", "Esp."]
     ]
  
     for asignacion in asignaciones:
@@ -4516,32 +4559,35 @@ def exportar_asignaciones_pdf(asignaciones, semana):
  
         data.append(
             [
-                candidato.clave_academica[:10],  # ✅ NUEVO (truncado)
+                candidato.clave_academica[:10],
                 reserva.fecha.strftime("%d/%m"),
                 hora_exacta,
                 f"{candidato.nombre[:10]} {candidato.apellidos[:10]}",
-                (candidato.email or "N/A")[:20],
+                (candidato.email or "N/A")[:18],
+                (candidato.telefono or "N/A")[:10],  # ✅ NUEVO
                 (
                     f"{candidato.media_estudios:.2f}"
                     if candidato.media_estudios
                     else "N/A"
                 ),
-                (entrevistador.username if entrevistador else "N/A")[:12],
+                (entrevistador.username if entrevistador else "N/A")[:10],
                 (reserva.espacio.nombre if reserva.espacio else "N/A")[:8],
             ]
         )
  
+    # ✅ ACTUALIZADO - Anchos ajustados
     table = Table(
         data,
         colWidths=[
-            2*cm,    # Clave
-            1.8*cm,  # Fecha
-            1.5*cm,  # Hora
-            3.5*cm,  # Candidato
-            4*cm,    # Email
-            1.5*cm,  # Nota
-            3*cm,    # Entrevistador
-            2*cm,    # Espacio
+            1.8*cm,  # Clave
+            1.5*cm,  # Fecha
+            1.3*cm,  # Hora
+            3*cm,    # Candidato
+            3.5*cm,  # Email
+            2*cm,    # Teléfono ✅ NUEVO
+            1.2*cm,  # Nota
+            2.5*cm,  # Entrevistador
+            1.5*cm,  # Espacio
         ],
     )
  
@@ -4549,7 +4595,7 @@ def exportar_asignaciones_pdf(asignaciones, semana):
     table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0B5394")),  # ✅ Color actualizado
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0B5394")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
