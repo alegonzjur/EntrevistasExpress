@@ -203,6 +203,11 @@
                                         title="Ver asignación">
                                     <i class="fas fa-calendar-check"></i>
                                 </button>
+                                <button class="btn btn-sm btn-danger" 
+                                        onclick="eliminarCandidato('{{ candidato.clave_academica }}', '{{ candidato.nombre }} {{ candidato.apellidos }}')"
+                                        title="Eliminar candidato">
+                                    <i class="fas fa-trash"></i>
+                                </button>
                                 {% endif %}
                             </td>
                         </tr>
@@ -349,6 +354,71 @@ function exportarTabla() {
 // Imprimir tabla
 function imprimirTabla() {
     window.print();
+}
+// ✅ NUEVA FUNCIÓN: Eliminar candidato
+function eliminarCandidato(clave, nombre) {
+    Swal.fire({
+        title: '⚠️ Eliminar Candidato',
+        html: `¿Estás seguro de que quieres eliminar a<br><strong>${nombre}</strong>?<br><small>(${clave})</small>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Mostrar spinner de carga
+            Swal.fire({
+                title: 'Eliminando...',
+                html: 'Por favor espera',
+                icon: 'info',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            // Hacer request al servidor
+            fetch(`/admin/candidatos/eliminar/${clave}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: '✅ Eliminado Correctamente',
+                        text: data.mensaje,
+                        confirmButtonColor: '#28a745'
+                    }).then(() => {
+                        // Recargar la página
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: '❌ Error',
+                        text: data.error,
+                        confirmButtonColor: '#dc3545'
+                    });
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    icon: 'error',
+                    title: '❌ Error de Conexión',
+                    text: 'No se pudo conectar con el servidor',
+                    confirmButtonColor: '#dc3545'
+                });
+                console.error('Error:', error);
+            });
+        }
+    });
 }
 </script>
 

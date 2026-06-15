@@ -3274,6 +3274,60 @@ def ver_candidatos_semana(semana):
         username=session["username"],
     )
 
+@app.route("/admin/candidatos/eliminar/<clave_academica>", methods=["POST"])
+@admin_required
+def eliminar_candidato_por_clave(clave_academica):
+    """Elimina un candidato de la base de datos"""
+    
+    try:
+        # Limpiar la clave
+        clave_academica = clave_academica.strip()
+        
+        # Buscar candidato
+        candidato = Candidato.query.filter_by(clave_academica=clave_academica).first()
+        
+        if not candidato:
+            return jsonify({"error": "Candidato no encontrado"}), 404
+        
+        # Verificar si tiene asignaciones
+        asignaciones = Asignacion.query.filter_by(candidato_clave=clave_academica).count()
+        if asignaciones > 0:
+            return jsonify({
+                "error": f"No se puede eliminar. El candidato tiene {asignaciones} asignación(es). Debes eliminarlas primero."
+            }), 400
+        
+        # Guardar datos para log
+        nombre_candidato = f"{candidato.nombre} {candidato.apellidos}"
+        semana = candidato.semana_carga
+        
+        # Eliminar
+        db.session.delete(candidato)
+        db.session.commit()
+        
+        # Registrar en logs
+        registrar_log(
+            accion="eliminar",
+            entidad="candidato",
+            entidad_id=None,
+            descripcion=f"Candidato eliminado: {nombre_candidato} ({clave_academica}) - Semana {semana}",
+            datos_nuevos={
+                "clave_academica": clave_academica,
+                "nombre": nombre_candidato,
+                "semana": semana,
+            },
+            nivel="warning",
+        )
+        
+        return jsonify({
+            "success": True,
+            "mensaje": f"Candidato {nombre_candidato} eliminado correctamente"
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ ERROR al eliminar candidato: {str(e)}")
+        return jsonify({"error": f"Error al eliminar: {str(e)}"}), 500
+
 
 @app.route("/admin/candidatos/asignaciones/<semana>")
 @admin_required
