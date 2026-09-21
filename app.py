@@ -1049,8 +1049,11 @@ def generar_email_entrevistador(entrevistador, asignaciones):
 
     subject = f"Calendario de Entrevistas - {mes_nombre} {año}"
 
-    # Generar filas de la tabla
+    # ✅ GENERAR FILAS DE LA TABLA CON COLORES DIFERENCIADOS POR DÍA
     filas_html = ""
+    colores_dia = ["#F0F8FF", "#F5FFFA"]  # Azul claro y verde muy claro
+    indice_color = 0
+    
     dias_esp = {
         0: "Lunes",
         1: "Martes",
@@ -1070,6 +1073,9 @@ def generar_email_entrevistador(entrevistador, asignaciones):
         # Nombre del día
         dia_semana = dias_esp[fecha.weekday()]
         fecha_str = fecha.strftime("%d/%m/%Y")
+        
+        # Color de fondo para este día
+        color_fondo = colores_dia[indice_color % 2]
 
         # Primera fila del día (con rowspan)
         primera_asig = asigs_dia[0]
@@ -1083,20 +1089,19 @@ def generar_email_entrevistador(entrevistador, asignaciones):
         email_candidato = candidato.email or "No disponible"
         telefono = candidato.telefono or 'No proporcionado'
 
-
         filas_html += f"""
-        <tr style="border-bottom: 1px solid #e0e0e0;">
-            <td rowspan="{len(asigs_dia)}" style="padding: 15px; background-color: #f8f9fa; font-weight: 600; text-align: center; border-right: 2px solid #dee2e6;">
-                <strong>{dia_semana}</strong><br>
-                <span style="font-size: 12px; color: #666; font-weight: normal;"><strong>{fecha_str}</strong></span>
+        <tr style="background-color: {color_fondo}; border-bottom: 2px solid #0B5394;">
+            <td rowspan="{len(asigs_dia)}" style="padding: 15px; background-color: #0B5394; color: white; font-weight: 600; text-align: center; border-right: 2px solid white; vertical-align: middle;">
+                <strong style="font-size: 16px;">{dia_semana}</strong><br>
+                <span style="font-size: 13px; margin-top: 5px; display: block;">{fecha_str}</span>
             </td>
-            <td style="padding: 15px; font-weight: 600; color: #4472C4;">{hora}</td>
-            <td style="padding: 15px;">
+            <td style="padding: 15px; font-weight: 600; color: #0B5394; background-color: {color_fondo};">{hora}</td>
+            <td style="padding: 15px; background-color: {color_fondo};">
                 <strong>{candidato.nombre} {candidato.apellidos}</strong><br>
                 <small style="color: #666;">📧 {email_candidato}</small><br>
                 <small style="color: #666;">📞 {telefono}</small>
             </td>
-            <td style="padding: 15px; font-size: 12px; color: #666;">
+            <td style="padding: 15px; font-size: 12px; color: #666; background-color: {color_fondo};">
                 {primera_asig.candidato.primera_opcion[:50] + '...' if primera_asig.candidato.primera_opcion and len(primera_asig.candidato.primera_opcion) > 50 else primera_asig.candidato.primera_opcion or '-'}
             </td>
         </tr>
@@ -1110,21 +1115,34 @@ def generar_email_entrevistador(entrevistador, asignaciones):
             )
             candidato = asig.candidato
             email_candidato = candidato.email or "No disponible"
-            telefono = candidato.telefono or 'No proporcionado'  # ✅ AGREGAR ESTA LÍNEA
+            telefono = candidato.telefono or 'No proporcionado'
 
             filas_html += f"""
-        <tr style="border-bottom: 1px solid #e0e0e0;">
-            <td style="padding: 15px; font-weight: 600; color: #4472C4;">{hora}</td>
-            <td style="padding: 15px;">
+        <tr style="background-color: {color_fondo}; border-bottom: 1px solid #ddd;">
+            <td style="padding: 15px; font-weight: 600; color: #0B5394; background-color: {color_fondo};">{hora}</td>
+            <td style="padding: 15px; background-color: {color_fondo};">
                 <strong>{candidato.nombre} {candidato.apellidos}</strong><br>
                 <small style="color: #666;">📧 {email_candidato}</small><br>
-                <small style="color: #666;">📞 {telefono}</small>  <!-- ✅ AGREGAR ESTA LÍNEA -->
+                <small style="color: #666;">📞 {telefono}</small>
             </td>
-            <td style="padding: 15px; font-size: 12px; color: #666;">
+            <td style="padding: 15px; font-size: 12px; color: #666; background-color: {color_fondo};">
                 {asig.candidato.primera_opcion[:50] + '...' if asig.candidato.primera_opcion and len(asig.candidato.primera_opcion) > 50 else asig.candidato.primera_opcion or '-'}
             </td>
         </tr>
-            """
+        """
+        
+        # ✅ AGREGAR FILA DE SEPARACIÓN ENTRE DÍAS
+        if fecha != fechas_ordenadas[-1]:  # Si no es el último día
+            filas_html += f"""
+        <tr style="height: 20px; background-color: #ffffff; border-bottom: 3px solid #0B5394;">
+            <td colspan="4" style="text-align: center; font-size: 12px; color: #999; font-weight: bold; padding: 8px;">
+                ✓ FIN DEL {dia_semana.upper()}
+            </td>
+        </tr>
+        """
+        
+        # Cambiar color para el siguiente día
+        indice_color += 1
 
     html = f"""
 <!DOCTYPE html>
