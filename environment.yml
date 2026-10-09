@@ -1,0 +1,14 @@
+# Entorno Conda para EntrevistasExpress.
+#
+# Crear:   conda env create -f environment.yml
+# Activar: conda activate entrevistas-express
+# Actualizar tras cambiar requirements.txt:
+#   conda env update -f environment.yml --prune
+name: entrevistas-express
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - -r requirements.txt

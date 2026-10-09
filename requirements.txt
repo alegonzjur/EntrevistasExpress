@@ -1,0 +1,14 @@
+# Core
+Flask==3.0.0
+Flask-SQLAlchemy==3.1.1
+SQLAlchemy==2.0.43
+Werkzeug==3.0.1
+psycopg2-binary==2.9.9
+python-dotenv==1.0.0
+
+# Usadas por el código pero ausentes del requirements.txt original
+Flask-Mail==0.9.1
+pandas==2.1.4
+openpyxl==3.1.2
+reportlab==4.0.9
+waitress==2.1.2
