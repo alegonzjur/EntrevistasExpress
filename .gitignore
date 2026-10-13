@@ -1,0 +1,30 @@
+# Secretos y configuración local — nunca se sube
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Entornos virtuales / Conda
+venv/
+env/
+.venv/
+
+# Archivos subidos por usuarios (Excels de candidatos con datos personales)
+uploads/*
+!uploads/.gitkeep
+
+# Bases de datos locales (si se usa SQLite en algún momento, p. ej. tests)
+*.sqlite3
+*.db
+
+# Logs
+*.log
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
