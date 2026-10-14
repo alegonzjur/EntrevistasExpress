@@ -1,0 +1,49 @@
+-- ====================================================================
+-- REGISTRO DE MIGRACIONES DE ESQUEMA — EntrevistasExpress
+-- ====================================================================
+--
+-- Qué es este fichero:
+-- Un registro manual, en orden cronológico, de cada cambio de esquema
+-- real que se aplique a la base de datos de producción a partir de la
+-- reconstrucción de octubre de 2026 (modelos en app/models/, esquema de
+-- referencia inicial en sql/esquema.sql).
+--
+-- No es lo mismo que sql/esquema.sql: ese fichero es una foto fija del
+-- esquema completo en un momento dado (se regenera entero); este fichero
+-- es un historial incremental — cada entrada es el ALTER/CREATE/DROP
+-- exacto que hay que ejecutar a mano en el PostgreSQL real para que su
+-- esquema pase de la versión N a la versión N+1. Útil porque
+-- db.create_all() (ver app/seed.py) crea tablas que no existen, pero NO
+-- modifica columnas de una tabla que ya existe — así que un cambio en un
+-- modelo (añadir una columna, cambiar un tipo, etc.) no se aplica solo
+-- con reiniciar la app; hay que aplicarlo aquí, a mano, contra la BD real.
+--
+-- Convención para cada entrada nueva:
+--   1. Encabezado con fecha (AAAA-MM-DD) y una frase de qué cambia y por
+--      qué, en el mismo estilo que el resto del proyecto (explicar antes
+--      de ejecutar).
+--   2. El SQL exacto a ejecutar, en el orden en que debe aplicarse.
+--   3. Si el cambio tiene vuelta atrás razonable, un bloque "-- Rollback:"
+--      con el SQL para deshacerlo.
+--
+-- Al aplicar una entrada en el PostgreSQL real, márcala aquí como
+-- aplicada (añade "-- ✅ Aplicado en <entorno> el <fecha>" bajo su
+-- encabezado) para que el registro refleje el estado real, no solo la
+-- intención.
+--
+-- Todavía no hay ninguna migración registrada: desde que se generó
+-- sql/esquema.sql no se ha aplicado ningún cambio de esquema. La primera
+-- entrada se añadirá aquí la próxima vez que un modelo cambie de verdad.
+--
+-- ====================================================================
+-- Plantilla para la siguiente entrada (bórrala y sustitúyela cuando
+-- añadas la primera migración real):
+-- ====================================================================
+--
+-- -- [AAAA-MM-DD] <Descripción breve del cambio y motivo>
+-- -- ✅ Aplicado en: (pendiente)
+--
+-- ALTER TABLE ...
+--
+-- -- Rollback:
+-- -- ALTER TABLE ...
