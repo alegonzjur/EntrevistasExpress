@@ -39,6 +39,16 @@ class Candidato(db.Model):
         return self.email is not None and self.email.strip() != ""
 
     def to_dict(self):
+        # BUG corregido: la línea original ("sedes": [s.nombre for s in
+        # self.sedes]) daba AttributeError, porque Candidato no tiene
+        # ninguna relación `sedes` — esa relación existe en Usuario (ver
+        # app/models/usuario.py), de donde parece que se copió por error.
+        # Candidato solo tiene el campo `sede` (string simple). Como
+        # to_dict() nunca se llama desde ningún sitio del proyecto
+        # (confirmado por grep: ninguna ruta ni servicio lo usa), nunca se
+        # había detectado en producción. Se corrige devolviendo `sede`
+        # también como lista de un elemento, que es lo que el nombre de la
+        # clave ("sedes", en plural) sugiere que se pretendía.
         return {
             "clave_academica": self.clave_academica,
             "solicitud": self.solicitud,
@@ -50,7 +60,7 @@ class Candidato(db.Model):
             "estado": self.estado,
             "primera_opcion": self.primera_opcion,
             "sede": self.sede,
-            "sedes": [s.nombre for s in self.sedes],
+            "sedes": [self.sede] if self.sede else [],
             "tiene_preferencias": self.tiene_preferencias,
             "franjas_disponibilidad": self.franjas_disponibilidad,
         }

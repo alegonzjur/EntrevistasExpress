@@ -635,33 +635,40 @@ def register(app):
             db.session.rollback()
             return jsonify({"error": f"Error al eliminar candidatos: {str(e)}"}), 500
 
-    @app.route("/admin/candidato/<int:candidato_id>/eliminar", methods=["POST"])
+    @app.route("/admin/candidato/<candidato_id>/eliminar", methods=["POST"])
     @admin_required
     def eliminar_candidato(candidato_id):
         """
         Elimina un candidato individual y su asignación si existe.
 
-        BUG HEREDADO (no introducido en esta extracción): la clave primaria
-        de Candidato es `clave_academica` (string, p. ej. "C001"), no un
-        entero. Esta ruta declara `<int:candidato_id>` y hace
-        `Candidato.query.get_or_404(candidato_id)` con ese entero — así que
-        en la práctica nunca puede encontrar un candidato real (su PK jamás
-        es un entero puro). Y además, `get_or_404` lanza una excepción
-        `werkzeug.exceptions.NotFound`, que el `except Exception` de más
-        abajo atrapa como un error cualquiera — así que el resultado real
-        no es un 404 limpio, sino un 500 con un mensaje confuso de doble
-        envoltura ("Error al eliminar candidato: 404 Not Found: ..."),
-        verificado por ejecución. Comprobé también que ningún
-        `url_for('eliminar_candidato')` aparece en ninguna plantilla: es
-        una ruta inalcanzable desde la UI, igual que `Candidato.to_dict()`
-        y `admin_estadisticas()`. El borrado individual real de candidatos
-        lo hace `eliminar_candidato_por_clave` más arriba. Se preserva tal
-        cual, sin arreglar ni eliminar.
+        BUGS corregidos (dos, en esta misma ruta):
+
+        1. La clave primaria de Candidato es `clave_academica` (string,
+           p. ej. "C001"), no un entero. La ruta declaraba
+           `<int:candidato_id>`, así que en la práctica nunca podía
+           encontrar un candidato real (su PK jamás es un entero puro).
+           Se cambia el convertidor de la ruta a texto plano (sin
+           `<int:...>`), igual que ya hace `eliminar_candidato_por_clave`
+           más arriba en este mismo fichero.
+
+        2. `get_or_404()` iba dentro del `try`/`except Exception`
+           genérico de más abajo: un candidato_id inexistente lanzaba
+           `werkzeug.exceptions.NotFound`, que ese except atrapaba como un
+           error cualquiera, dando un 500 con mensaje de doble envoltura
+           en vez de un 404 limpio (mismo patrón ya corregido en
+           eliminar_log_asignacion y eliminar_carga). Se saca la búsqueda
+           fuera del try.
+
+        Esta ruta sigue sin tener ningún `url_for('eliminar_candidato')`
+        en ninguna plantilla (confirmado por grep) — el borrado individual
+        real desde la UI lo hace `eliminar_candidato_por_clave`, más
+        arriba. Queda corregida por si en el futuro se enlaza desde algún
+        sitio, no porque esté en uso ahora.
         """
 
-        try:
-            candidato = Candidato.query.get_or_404(candidato_id)
+        candidato = Candidato.query.get_or_404(candidato_id)
 
+        try:
             # Eliminar asignación si existe
             asignacion = Asignacion.query.filter_by(
                 candidato_clave=candidato_id

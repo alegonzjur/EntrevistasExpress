@@ -176,8 +176,17 @@ def register(app):
                         mail.send(msg)
 
                         # Marcar como enviado
+                        # BUG corregido: el código original (y esta versión hasta
+                        # ahora) escribía `asignacion.fecha_envio_email`, un
+                        # atributo que no existe en el modelo Asignacion (el
+                        # campo real es `fecha_email`). SQLAlchemy permite
+                        # asignar atributos arbitrarios a una instancia, así que
+                        # no fallaba: creaba una propiedad Python transitoria
+                        # que se perdía al terminar la petición, y `fecha_email`
+                        # se quedaba NULL para siempre. Confirmado con un test
+                        # que comprobaba el valor tras el commit.
                         asignacion.enviado_email = True
-                        asignacion.fecha_envio_email = datetime.now()
+                        asignacion.fecha_email = datetime.now()
 
                         resultados["candidatos_enviados"] += 1
 

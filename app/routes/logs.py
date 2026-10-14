@@ -297,9 +297,16 @@ def register(app):
     def eliminar_carga(carga_id):
         """Elimina una carga de Excel y todos sus candidatos asociados"""
 
-        try:
-            carga = CargaExcel.query.get_or_404(carga_id)
+        # BUG corregido: mismo patrón que en eliminar_log_asignacion()
+        # (app/routes/asignaciones.py) y eliminar_candidato()
+        # (app/routes/candidatos.py) — get_or_404() iba dentro del try de
+        # más abajo, con un único except Exception genérico, así que un
+        # carga_id inexistente producía un 500 con mensaje confuso en vez
+        # de un 404 limpio. Se saca la búsqueda fuera del try para que
+        # NotFound se propague a Flask sin que el except la intercepte.
+        carga = CargaExcel.query.get_or_404(carga_id)
 
+        try:
             # Obtener candidatos de esta carga
             candidatos = Candidato.query.filter_by(
                 archivo_origen=carga.archivo_nombre, semana_carga=carga.semana_destino

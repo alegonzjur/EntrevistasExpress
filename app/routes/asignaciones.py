@@ -397,17 +397,18 @@ def register(app):
         """
         Obtiene información detallada de una reserva.
 
-        BUG HEREDADO (no introducido en esta extracción): el bucle de más
-        abajo lee `asig.candidato_id`, pero `Asignacion` no tiene ningún
-        campo con ese nombre — su FK hacia Candidato se llama
-        `candidato_clave` (verificado contra el modelo). Esto significa que
-        esta ruta lanza `AttributeError` en cuanto la reserva consultada
-        tiene alguna asignación (el caso normal por el que tendría sentido
-        pedir esta información) — solo "funciona" cuando `asignaciones`
-        está vacío. Comprobé también que ningún sitio de las plantillas
-        llama a esta ruta (ni por `url_for`, ni como fetch() a una URL
-        fija) — es inalcanzable desde la UI. Se preserva tal cual, sin
-        arreglar.
+        BUG corregido: el bucle de más abajo leía `asig.candidato_id`, pero
+        `Asignacion` no tiene ningún campo con ese nombre — su FK hacia
+        Candidato se llama `candidato_clave` (verificado contra el
+        modelo). Esto hacía que la ruta lanzara `AttributeError` en cuanto
+        la reserva consultada tenía alguna asignación (el caso normal por
+        el que tendría sentido pedir esta información) — solo "funcionaba"
+        cuando `asignaciones` estaba vacío. Sigue siendo una ruta
+        inalcanzable desde la UI (ningún `url_for` ni fetch() fijo la
+        llama, confirmado por grep), pero ya no falla si en el futuro se
+        enlaza desde algún sitio. La clave del JSON de salida se mantiene
+        como "candidato_id" (no se renombra) para no romper a un futuro
+        consumidor que ya esperase ese nombre de clave.
         """
 
         reserva = Reserva.query.get_or_404(reserva_id)
@@ -418,7 +419,7 @@ def register(app):
             asignaciones_data.append(
                 {
                     "id": asig.id,
-                    "candidato_id": asig.candidato_id,
+                    "candidato_id": asig.candidato_clave,
                     "candidato_nombre": f"{asig.candidato.nombre} {asig.candidato.apellidos}",
                     "candidato_nota": (
                         float(asig.candidato.media_estudios)
@@ -505,9 +506,18 @@ def register(app):
     def eliminar_log_asignacion(log_id):
         """Elimina un registro de log de asignación"""
 
-        try:
-            log = LogAsignacion.query.get_or_404(log_id)
+        # BUG corregido: `get_or_404()` iba dentro del `try` de más abajo,
+        # cuyo único `except` es un `Exception` genérico. Cuando log_id no
+        # existe, get_or_404 lanza werkzeug.exceptions.NotFound (pensado
+        # para que Flask lo convierta automáticamente en un 404 limpio),
+        # pero el except genérico lo capturaba primero y lo envolvía en un
+        # 500 con un mensaje confuso ("Error al eliminar log: 404 Not
+        # Found: ..."). Sacando la búsqueda fuera del try, NotFound vuelve
+        # a propagarse a Flask sin que nadie la intercepte, y se obtiene el
+        # 404 limpio que la función ya pretendía dar.
+        log = LogAsignacion.query.get_or_404(log_id)
 
+        try:
             semana = log.semana_objetivo
 
             db.session.delete(log)
