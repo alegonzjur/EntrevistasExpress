@@ -54,15 +54,15 @@
 <div class="leyenda">
     <div class="leyenda-item">
         <div class="leyenda-color disponible"></div>
-        <span>🟢 Libre (0/2)</span>
+        <span>🟢 Libre (0/{{ max_reservas }})</span>
     </div>
     <div class="leyenda-item">
         <div class="leyenda-color parcial"></div>
-        <span>🟡 Parcial (1/2)</span>
+        <span>🟡 Parcial (1-{{ max_reservas - 1 }}/{{ max_reservas }})</span>
     </div>
     <div class="leyenda-item">
         <div class="leyenda-color completa"></div>
-        <span>🔴 Completa (2/2)</span>
+        <span>🔴 Completa ({{ max_reservas }}/{{ max_reservas }})</span>
     </div>
     <!-- ✅ NUEVO -->
     <div class="leyenda-item">
@@ -172,20 +172,21 @@ async function cargarFranjas() {
                     icono = '⭐';
                 } else if (franja.solo_secundarias && franja.num_reservas > 0) {
                     // Solo tiene reservas secundarias
-                    claseExtra = franja.num_reservas == 1 ? 'secundaria-parcial' : 'secundaria-completa';
-                    textoEstado = franja.num_reservas == 1 ? '🟪 Sec. (1/2)' : '🟪 Sec. (2/2)';
+                    const secundariaCompleta = franja.num_reservas >= franja.max_reservas;
+                    claseExtra = secundariaCompleta ? 'secundaria-completa' : 'secundaria-parcial';
+                    textoEstado = `🟪 Sec. (${franja.num_reservas}/${franja.max_reservas})`;
                     icono = '🟪';
                 } else if (franja.disponible) {
                     claseExtra = 'disponible';
-                    textoEstado = '✓ Libre (0/2)';
+                    textoEstado = `✓ Libre (0/${franja.max_reservas})`;
                     icono = '🟢';
                 } else if (franja.parcial) {
                     claseExtra = 'parcial';
-                    textoEstado = '⚠ Parcial (1/2)';
+                    textoEstado = `⚠ Parcial (${franja.num_reservas}/${franja.max_reservas})`;
                     icono = '🟡';
                 } else if (franja.completa) {
                     claseExtra = 'completa';
-                    textoEstado = '✗ Completa (2/2)';
+                    textoEstado = `✗ Completa (${franja.num_reservas}/${franja.max_reservas})`;
                     icono = '🔴';
                 }
                 
@@ -249,7 +250,7 @@ function mostrarInfoCompleta(franja) {
     let usuarios = franja.reservas.map(r => r.usuario).join(', ');
     
     let htmlInfo = '<div style="text-align: left;">';
-    htmlInfo += '<p><strong>Esta franja está completa (2/2):</strong></p>';
+    htmlInfo += `<p><strong>Esta franja está completa (${franja.num_reservas}/${franja.max_reservas}):</strong></p>`;
     htmlInfo += '<ul style="margin: 10px 0; padding-left: 20px;">';
     franja.reservas.forEach(r => {
         const prioridadBadge = r.prioridad === 'secundaria' ? 
@@ -284,7 +285,7 @@ async function mostrarModalMisReservasMejorado(espacioId, fecha, nombreDia, hora
             <div style="text-align: left; padding: 10px;">
                 <p><strong>Día:</strong> ${nombreDia}</p>
                 <p><strong>Horario:</strong> ${horaInicio} - ${horaFin}</p>
-                <p><strong>Ocupación:</strong> ${franja.num_reservas}/2 reservas</p>
+                <p><strong>Ocupación:</strong> ${franja.num_reservas}/${franja.max_reservas} reservas</p>
                 ${notasHtml}
                 ${otrasReservas}
             </div>
@@ -326,7 +327,7 @@ function mostrarModalMisReservas(espacioId, fecha, nombreDia, horaInicio, horaFi
     document.getElementById('modal-cancelar-info').innerHTML = `
         <p><strong>Día:</strong> ${nombreDia}</p>
         <p><strong>Horario:</strong> ${horaInicio} - ${horaFin}</p>
-        <p><strong>Ocupación:</strong> ${franja.num_reservas}/2 reservas</p>
+        <p><strong>Ocupación:</strong> ${franja.num_reservas}/${franja.max_reservas} reservas</p>
         ${notasHtml}
         ${otrasReservas}
         <p style="color: #ef4444; margin-top: 15px;">¿Deseas cancelar tu reserva?</p>
@@ -357,18 +358,21 @@ function mostrarModalReserva(espacioId, fecha, nombreDia, horaInicio, horaFin, f
     
     let estadoFranja = '';
     if (franja.parcial) {
-        let otroUsuario = franja.reservas[0].usuario;
+        let otrosUsuarios = franja.reservas.map(r => r.usuario).join(', ');
+        const espaciosRestantes = franja.max_reservas - franja.num_reservas;
+        const textoReservas = franja.num_reservas === 1 ? 'reserva' : 'reservas';
+        const textoEspacios = espaciosRestantes === 1 ? 'espacio' : 'espacios';
         estadoFranja = `<p style="background: #FEF3C7; padding: 10px; border-radius: 5px; border-left: 3px solid #F59E0B;">
-            <strong>⚠️ Atención:</strong> Esta franja ya tiene 1 reserva de <strong>${otroUsuario}</strong>. 
-            Aún queda 1 espacio disponible.
+            <strong>⚠️ Atención:</strong> Esta franja ya tiene ${franja.num_reservas} ${textoReservas} de <strong>${otrosUsuarios}</strong>.
+            Quedan ${espaciosRestantes} ${textoEspacios} disponibles.
         </p>`;
     }
-    
+
     document.getElementById('modal-info').innerHTML = `
         ${infoUsuario}
         <p><strong>Día:</strong> ${nombreDia}</p>
         <p><strong>Horario:</strong> ${horaInicio} - ${horaFin}</p>
-        <p><strong>Disponibilidad:</strong> ${franja.num_reservas}/2 reservas</p>
+        <p><strong>Disponibilidad:</strong> ${franja.num_reservas}/${franja.max_reservas} reservas</p>
         ${estadoFranja}
     `;
     

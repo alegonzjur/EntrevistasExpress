@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 from flask import jsonify, render_template, request, session
 
+from app.constants import MAX_RESERVAS_POR_FRANJA
 from app.extensions import db
 from app.models import Espacio, Reserva, Usuario
 from app.services.logs import registrar_log
@@ -65,6 +66,7 @@ def register(app):
             username=session["username"],
             es_admin=session.get("rol") == "admin",
             usuarios_lista=usuarios_lista,
+            max_reservas=MAX_RESERVAS_POR_FRANJA,
         )
 
     @app.route("/api/franjas/<int:dia_id>")
@@ -140,14 +142,15 @@ def register(app):
                     "hora_inicio": franja_inicio,
                     "hora_fin": franja_fin,
                     "num_reservas": num_reservas,
+                    "max_reservas": MAX_RESERVAS_POR_FRANJA,
                     "disponible": num_reservas == 0,
-                    "parcial": num_reservas == 1,
-                    "completa": num_reservas >= 2,
+                    "parcial": 0 < num_reservas < MAX_RESERVAS_POR_FRANJA,
+                    "completa": num_reservas >= MAX_RESERVAS_POR_FRANJA,
                     "tiene_mi_reserva": tiene_mi_reserva,
                     "tiene_secundaria": tiene_secundaria,
                     "solo_secundarias": solo_secundarias,
                     "reservas": reservas_info,
-                    "puede_reservar": num_reservas < 2,
+                    "puede_reservar": num_reservas < MAX_RESERVAS_POR_FRANJA,
                 }
             )
 
@@ -178,13 +181,20 @@ def register(app):
         hora_inicio = datetime.strptime(hora_inicio_str, "%H:%M").time()
         hora_fin = datetime.strptime(hora_fin_str, "%H:%M").time()
 
-        # Verificar que no existan más de 2 reservas
+        # Verificar que no existan más de MAX_RESERVAS_POR_FRANJA reservas
         reservas_existentes = Reserva.query.filter_by(
             espacio_id=espacio_id, fecha=fecha, hora_inicio=hora_inicio
         ).all()
 
-        if len(reservas_existentes) >= 2:
-            return jsonify({"error": "Esta franja ya tiene el máximo de 2 reservas"}), 400
+        if len(reservas_existentes) >= MAX_RESERVAS_POR_FRANJA:
+            return (
+                jsonify(
+                    {
+                        "error": f"Esta franja ya tiene el máximo de {MAX_RESERVAS_POR_FRANJA} reservas"
+                    }
+                ),
+                400,
+            )
 
         # Verificar que el usuario no tenga ya una reserva en esta franja
         reserva_usuario = Reserva.query.filter_by(

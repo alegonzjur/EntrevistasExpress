@@ -11,4 +11,5 @@ ruta concreta.
 
 SEDES_DISPONIBLES = ["Bormujos", "Ciempozuelos", "Pº de la Habana"]
 
+# Número máximo de profesores que pueden reservar una misma frannja (día + hora).
 MAX_RESERVAS_POR_FRANJA = 6
