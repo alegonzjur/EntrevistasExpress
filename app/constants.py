@@ -10,3 +10,5 @@ ruta concreta.
 """
 
 SEDES_DISPONIBLES = ["Bormujos", "Ciempozuelos", "Pº de la Habana"]
+
+MAX_RESERVAS_POR_FRANJA = 6

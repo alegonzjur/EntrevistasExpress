@@ -28,3 +28,6 @@ uploads/*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Archivo app.py / Archivo antiguo con información importante.
+app.py
