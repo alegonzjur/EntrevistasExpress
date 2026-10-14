@@ -471,3 +471,37 @@
     background: linear-gradient(135deg, #9333EA 0%, #7E22CE 100%);
     border: 2px solid #6B21A8;
 }
+
+/* === AVISO: DISPONIBILIDAD MÍNIMA SEMANAL === */
+.aviso-disponibilidad-minima {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 16px 20px;
+    background: var(--color-warning-bg);
+    border-left: 4px solid var(--color-warning);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-sm);
+}
+
+.aviso-disponibilidad-minima .aviso-icono {
+    font-size: 20px;
+    line-height: 1.4;
+}
+
+.aviso-disponibilidad-minima p {
+    margin: 0 0 6px 0;
+    font-weight: 600;
+    color: var(--color-gray-dark);
+}
+
+.aviso-disponibilidad-minima ul {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--color-gray-dark);
+}
+
+.aviso-disponibilidad-minima li {
+    line-height: 1.6;
+}
