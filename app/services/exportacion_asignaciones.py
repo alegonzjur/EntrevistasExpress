@@ -96,7 +96,7 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
             f"{candidato.nombre} {candidato.apellidos}",
             candidato.email or "N/A",
             candidato.telefono or "N/A",
-            float(candidato.media_estudios) if candidato.media_estudios else 0,
+            candidato.media_estudios_texto,
             candidato.sede or "N/A",
             entrevistador.username if entrevistador else "N/A",
             reserva.espacio.nombre if reserva.espacio else "N/A",
@@ -106,9 +106,12 @@ def exportar_asignaciones_xlsx(asignaciones, semana):
         ]
         ws.append(row)
 
-        # Colorear según nota (columna 9)
-        nota = float(candidato.media_estudios) if candidato.media_estudios else 0
-        color_nota = "FFC7CE" if nota < 5.5 else "FFEB9C" if nota < 6.5 else "C6EFCE"
+        # Colorear según nota (columna 9). Sin nota -> gris neutro.
+        if candidato.media_estudios is None:
+            color_nota = "E2E3E5"
+        else:
+            nota = float(candidato.media_estudios)
+            color_nota = "FFC7CE" if nota < 5.5 else "FFEB9C" if nota < 6.5 else "C6EFCE"
         ws.cell(row=idx + 1, column=9).fill = PatternFill(
             start_color=color_nota, end_color=color_nota, fill_type="solid"
         )
@@ -215,7 +218,7 @@ def exportar_asignaciones_csv(asignaciones, semana):
                 f"{candidato.nombre} {candidato.apellidos}",
                 candidato.email or "N/A",
                 candidato.telefono or "N/A",
-                float(candidato.media_estudios) if candidato.media_estudios else 0,
+                candidato.media_estudios_texto,
                 candidato.sede or "N/A",
                 entrevistador.username if entrevistador else "N/A",
                 reserva.espacio.nombre if reserva.espacio else "N/A",
@@ -286,11 +289,7 @@ def exportar_asignaciones_pdf(asignaciones, semana):
                 f"{candidato.nombre[:10]} {candidato.apellidos[:10]}",
                 (candidato.email or "N/A")[:18],
                 (candidato.telefono or "N/A")[:10],
-                (
-                    f"{candidato.media_estudios:.2f}"
-                    if candidato.media_estudios
-                    else "N/A"
-                ),
+                candidato.media_estudios_texto,
                 (entrevistador.username if entrevistador else "N/A")[:10],
                 (reserva.espacio.nombre if reserva.espacio else "N/A")[:8],
             ]

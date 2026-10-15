@@ -74,7 +74,7 @@ def exportar_candidatos_xlsx(candidatos, semana):
             candidato.nombre,
             candidato.email or "N/A",
             candidato.telefono or "N/A",
-            float(candidato.media_estudios) if candidato.media_estudios else 0,
+            candidato.media_estudios_texto,
             candidato.sede or "Sin detectar",
             candidato.primera_opcion or "",
             candidato.estado.upper(),
@@ -82,9 +82,13 @@ def exportar_candidatos_xlsx(candidatos, semana):
         ]
         ws.append(row)
 
-        # Colorear según nota (columna 8)
-        nota = float(candidato.media_estudios) if candidato.media_estudios else 0
-        color = "FFC7CE" if nota < 5.5 else "FFEB9C" if nota < 6.5 else "C6EFCE"
+        # Colorear según nota (columna 8). Sin nota -> gris neutro, nunca
+        # rojo: un candidato sin nota no es lo mismo que uno con nota baja.
+        if candidato.media_estudios is None:
+            color = "E2E3E5"
+        else:
+            nota = float(candidato.media_estudios)
+            color = "FFC7CE" if nota < 5.5 else "FFEB9C" if nota < 6.5 else "C6EFCE"
         ws.cell(row=idx + 1, column=8).fill = PatternFill(
             start_color=color, end_color=color, fill_type="solid"
         )
@@ -174,7 +178,7 @@ def exportar_candidatos_csv(candidatos, semana):
                 candidato.nombre,
                 candidato.email or "N/A",
                 candidato.telefono or "N/A",
-                float(candidato.media_estudios) if candidato.media_estudios else 0,
+                candidato.media_estudios_texto,
                 candidato.sede or "Sin detectar",
                 candidato.primera_opcion or "",
                 candidato.estado.upper(),
@@ -229,11 +233,7 @@ def exportar_candidatos_pdf(candidatos, semana):
                 candidato.nombre[:12],
                 (candidato.email or "N/A")[:20],
                 (candidato.telefono or "N/A")[:12],
-                (
-                    f"{candidato.media_estudios:.2f}"
-                    if candidato.media_estudios
-                    else "N/A"
-                ),
+                candidato.media_estudios_texto,
                 (candidato.sede or "N/A")[:10],
                 candidato.estado.upper(),
             ]

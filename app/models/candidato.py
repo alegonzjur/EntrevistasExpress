@@ -13,9 +13,24 @@ class Candidato(db.Model):
     nombre = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), nullable=True)
     telefono = db.Column(db.String(20), nullable=True)
-    media_estudios = db.Column(db.Numeric(4, 2), nullable=False)
+    # Desde la migración de 2026-10-15: deja de ser obligatoria. El Excel
+    # semanal puede traer esta celda vacía para algún alumno, y eso ya no
+    # impide cargarlo — simplemente queda sin nota (ver
+    # `media_estudios_texto` más abajo, y services/etl_candidatos.py).
+    media_estudios = db.Column(db.Numeric(4, 2), nullable=True)
+    # Desde la migración de 2026-10-15: ya no es el texto libre completo
+    # del Excel ("Grado en Enfermería. CCS de Bormujos..."), sino solo el
+    # centro detectado (Bormujos / Ciempozuelos / Pº de la Habana) — el
+    # mismo valor que `sede`. Se mantienen ambas columnas porque `sede`
+    # es la que usa la lógica de asignación (ver services/asignacion.py),
+    # y conviene no acoplar esa lógica al nombre de una columna que, por
+    # su nombre, un futuro cambio del Excel podría llevar a reinterpretar.
     primera_opcion = db.Column(db.Text)
     sede = db.Column(db.String(50), nullable=True)
+    forma_acceso = db.Column(db.String(50), nullable=True)
+    tipo_bachillerato = db.Column(db.String(100), nullable=True)
+    tipo_fpii_cgs = db.Column(db.String(100), nullable=True)
+    convocatoria = db.Column(db.Integer, nullable=True)
     estado = db.Column(db.String(20), default="pendiente", nullable=False)
     fecha_carga = db.Column(db.DateTime, default=datetime.utcnow)
     semana_carga = db.Column(db.String(20))
@@ -37,6 +52,18 @@ class Candidato(db.Model):
     @property
     def tiene_email(self):
         return self.email is not None and self.email.strip() != ""
+
+    @property
+    def media_estudios_texto(self):
+        """
+        Representación legible de la nota para plantillas y exportaciones:
+        "No disponible" si no se cargó, en vez de dejar que un
+        `"%.2f"|format(None)` falle, o mostrar un 0 que parecería una nota
+        real (y se vería, erróneamente, como la peor nota posible).
+        """
+        if self.media_estudios is None:
+            return "No disponible"
+        return f"{float(self.media_estudios):.2f}"
 
     def to_dict(self):
         # BUG corregido: la línea original ("sedes": [s.nombre for s in

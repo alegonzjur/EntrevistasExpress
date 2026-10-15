@@ -46,10 +46,11 @@ def register(app):
     def gestion_manual_candidatos(semana):
         """Vista de gestión manual de candidatos y asignaciones"""
 
-        # Obtener candidatos de la semana
+        # Obtener candidatos de la semana. Sin nota (media_estudios None)
+        # se ordena como si fuera un 5, igual que en el resto de la app.
         candidatos = (
             Candidato.query.filter_by(semana_carga=semana)
-            .order_by(Candidato.media_estudios.asc())
+            .order_by(db.func.coalesce(Candidato.media_estudios, 5).asc())
             .all()
         )
 

@@ -6,6 +6,7 @@ las vistas de administración de candidatos.
 
 import unicodedata
 
+from app.extensions import db
 from app.models import Candidato
 
 
@@ -62,19 +63,25 @@ def detectar_sede_desde_primera_opcion(primera_opcion):
 
 
 def obtener_candidatos_pendientes():
-    """Obtiene candidatos pendientes ordenados por nota"""
+    """Obtiene candidatos pendientes ordenados por nota.
+
+    Un candidato sin nota (media_estudios None) se ordena como si tuviera
+    un 5, igual que en el algoritmo de asignación (services/asignacion.py)
+    — no al principio ni al final de la lista.
+    """
     return (
         Candidato.query.filter_by(estado="pendiente")
-        .order_by(Candidato.media_estudios.asc())
+        .order_by(db.func.coalesce(Candidato.media_estudios, 5).asc())
         .all()
     )
 
 
 def obtener_candidatos_por_semana(semana):
-    """Obtiene candidatos de una semana específica"""
+    """Obtiene candidatos de una semana específica, ordenados por nota
+    (sin nota -> se trata como un 5, igual que en el resto de la app)."""
     return (
         Candidato.query.filter_by(semana_carga=semana)
-        .order_by(Candidato.media_estudios.asc())
+        .order_by(db.func.coalesce(Candidato.media_estudios, 5).asc())
         .all()
     )
 

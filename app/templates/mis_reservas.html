@@ -213,7 +213,7 @@
             <div class="candidato-mini">
                 <strong>Pos. {{ asig.posicion }}</strong> - 
                 {{ asig.candidato.nombre }} {{ asig.candidato.apellidos }}
-                (📊 {{ "%.2f"|format(asig.candidato.media_estudios) }})
+                (📊 {{ asig.candidato.media_estudios_texto }})
                 - ⏰ {{ asig.hora_exacta.strftime('%H:%M') if asig.hora_exacta else 'N/A' }}
                 {% if asig.candidato.email %}
                 <br><small>📧 {{ asig.candidato.email }}</small>
@@ -306,7 +306,7 @@
             {% for asig in asignaciones %}
             <div class="candidato-mini">
                 {{ asig.candidato.nombre }} {{ asig.candidato.apellidos }}
-                (📊 {{ "%.2f"|format(asig.candidato.media_estudios) }})
+                (📊 {{ asig.candidato.media_estudios_texto }})
             </div>
             {% endfor %}
         </div>

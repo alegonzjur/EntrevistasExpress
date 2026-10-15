@@ -43,7 +43,14 @@ COLUMNAS_NECESARIAS = [
 ]
 
 # Columnas que se usan si están, pero cuya ausencia no es un error.
-COLUMNAS_OPCIONALES = ["Entrevistas", "Tel. Movil"]
+COLUMNAS_OPCIONALES = [
+    "Entrevistas",
+    "Tel. Movil",
+    "Forma de acceso",
+    "Tipo Bachillerato",
+    "Tipo FPII/CGS",
+    "Convocatoria",
+]
 
 MAPEO_COLUMNAS = {
     "Clave académica": "clave_academica",
@@ -55,6 +62,20 @@ MAPEO_COLUMNAS = {
     "Media estudios realizados": "media_estudios",
     "Primera opción": "primera_opcion",
     "Entrevistas": "franjas_disponibilidad",
+    "Forma de acceso": "forma_acceso",
+    "Tipo Bachillerato": "tipo_bachillerato",
+    "Tipo FPII/CGS": "tipo_fpii_cgs",
+    "Convocatoria": "convocatoria",
+}
+
+# Columnas opcionales a las que, si vienen vacías en el Excel (o si la
+# columna no existe en absoluto para esa semana), se les pone este texto
+# en vez de dejarlas en NULL — a petición expresa de negocio, distinto
+# del resto de columnas opcionales (p. ej. telefono o forma_acceso, que
+# si faltan se quedan simplemente en None).
+VALOR_POR_DEFECTO_SI_VACIO = {
+    "tipo_bachillerato": "No disponible",
+    "tipo_fpii_cgs": "No disponible",
 }
 
 
@@ -183,15 +204,23 @@ def transformar(df, umbral, solicitudes_seleccionadas, semana, archivo_origen):
     df_procesado = df[columnas_a_usar].copy()
     df_procesado.rename(columns=MAPEO_COLUMNAS, inplace=True)
 
-    # Limpiar datos
-    df_procesado = df_procesado.dropna(
-        subset=["clave_academica", "apellidos", "nombre", "media_estudios"]
-    )
+    # Limpiar datos. Desde el cambio de 2026-10-15, media_estudios ya NO
+    # es obligatoria: un alumno se carga igual aunque el Excel traiga esa
+    # celda vacía (antes, dropna la descartaba aquí mismo). Se convierte
+    # con pd.to_numeric + dtype=object para que una celda vacía quede en
+    # None de Python (no NaN de numpy), igual que se hizo con
+    # `convocatoria` — necesario para que to_sql la inserte como NULL.
+    df_procesado = df_procesado.dropna(subset=["clave_academica", "apellidos", "nombre"])
     df_procesado["solicitud"] = pd.to_numeric(df_procesado["solicitud"], errors="coerce")
-    df_procesado["media_estudios"] = pd.to_numeric(
+    media_estudios_numerica = pd.to_numeric(
         df_procesado["media_estudios"], errors="coerce"
     )
-    df_procesado = df_procesado.dropna(subset=["solicitud", "media_estudios"])
+    df_procesado["media_estudios"] = pd.Series(
+        [float(x) if pd.notna(x) else None for x in media_estudios_numerica],
+        index=df_procesado.index,
+        dtype=object,
+    )
+    df_procesado = df_procesado.dropna(subset=["solicitud"])
 
     df_procesado["clave_academica"] = (
         df_procesado["clave_academica"].astype(str).str.strip()
@@ -200,15 +229,62 @@ def transformar(df, umbral, solicitudes_seleccionadas, semana, archivo_origen):
     df_procesado["sede"] = df_procesado["primera_opcion"].apply(
         detectar_sede_desde_primera_opcion
     )
+    # A petición de negocio: "Primera opción" deja de guardar el texto
+    # libre completo del Excel ("Grado en Enfermería. CCS de Bormujos...")
+    # y pasa a guardar solo el centro detectado (mismo valor que `sede`;
+    # ver el comentario en el modelo sobre por qué se mantienen las dos
+    # columnas).
+    df_procesado["primera_opcion"] = df_procesado["sede"]
+
+    # Columnas opcionales con valor por defecto si vienen vacías (o si la
+    # columna no existe en absoluto en el Excel de esta semana).
+    for columna, valor_defecto in VALOR_POR_DEFECTO_SI_VACIO.items():
+        if columna in df_procesado.columns:
+            df_procesado[columna] = df_procesado[columna].apply(
+                lambda x: (
+                    valor_defecto
+                    if pd.isna(x) or str(x).strip() == ""
+                    else str(x).strip()
+                )
+            )
+        else:
+            df_procesado[columna] = valor_defecto
+
+    # Convocatoria es un entero (p. ej. "06" -> 6). Si falta o no es
+    # numérica, se deja en None (a diferencia de tipo_bachillerato /
+    # tipo_fpii_cgs, aquí no se pidió un valor por defecto).
+    if "convocatoria" in df_procesado.columns:
+        convocatoria_numerica = pd.to_numeric(
+            df_procesado["convocatoria"], errors="coerce"
+        )
+        # dtype=object a propósito: si se deja que pandas infiera el
+        # tipo (vía .apply normal), una columna sin ningún hueco vacío
+        # se reconvierte a int64 y cada valor queda como numpy.int64 en
+        # vez de int de Python — con psycopg2/to_sql eso puede fallar o
+        # insertarse como un tipo inesperado. Construirla así garantiza
+        # int (o None) nativos de Python en cada fila.
+        df_procesado["convocatoria"] = pd.Series(
+            [int(x) if pd.notna(x) else None for x in convocatoria_numerica],
+            index=df_procesado.index,
+            dtype=object,
+        )
+    else:
+        df_procesado["convocatoria"] = None
 
     total_leidos = len(df)
     total_validos = len(df_procesado)
 
     # Filtro por nota: umbral <= 0 (incluido el valor por defecto, 0)
-    # significa "sin límite", no "ningún candidato pasa".
+    # significa "sin límite", no "ningún candidato pasa". Un candidato
+    # sin nota (media_estudios None) siempre pasa este filtro, pase lo
+    # que pase con el umbral — no hay nota contra la que compararlo, y
+    # la nota que falta no es un motivo para no cargarlo.
     df_filtrado = df_procesado
     if umbral is not None and umbral > 0:
-        df_filtrado = df_filtrado[df_filtrado["media_estudios"] < umbral].copy()
+        df_filtrado = df_filtrado[
+            df_filtrado["media_estudios"].isna()
+            | (df_filtrado["media_estudios"] < umbral)
+        ].copy()
     else:
         df_filtrado = df_filtrado.copy()
 
@@ -293,6 +369,9 @@ def transformar(df, umbral, solicitudes_seleccionadas, semana, archivo_origen):
         "sede",
         "franjas_disponibilidad",
         "franjas_parseadas",
+        "forma_acceso",
+        "tipo_bachillerato",
+        "tipo_fpii_cgs",
     ]:
         if col in df_filtrado.columns:
             df_filtrado[col] = df_filtrado[col].apply(

@@ -150,15 +150,15 @@
                     </thead>
                     <tbody>
                         {% for candidato in candidatos %}
-                        <tr data-estado="{{ candidato.estado }}" 
-                            data-nota="{{ candidato.media_estudios }}"
+                        <tr data-estado="{{ candidato.estado }}"
+                            data-nota="{{ candidato.media_estudios if candidato.media_estudios is not none else '' }}"
                             data-nombre="{{ candidato.nombre|lower }} {{ candidato.apellidos|lower }}">
                             <td><strong>{{ candidato.solicitud }}</strong></td>
                             <td>{{ candidato.apellidos }}</td>
                             <td>{{ candidato.nombre }}</td>
                             <td>
-                                <span class="badge {% if candidato.media_estudios < 5.5 %}bg-danger{% elif candidato.media_estudios < 6.5 %}bg-warning{% else %}bg-info{% endif %}">
-                                    {{ "%.2f"|format(candidato.media_estudios) }}
+                                <span class="badge {% if candidato.media_estudios is none %}bg-secondary{% elif candidato.media_estudios < 5.5 %}bg-danger{% elif candidato.media_estudios < 6.5 %}bg-warning{% else %}bg-info{% endif %}">
+                                    {{ candidato.media_estudios_texto }}
                                 </span>
                             </td>
                             <td>
@@ -263,11 +263,14 @@ function filtrarTabla() {
     filas.forEach(fila => {
         const nombre = fila.getAttribute('data-nombre');
         const estado = fila.getAttribute('data-estado');
-        const nota = parseFloat(fila.getAttribute('data-nota'));
-        
+        const notaAttr = fila.getAttribute('data-nota');
+        // Un candidato sin nota (atributo vacío) no se oculta al mover
+        // el filtro de rango de nota: no hay nota con la que compararlo.
+        const nota = notaAttr === '' ? null : parseFloat(notaAttr);
+
         const coincideNombre = nombre.includes(filtroNombre);
         const coincideEstado = !filtroEstado || estado === filtroEstado;
-        const coincideNota = nota >= filtroNotaMin && nota <= filtroNotaMax;
+        const coincideNota = nota === null || (nota >= filtroNotaMin && nota <= filtroNotaMax);
         
         if (coincideNombre && coincideEstado && coincideNota) {
             fila.style.display = '';

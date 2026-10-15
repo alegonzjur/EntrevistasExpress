@@ -107,6 +107,7 @@
     .nota-baja { background: #ffc7ce; color: #c00; }
     .nota-media { background: #ffeb9c; color: #856404; }
     .nota-alta { background: #c6efce; color: #155724; }
+    .nota-sin-datos { background: #e2e3e5; color: #41464b; }
     
     .reserva-header {
         display: flex;
@@ -307,7 +308,7 @@
             <div class="candidato-item {{ candidato.estado }}" 
                  data-candidato-id="{{ candidato.clave_candidato }}"
                  data-estado="{{ candidato.estado }}"
-                 onclick="seleccionarCandidato({{ candidato.clave_academica }}, '{{ candidato.nombre }} {{ candidato.apellidos }}', {{ candidato.media_estudios }}, '{{ candidato.estado }}')">
+                 onclick="seleccionarCandidato({{ candidato.clave_academica }}, '{{ candidato.nombre }} {{ candidato.apellidos }}', {{ 'null' if candidato.media_estudios is none else candidato.media_estudios }}, '{{ candidato.estado }}')">
                 <div class="candidato-nombre">
                     {{ candidato.nombre }} {{ candidato.apellidos }}
                     {% if candidato.estado == 'asignado' %}
@@ -315,8 +316,8 @@
                     {% endif %}
                 </div>
                 <div class="candidato-info">
-                    <span class="nota-badge {% if candidato.media_estudios < 5.5 %}nota-baja{% elif candidato.media_estudios < 6.5 %}nota-media{% else %}nota-alta{% endif %}">
-                        📊 {{ "%.2f"|format(candidato.media_estudios) }}
+                    <span class="nota-badge {% if candidato.media_estudios is none %}nota-sin-datos{% elif candidato.media_estudios < 5.5 %}nota-baja{% elif candidato.media_estudios < 6.5 %}nota-media{% else %}nota-alta{% endif %}">
+                        📊 {{ candidato.media_estudios_texto }}
                     </span>
                     <span>📧 {{ candidato.email or 'Sin email' }}</span>
                 </div>
@@ -374,7 +375,7 @@
                         <span>
                             <strong>Pos.{{ asig.posicion }}</strong> - 
                             {{ asig.candidato.nombre }} {{ asig.candidato.apellidos }}
-                            ({{ "%.2f"|format(asig.candidato.media_estudios) }})
+                            ({{ asig.candidato.media_estudios_texto }})
                         </span>
                         <button class="btn-desasignar" 
                                 onclick="event.stopPropagation(); desasignarCandidato({{ asig.id }}, '{{ asig.candidato.nombre }} {{ asig.candidato.apellidos }}')">
@@ -462,11 +463,15 @@ function actualizarPanelAccion() {
     const info = document.getElementById('info-seleccion');
     const btnConfirmar = document.getElementById('btn-confirmar-asignacion');
     
+    const notaTexto = (candidatoSeleccionado && candidatoSeleccionado.nota !== null)
+        ? candidatoSeleccionado.nota
+        : 'No disponible';
+
     if (candidatoSeleccionado && reservaSeleccionada) {
         panel.style.display = 'block';
         info.innerHTML = `
             <strong>Candidato:</strong> ${candidatoSeleccionado.nombre}<br>
-            <strong>Nota:</strong> ${candidatoSeleccionado.nota}<br>
+            <strong>Nota:</strong> ${notaTexto}<br>
             <strong>Clave:</strong> ${candidatoSeleccionado.clave_academica}<br>
             <hr style="margin: 10px 0;">
             <strong>Reserva:</strong> ${reservaSeleccionada.fecha} a las ${reservaSeleccionada.hora}<br>
@@ -477,7 +482,7 @@ function actualizarPanelAccion() {
         panel.style.display = 'block';
         info.innerHTML = `
             <strong>Candidato seleccionado:</strong><br>
-            ${candidatoSeleccionado.nombre} (${candidatoSeleccionado.nota})<br>
+            ${candidatoSeleccionado.nombre} (${notaTexto})<br>
             <strong>Clave:</strong> ${candidatoSeleccionado.clave_academica}<br>
             <br>
             <em style="color: #666;">Ahora selecciona una reserva →</em>

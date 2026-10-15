@@ -145,10 +145,13 @@ def ejecutar_asignacion_automatica(semana_carga, usuario_id, max_por_profesor=No
     # FASE 1: OBTENER CANDIDATOS Y CLASIFICAR
     # ========================================
 
-    # Obtener TODOS los candidatos pendientes
+    # Obtener TODOS los candidatos pendientes. Un candidato sin nota
+    # (media_estudios None, desde que esa celda del Excel dejó de ser
+    # obligatoria) se trata, a efectos de este orden, como si tuviera
+    # una nota de 5 — ni al principio ni al final de la cola.
     candidatos_todos = (
         Candidato.query.filter_by(semana_carga=semana_carga, estado="pendiente")
-        .order_by(Candidato.media_estudios.asc())
+        .order_by(db.func.coalesce(Candidato.media_estudios, 5).asc())
         .all()
     )
 
@@ -343,7 +346,10 @@ def ejecutar_asignacion_automatica(semana_carga, usuario_id, max_por_profesor=No
 
     # Combinar candidatos sin preferencias + candidatos con preferencias no asignados
     candidatos_restantes = [c for c in candidatos_todos if c.estado == "pendiente"]
-    candidatos_restantes.sort(key=lambda x: x.media_estudios)  # Ordenar por nota
+    # Ordenar por nota; sin nota -> se trata como un 5 (ver Fase 1).
+    candidatos_restantes.sort(
+        key=lambda x: x.media_estudios if x.media_estudios is not None else 5
+    )
 
     candidatos_asignados_sin_preferencia = 0
 

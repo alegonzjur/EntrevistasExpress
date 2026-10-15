@@ -203,8 +203,8 @@
                                 <br><small class="text-muted">Sol: {{ asignacion.candidato.solicitud }}</small>
                             </td>
                             <td>
-                                <span class="badge {% if asignacion.candidato.media_estudios < 5.5 %}bg-danger{% elif asignacion.candidato.media_estudios < 6.5 %}bg-warning{% else %}bg-info{% endif %}">
-                                    {{ "%.2f"|format(asignacion.candidato.media_estudios) }}
+                                <span class="badge {% if asignacion.candidato.media_estudios is none %}bg-secondary{% elif asignacion.candidato.media_estudios < 5.5 %}bg-danger{% elif asignacion.candidato.media_estudios < 6.5 %}bg-warning{% else %}bg-info{% endif %}">
+                                    {{ asignacion.candidato.media_estudios_texto }}
                                 </span>
                             </td>
                             <td>
@@ -276,7 +276,7 @@
                                     </p>
                                     <p class="mb-1">
                                         <small>
-                                            📊 Nota: <span class="badge bg-info">{{ "%.2f"|format(asignacion.candidato.media_estudios) }}</span>
+                                            📊 Nota: <span class="badge bg-info">{{ asignacion.candidato.media_estudios_texto }}</span>
                                         </small>
                                     </p>
                                     <p class="mb-0">
@@ -657,6 +657,3 @@ function testEmail() {
 </script>
 
 {% endblock %}
-
-
-

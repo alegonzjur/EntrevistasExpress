@@ -318,9 +318,11 @@ def register(app):
     def ver_candidatos_semana(semana):
         """Ver candidatos de una semana específica"""
 
+        # Sin nota (media_estudios None) se ordena como si fuera un 5,
+        # igual que en el resto de la app (ver services/candidatos.py).
         candidatos_lista = (
             Candidato.query.filter_by(semana_carga=semana)
-            .order_by(Candidato.media_estudios.asc())
+            .order_by(db.func.coalesce(Candidato.media_estudios, 5).asc())
             .all()
         )
 

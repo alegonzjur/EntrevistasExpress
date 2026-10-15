@@ -40,9 +40,11 @@ def register(app):
     def exportar_candidatos(semana, formato):
         """Exporta candidatos de una semana en diferentes formatos"""
 
+        # Sin nota (media_estudios None) se ordena como si fuera un 5,
+        # igual que en el resto de la app (ver services/candidatos.py).
         candidatos = (
             Candidato.query.filter_by(semana_carga=semana)
-            .order_by(Candidato.media_estudios.desc())
+            .order_by(db.func.coalesce(Candidato.media_estudios, 5).desc())
             .all()
         )
 
