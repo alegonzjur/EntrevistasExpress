@@ -141,11 +141,17 @@
                         </div>
                         
                         <div class="mb-3">
-                            <label for="umbralNota" class="form-label">Umbral de Nota:</label>
-                            <input type="number" class="form-control" id="umbralNota" name="umbral" value="7.0" step="0.1" min="0" max="10" required>
-                            <small class="form-text text-muted">Solo candidatos con nota menor a este valor</small>
+                            <label for="umbralNota" class="form-label">Umbral de Nota (opcional):</label>
+                            <input type="number" class="form-control" id="umbralNota" name="umbral" value="0" step="0.1" min="0" max="10">
+                            <small class="form-text text-muted">0 = sin límite de nota (se cargan todos). Un valor mayor que 0 solo carga candidatos con nota menor a ese valor.</small>
                         </div>
-                        
+
+                        <div class="mb-3">
+                            <label for="solicitudesSeleccionadas" class="form-label">Solicitudes a cargar (opcional):</label>
+                            <input type="text" class="form-control" id="solicitudesSeleccionadas" name="solicitudes" placeholder="Ej: 1-4,6,8,9">
+                            <small class="form-text text-muted">Igual que al elegir páginas a imprimir: números sueltos y/o rangos "inicio-fin" separados por comas. Vacío = todas las solicitudes (sujetas al umbral de nota, si lo hay).</small>
+                        </div>
+
                         <button type="submit" class="btn btn-primary" id="btnCargar">
                             <i class="fas fa-upload"></i> Cargar y Procesar
                         </button>
@@ -396,15 +402,17 @@ document.getElementById('formCargarExcel').addEventListener('submit', async func
         Swal.close();
         
         if (response.ok) {
+            const filtroNota = data.umbral > 0 ? ` (nota < ${data.umbral})` : ' (sin filtro de nota)';
+            const filtroSolicitudes = data.solicitudes ? `<br>• Solicitudes seleccionadas: ${data.solicitudes.join(', ')}` : '';
             let mensajeHTML = `
                 <div style="text-align: left;">
                     <strong>✅ ${data.candidatos_finales} candidatos importados correctamente</strong><br><br>
                     📊 <strong>Detalles:</strong><br>
                     • Total leídos: ${data.total_leidos}<br>
                     • Válidos: ${data.total_validos}<br>
-                    • Importados (nota < ${data.umbral}): ${data.candidatos_finales}
+                    • Importados${filtroNota}: ${data.candidatos_finales}${filtroSolicitudes}
             `;
-            
+
             if (data.candidatos_duplicados && data.candidatos_duplicados > 0) {
                 mensajeHTML += `<br>• ⚠️ Duplicados omitidos: ${data.candidatos_duplicados}`;
             }

@@ -7,11 +7,9 @@ la exportación de informes vive en routes/exportaciones.py.)
 """
 
 import hashlib
-import json
 import os
 from datetime import datetime
 
-import pandas as pd
 from sqlalchemy import func
 
 from flask import jsonify, render_template, request, session
@@ -20,11 +18,14 @@ from werkzeug.utils import secure_filename
 from app.extensions import db
 from app.models import Asignacion, Candidato, CargaExcel, LogAsignacion
 from app.services.asignacion import ejecutar_asignacion_automatica
-from app.services.candidatos import (
-    detectar_sede_desde_primera_opcion,
-    obtener_estadisticas_semana_candidatos,
+from app.services.candidatos import obtener_estadisticas_semana_candidatos
+from app.services.etl_candidatos import (
+    ErrorCargaExcel,
+    cargar,
+    extraer,
+    parsear_rango_solicitudes,
+    transformar,
 )
-from app.services.franjas import parsear_franjas_disponibilidad
 from app.services.logs import registrar_log
 from app.utils.archivos import allowed_file
 from app.utils.decorators import admin_required
@@ -143,10 +144,16 @@ def register(app):
         try:
             # Obtener parámetros
             semana = request.form.get("semana")
-            umbral = float(request.form.get("umbral", 7.0))
+            umbral = float(request.form.get("umbral", 0))
+            solicitudes_texto = request.form.get("solicitudes", "")
 
             if not semana:
                 return jsonify({"error": "Debe especificar una semana"}), 400
+
+            try:
+                solicitudes_seleccionadas = parsear_rango_solicitudes(solicitudes_texto)
+            except ErrorCargaExcel as e:
+                return jsonify({"error": e.mensaje}), 400
 
             # Guardar archivo temporalmente
             filename = secure_filename(file.filename)
@@ -178,225 +185,39 @@ def register(app):
                     400,
                 )
 
-            # Procesar Excel
-            df = pd.read_excel(filepath, header=23)  # Fila 24 = índice 23
+            # --- ETL: Extract ---
+            df = extraer(filepath)
 
-            # Columnas:
-            # - "Correo electrónico" en lugar de "Email"
-            # - "Entrevistas" en lugar de "Franjas de disponibilidad..."
-            columnas_necesarias = [
-                "Clave académica",
-                "Solicitud",
-                "Apellidos",
-                "Nombre",
-                "Correo electrónico",
-                "Media estudios realizados",
-                "Primera opción",
-            ]
-
-            # Columnas opcionales
-            columnas_opcionales = ["Entrevistas", "Tel. Movil"]
-
-            # Verificar columnas obligatorias
-            columnas_faltantes = [
-                col for col in columnas_necesarias if col not in df.columns
-            ]
-
-            if columnas_faltantes:
+            # --- ETL: Transform ---
+            try:
+                df_filtrado, stats = transformar(
+                    df,
+                    umbral=umbral,
+                    solicitudes_seleccionadas=solicitudes_seleccionadas,
+                    semana=semana,
+                    archivo_origen=filename,
+                )
+            except ErrorCargaExcel as e:
                 os.remove(filepath)
-                return (
-                    jsonify(
-                        {"error": f'Columnas faltantes: {", ".join(columnas_faltantes)}'}
-                    ),
-                    400,
-                )
+                return jsonify({"error": e.mensaje, **e.extra}), 400
 
-            # Seleccionar columnas (obligatorias + opcionales que existan)
-            columnas_a_usar = columnas_necesarias.copy()
-            for col in columnas_opcionales:
-                if col in df.columns:
-                    columnas_a_usar.append(col)
+            total_leidos = stats["total_leidos"]
+            total_validos = stats["total_validos"]
+            candidatos_finales = stats["candidatos_finales"]
+            candidatos_duplicados = stats["candidatos_duplicados"]
+            candidatos_por_sede = stats["candidatos_por_sede"]
+            candidatos_sin_sede = stats["candidatos_sin_sede"]
+            candidatos_con_preferencias = stats["candidatos_con_preferencias"]
+            candidatos_sin_preferencias = stats["candidatos_sin_preferencias"]
 
-            df_procesado = df[columnas_a_usar].copy()
-
-            # Mapeo de columnas
-            mapeo_columnas = {
-                "Clave académica": "clave_academica",
-                "Solicitud": "solicitud",
-                "Apellidos": "apellidos",
-                "Nombre": "nombre",
-                "Correo electrónico": "email",
-                "Tel. Movil": "telefono",
-                "Media estudios realizados": "media_estudios",
-                "Primera opción": "primera_opcion",
-                "Entrevistas": "franjas_disponibilidad",
-            }
-
-            df_procesado.rename(columns=mapeo_columnas, inplace=True)
-
-            # Limpiar datos
-            df_procesado = df_procesado.dropna(
-                subset=["clave_academica", "apellidos", "nombre", "media_estudios"]
-            )
-            df_procesado["solicitud"] = pd.to_numeric(
-                df_procesado["solicitud"], errors="coerce"
-            )
-            df_procesado["media_estudios"] = pd.to_numeric(
-                df_procesado["media_estudios"], errors="coerce"
-            )
-            df_procesado = df_procesado.dropna(subset=["solicitud", "media_estudios"])
-
-            # Convertir clave_academica a string
-            df_procesado["clave_academica"] = (
-                df_procesado["clave_academica"].astype(str).str.strip()
-            )
-
-            # Detectar sede desde primera_opcion
-            df_procesado["sede"] = df_procesado["primera_opcion"].apply(
-                detectar_sede_desde_primera_opcion
-            )
-
-            total_leidos = len(df)
-            total_validos = len(df_procesado)
-
-            # Filtrar por umbral
-            df_filtrado = df_procesado[df_procesado["media_estudios"] < umbral].copy()
-
-            # Parsear franjas de disponibilidad
-            if "franjas_disponibilidad" in df_filtrado.columns:
-                df_filtrado["tiene_preferencias"] = df_filtrado[
-                    "franjas_disponibilidad"
-                ].notna() & (
-                    df_filtrado["franjas_disponibilidad"].astype(str).str.strip()
-                    != ""
-                )
-
-                # Parsear franjas
-                df_filtrado["franjas_parseadas"] = df_filtrado[
-                    "franjas_disponibilidad"
-                ].apply(
-                    lambda x: (
-                        json.dumps(
-                            parsear_franjas_disponibilidad(x), ensure_ascii=False
-                        )
-                        if pd.notna(x) and str(x).strip() != ""
-                        else None
-                    )
-                )
-            else:
-                df_filtrado["tiene_preferencias"] = False
-                df_filtrado["franjas_parseadas"] = None
-                df_filtrado["franjas_disponibilidad"] = None
-
-            # Añadir campos de gestión
-            df_filtrado["estado"] = "pendiente"
-            df_filtrado["fecha_carga"] = datetime.now()
-            df_filtrado["semana_carga"] = semana
-            df_filtrado["archivo_origen"] = filename
-
-            candidatos_finales = len(df_filtrado)
-
-            if candidatos_finales == 0:
-                os.remove(filepath)
-                return (
-                    jsonify(
-                        {
-                            "error": f"No hay candidatos con nota inferior a {umbral}",
-                            "total_leidos": int(total_leidos),
-                            "total_validos": int(total_validos),
-                        }
-                    ),
-                    400,
-                )
-
-            # Estadísticas por sede
-            candidatos_por_sede_raw = df_filtrado["sede"].value_counts().to_dict()
-            candidatos_por_sede = {
-                str(k) if k is not None else "Sin detectar": int(v)
-                for k, v in candidatos_por_sede_raw.items()
-            }
-            candidatos_sin_sede = int(df_filtrado["sede"].isna().sum())
-
-            # Estadísticas de preferencias
-            candidatos_con_preferencias = int(df_filtrado["tiene_preferencias"].sum())
-            candidatos_sin_preferencias = (
-                candidatos_finales - candidatos_con_preferencias
-            )
-
-            # Verificar duplicados (por clave_academica)
-            claves_en_df = df_filtrado["clave_academica"].tolist()
-            candidatos_existentes = Candidato.query.filter(
-                Candidato.clave_academica.in_(claves_en_df)
-            ).all()
-
-            candidatos_duplicados = len(candidatos_existentes)
-
-            if candidatos_duplicados > 0:
-                claves_duplicadas = [c.clave_academica for c in candidatos_existentes]
-                df_filtrado = df_filtrado[
-                    ~df_filtrado["clave_academica"].isin(claves_duplicadas)
-                ].copy()
-                candidatos_finales = len(df_filtrado)
-
-                if candidatos_finales == 0:
-                    os.remove(filepath)
-                    return (
-                        jsonify(
-                            {
-                                "error": f"Todos los candidatos ({candidatos_duplicados}) ya están cargados",
-                                "duplicados": candidatos_duplicados,
-                                "total_leidos": int(total_leidos),
-                            }
-                        ),
-                        400,
-                    )
-
-                # Recalcular estadísticas
-                candidatos_por_sede_raw = df_filtrado["sede"].value_counts().to_dict()
-                candidatos_por_sede = {
-                    str(k) if k is not None else "Sin detectar": int(v)
-                    for k, v in candidatos_por_sede_raw.items()
-                }
-                candidatos_sin_sede = int(df_filtrado["sede"].isna().sum())
-                candidatos_con_preferencias = int(
-                    df_filtrado["tiene_preferencias"].sum()
-                )
-                candidatos_sin_preferencias = (
-                    candidatos_finales - candidatos_con_preferencias
-                )
-
-            # Codificar campos de texto
-            for col in [
-                "apellidos",
-                "nombre",
-                "primera_opcion",
-                "archivo_origen",
-                "email",
-                "telefono",
-                "sede",
-                "franjas_disponibilidad",
-                "franjas_parseadas",
-            ]:
-                if col in df_filtrado.columns:
-                    df_filtrado[col] = df_filtrado[col].apply(
-                        lambda x: (
-                            str(x).encode("utf-8", "ignore").decode("utf-8")
-                            if x is not None and str(x) not in ["nan", "None"]
-                            else None
-                        )
-                    )
-
-            # Guardar en base de datos
-            df_filtrado.to_sql(
-                "candidatos",
-                db.engine,
-                if_exists="append",
-                index=False,
-                method="multi",
-                chunksize=100,
-            )
+            # --- ETL: Load ---
+            cargar(df_filtrado)
 
             # Registrar carga
+            filtro_nota_texto = f"con nota < {umbral}" if umbral > 0 else "sin filtro de nota"
+            filtro_solicitudes_texto = (
+                f", solicitudes {solicitudes_texto.strip()}" if solicitudes_seleccionadas else ""
+            )
             carga = CargaExcel(
                 archivo_nombre=filename,
                 archivo_hash=archivo_hash,
@@ -406,7 +227,7 @@ def register(app):
                 cargado_por_usuario_id=session["user_id"],
                 semana_destino=semana,
                 estado="completado",
-                mensaje=f"Importación exitosa. {candidatos_finales} candidatos con nota < {umbral}"
+                mensaje=f"Importación exitosa. {candidatos_finales} candidatos {filtro_nota_texto}{filtro_solicitudes_texto}"
                 + (
                     f" ({candidatos_duplicados} duplicados omitidos)"
                     if candidatos_duplicados > 0
@@ -472,6 +293,7 @@ def register(app):
                     "candidatos_finales": int(candidatos_finales),
                     "candidatos_duplicados": int(candidatos_duplicados),
                     "umbral": float(umbral),
+                    "solicitudes": sorted(solicitudes_seleccionadas) if solicitudes_seleccionadas else None,
                     "semana": str(semana),
                     "candidatos_por_sede": candidatos_por_sede,
                     "candidatos_sin_sede": int(candidatos_sin_sede),
