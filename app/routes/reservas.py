@@ -12,6 +12,7 @@ from app.constants import MAX_RESERVAS_POR_FRANJA
 from app.extensions import db
 from app.models import Espacio, Reserva, Usuario
 from app.services.logs import registrar_log
+from app.utils.cursos import obtener_cursos_disponibles, rango_fechas_curso
 from app.utils.decorators import admin_required, login_required
 
 
@@ -336,6 +337,7 @@ def register(app):
         dia_filtro = request.args.get("dia", "")
         fecha_desde = request.args.get("fecha_desde", "")
         fecha_hasta = request.args.get("fecha_hasta", "")
+        curso_filtro = request.args.get("curso", "")
 
         query = Reserva.query
 
@@ -353,12 +355,31 @@ def register(app):
             fecha_hasta_obj = datetime.strptime(fecha_hasta, "%Y-%m-%d").date()
             query = query.filter(Reserva.fecha <= fecha_hasta_obj)
 
+        if curso_filtro:
+            inicio_curso, fin_curso = rango_fechas_curso(curso_filtro)
+            query = query.filter(
+                Reserva.fecha >= inicio_curso, Reserva.fecha <= fin_curso
+            )
+
+        # Orden pedido por el usuario: primero de lunes a viernes (los
+        # espacios se crean en ese orden en seed.py, así que ordenar por
+        # espacio_id ascendente agrupa por día de la semana, igual que ya
+        # hace la vista semanal de /reservas), y dentro de un mismo día,
+        # por la franja horaria más temprana primero. La fecha se añade
+        # como criterio final solo para que el orden sea estable cuando
+        # coinciden día de la semana y hora en semanas distintas.
         reservas_filtradas = query.order_by(
-            Reserva.fecha.desc(), Reserva.hora_inicio.desc()
+            Reserva.espacio_id.asc(), Reserva.hora_inicio.asc(), Reserva.fecha.asc()
         ).all()
 
         usuarios = Usuario.query.filter_by(activo=True).order_by(Usuario.username).all()
         espacios = Espacio.query.order_by(Espacio.id).all()
+
+        # Cursos disponibles para el selector de filtro, calculados a
+        # partir de las fechas de todas las reservas (sin cargar los
+        # objetos completos).
+        todas_las_fechas = [f for (f,) in db.session.query(Reserva.fecha).all()]
+        cursos_disponibles = obtener_cursos_disponibles(todas_las_fechas)
 
         total_reservas = len(reservas_filtradas)
         usuarios_unicos = len(set(r.usuario_id for r in reservas_filtradas))
@@ -369,6 +390,7 @@ def register(app):
             reservas=reservas_filtradas,
             usuarios=usuarios,
             espacios=espacios,
+            cursos_disponibles=cursos_disponibles,
             total_reservas=total_reservas,
             usuarios_unicos=usuarios_unicos,
             dias_con_reservas=dias_con_reservas,
@@ -376,5 +398,6 @@ def register(app):
             dia_filtro=dia_filtro,
             fecha_desde=fecha_desde,
             fecha_hasta=fecha_hasta,
+            curso_filtro=curso_filtro,
             username=session["username"],
         )

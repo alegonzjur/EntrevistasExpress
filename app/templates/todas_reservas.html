@@ -34,12 +34,12 @@
                     <option value="">Todos los usuarios</option>
                     {% for usuario in usuarios %}
                     <option value="{{ usuario.id }}" {% if usuario_filtro == usuario.id|string %}selected{% endif %}>
-                        {{ usuario.username }}
+                        {{ usuario.nombre_completo or usuario.username }}
                     </option>
                     {% endfor %}
                 </select>
             </div>
-            
+
             <div class="filtro-group">
                 <label for="dia">📅 Día:</label>
                 <select id="dia" name="dia">
@@ -51,17 +51,29 @@
                     {% endfor %}
                 </select>
             </div>
-            
+
+            <div class="filtro-group">
+                <label for="curso">🎓 Curso:</label>
+                <select id="curso" name="curso">
+                    <option value="">Todos los cursos</option>
+                    {% for curso in cursos_disponibles %}
+                    <option value="{{ curso }}" {% if curso_filtro == curso %}selected{% endif %}>
+                        {{ curso }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
             <div class="filtro-group">
                 <label for="fecha_desde">📆 Desde:</label>
                 <input type="date" id="fecha_desde" name="fecha_desde" value="{{ fecha_desde }}">
             </div>
-            
+
             <div class="filtro-group">
                 <label for="fecha_hasta">📆 Hasta:</label>
                 <input type="date" id="fecha_hasta" name="fecha_hasta" value="{{ fecha_hasta }}">
             </div>
-            
+
             <button type="submit" class="btn-filtrar">🔍 Filtrar</button>
             <a href="{{ url_for('todas_reservas') }}" class="btn-limpiar">🔄 Limpiar</a>
         </div>
@@ -82,6 +94,7 @@
         <thead>
             <tr>
                 <th>Fecha</th>
+                <th>Curso</th>
                 <th>Día</th>
                 <th>Horario</th>
                 <th>Usuario</th>
@@ -94,6 +107,7 @@
             {% for reserva in reservas %}
             <tr id="reserva-{{ reserva.id }}">
                 <td class="fecha-cell">{{ reserva.fecha.strftime('%d/%m/%Y') }}</td>
+                <td class="curso-cell">{{ reserva.curso }}</td>
                 <td>
                     <span class="badge-dia badge-{{ reserva.espacio.nombre.lower() }}">
                         {{ reserva.espacio.nombre }}
@@ -104,10 +118,10 @@
                 </td>
                 <td>
                     <div class="usuario-column">
-                        <span class="badge-usuario">{{ reserva.usuario.username }}</span>
+                        <span class="badge-usuario">{{ reserva.usuario.nombre_completo or reserva.usuario.username }}</span>
                         {% if reserva.creador_admin %}
                         <span style="font-size: 11px; color: #666;" title="Creada por admin">
-                            (por {{ reserva.creador_admin.username }})
+                            (por {{ reserva.creador_admin.nombre_completo or reserva.creador_admin.username }})
                         </span>
                         {% endif %}
                     </div>
@@ -120,7 +134,7 @@
                 </td>
                 <td class="acciones-cell">
                     <button class="btn-ver" onclick="verDetalles({{ reserva.id }})">Ver</button>
-                    <button class="btn-eliminar-tabla" onclick="eliminarReserva({{ reserva.id }}, '{{ reserva.usuario.username }}')">
+                    <button class="btn-eliminar-tabla" onclick="eliminarReserva({{ reserva.id }}, '{{ reserva.usuario.nombre_completo or reserva.usuario.username }}')">
                         Eliminar
                     </button>
                 </td>
@@ -149,17 +163,19 @@ function verDetalles(reservaId) {
     // Extraer datos
     const cells = fila.getElementsByTagName('td');
     const fecha = cells[0].textContent;
-    const dia = cells[1].textContent.trim();
-    const horario = cells[2].textContent;
-    const usuario = cells[3].querySelector('.badge-usuario').textContent;
-    const notas = cells[4].getAttribute('title');
-    const creada = cells[5].textContent;
-    
+    const curso = cells[1].textContent.trim();
+    const dia = cells[2].textContent.trim();
+    const horario = cells[3].textContent;
+    const usuario = cells[4].querySelector('.badge-usuario').textContent;
+    const notas = cells[5].getAttribute('title');
+    const creada = cells[6].textContent;
+
     // Mostrar en alert (puedes mejorar esto con un modal bonito)
     alert(`
 📋 DETALLES DE LA RESERVA
 
 📅 Fecha: ${fecha}
+🎓 Curso: ${curso}
 📆 Día: ${dia}
 🕐 Horario: ${horario}
 👤 Usuario: ${usuario}

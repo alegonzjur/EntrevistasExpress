@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.extensions import db
+from app.utils.cursos import obtener_curso_academico
 
 
 class Reserva(db.Model):
@@ -17,3 +18,11 @@ class Reserva(db.Model):
         db.Integer, db.ForeignKey("usuarios.id"), nullable=True
     )
     prioridad = db.Column(db.String(20), default="normal", nullable=False)
+
+    @property
+    def curso(self):
+        """Curso académico (1 sep - 31 ago) al que pertenece esta reserva,
+        calculado a partir de su fecha — no es una columna propia, para no
+        tener que recalcular/migrar nada si la convención de cursos
+        cambiara en el futuro."""
+        return obtener_curso_academico(self.fecha)
