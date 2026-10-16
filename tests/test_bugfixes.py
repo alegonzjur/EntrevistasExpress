@@ -158,7 +158,7 @@ def test_admin_estadisticas_renderiza_sin_reservas(admin_client):
     TemplateNotFound. Ahora existe y debe renderizar incluso sin datos."""
     resp = admin_client.get("/admin/estadisticas")
     assert resp.status_code == 200
-    assert "Todavía no hay reservas".encode() in resp.data
+    assert "No hay reservas".encode() in resp.data
 
 
 def test_admin_estadisticas_renderiza_con_reservas(app, admin_client, admin_user):

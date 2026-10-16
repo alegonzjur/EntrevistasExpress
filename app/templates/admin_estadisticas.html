@@ -90,6 +90,31 @@ td {
     font-size: 72px;
     margin-bottom: 20px;
 }
+
+.filtro-sede {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.filtro-sede label {
+    font-weight: 600;
+    color: #0066B3;
+}
+
+.filtro-sede select {
+    padding: 8px 12px;
+    border: 2px solid #E0E0E0;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.filtro-sede .btn-limpiar-sede {
+    font-size: 13px;
+    color: #666;
+    text-decoration: none;
+}
 {% endblock %}
 
 {% block content %}
@@ -120,7 +145,22 @@ td {
     </div>
 </div>
 
-<h3 style="color: #0066B3; margin-bottom: 15px;">🏆 Top 10 — Reservas por profesor</h3>
+<h3 style="color: #0066B3; margin-bottom: 15px;">📋 Reservas por profesor</h3>
+
+<form method="GET" action="{{ url_for('admin_estadisticas') }}" class="filtro-sede">
+    <label for="sede">🏫 Sede:</label>
+    <select id="sede" name="sede" onchange="this.form.submit()">
+        <option value="">Todas las sedes</option>
+        {% for sede in sedes_disponibles %}
+        <option value="{{ sede.nombre }}" {% if sede_filtro == sede.nombre %}selected{% endif %}>
+            {{ sede.nombre }}
+        </option>
+        {% endfor %}
+    </select>
+    {% if sede_filtro %}
+    <a href="{{ url_for('admin_estadisticas') }}" class="btn-limpiar-sede">🔄 Quitar filtro</a>
+    {% endif %}
+</form>
 
 {% if reservas_por_usuario %}
 <div class="ranking-tabla">
@@ -128,15 +168,15 @@ td {
         <thead>
             <tr>
                 <th>#</th>
-                <th>Usuario</th>
+                <th>Profesor</th>
                 <th>Reservas</th>
             </tr>
         </thead>
         <tbody>
-            {% for username_fila, total in reservas_por_usuario %}
+            {% for usuario, total in reservas_por_usuario %}
             <tr>
                 <td class="puesto">{{ loop.index }}</td>
-                <td>{{ username_fila }}</td>
+                <td>{{ usuario.nombre_completo or usuario.username }}</td>
                 <td>{{ total }}</td>
             </tr>
             {% endfor %}
@@ -146,8 +186,14 @@ td {
 {% else %}
 <div class="empty-state">
     <div class="empty-state-icon">📭</div>
-    <h3>Todavía no hay reservas</h3>
-    <p>El ranking aparecerá en cuanto se registre la primera reserva.</p>
+    <h3>No hay reservas{% if sede_filtro %} para esta sede{% endif %}</h3>
+    <p>
+        {% if sede_filtro %}
+        Prueba a quitar el filtro de sede o elige otra.
+        {% else %}
+        La lista aparecerá en cuanto se registre la primera reserva.
+        {% endif %}
+    </p>
 </div>
 {% endif %}
 {% endblock %}

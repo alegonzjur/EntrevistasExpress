@@ -65,6 +65,18 @@
             </div>
 
             <div class="filtro-group">
+                <label for="sede">🏫 Sede:</label>
+                <select id="sede" name="sede">
+                    <option value="">Todas las sedes</option>
+                    {% for sede in sedes_disponibles %}
+                    <option value="{{ sede.nombre }}" {% if sede_filtro == sede.nombre %}selected{% endif %}>
+                        {{ sede.nombre }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="filtro-group">
                 <label for="fecha_desde">📆 Desde:</label>
                 <input type="date" id="fecha_desde" name="fecha_desde" value="{{ fecha_desde }}">
             </div>

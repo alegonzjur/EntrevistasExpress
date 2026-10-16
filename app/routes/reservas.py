@@ -10,7 +10,7 @@ from flask import jsonify, render_template, request, session
 
 from app.constants import MAX_RESERVAS_POR_FRANJA
 from app.extensions import db
-from app.models import Espacio, Reserva, Usuario
+from app.models import Espacio, Reserva, Sede, Usuario
 from app.services.logs import registrar_log
 from app.utils.cursos import obtener_cursos_disponibles, rango_fechas_curso
 from app.utils.decorators import admin_required, login_required
@@ -338,6 +338,7 @@ def register(app):
         fecha_desde = request.args.get("fecha_desde", "")
         fecha_hasta = request.args.get("fecha_hasta", "")
         curso_filtro = request.args.get("curso", "")
+        sede_filtro = request.args.get("sede", "")
 
         query = Reserva.query
 
@@ -372,8 +373,21 @@ def register(app):
             Reserva.espacio_id.asc(), Reserva.hora_inicio.asc(), Reserva.fecha.asc()
         ).all()
 
+        # El filtro de sede no es una columna de Reserva (una reserva no
+        # tiene sede propia): es la sede que puede atender el profesor que
+        # hizo la reserva. Se aplica en Python reutilizando
+        # Usuario.puede_atender_sede(), la misma lógica que ya usa el
+        # algoritmo de asignación, en vez de reconstruirla en SQL.
+        if sede_filtro:
+            reservas_filtradas = [
+                r for r in reservas_filtradas if r.usuario.puede_atender_sede(sede_filtro)
+            ]
+
         usuarios = Usuario.query.filter_by(activo=True).order_by(Usuario.username).all()
         espacios = Espacio.query.order_by(Espacio.id).all()
+        sedes_disponibles = (
+            Sede.query.filter_by(activa=True).order_by(Sede.nombre).all()
+        )
 
         # Cursos disponibles para el selector de filtro, calculados a
         # partir de las fechas de todas las reservas (sin cargar los
@@ -390,6 +404,7 @@ def register(app):
             reservas=reservas_filtradas,
             usuarios=usuarios,
             espacios=espacios,
+            sedes_disponibles=sedes_disponibles,
             cursos_disponibles=cursos_disponibles,
             total_reservas=total_reservas,
             usuarios_unicos=usuarios_unicos,
@@ -399,5 +414,6 @@ def register(app):
             fecha_desde=fecha_desde,
             fecha_hasta=fecha_hasta,
             curso_filtro=curso_filtro,
+            sede_filtro=sede_filtro,
             username=session["username"],
         )

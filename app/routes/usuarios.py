@@ -391,8 +391,13 @@ def register(app):
 
         total_reservas = Reserva.query.count()
 
-        reservas_por_usuario = (
-            db.session.query(Usuario.username, func.count(Reserva.id).label("total"))
+        sede_filtro = request.args.get("sede", "")
+        sedes_disponibles = (
+            Sede.query.filter_by(activa=True).order_by(Sede.nombre).all()
+        )
+
+        reservas_por_usuario_todos = (
+            db.session.query(Usuario, func.count(Reserva.id).label("total"))
             # Join explícito: Usuario tiene dos relaciones FK hacia Reserva
             # (usuario_id y creado_por_admin), así que un .join(Reserva) sin
             # condición es ambiguo para SQLAlchemy y lanza
@@ -402,11 +407,24 @@ def register(app):
             # propio usuario", que es la lectura que tiene sentido para esta
             # estadística.
             .join(Reserva, Reserva.usuario_id == Usuario.id)
-            .group_by(Usuario.username)
+            .group_by(Usuario.id)
             .order_by(func.count(Reserva.id).desc())
-            .limit(10)
             .all()
         )
+
+        # No es "modo competición" (ya no hay Top 10): se listan todos los
+        # profesores con reservas, de mayor a menor, y se puede acotar a
+        # una sede concreta — un profesor puede atender varias sedes
+        # (reutilizamos la misma lógica que ya decide, en el algoritmo de
+        # asignación, si un profesor puede atender una sede dada).
+        if sede_filtro:
+            reservas_por_usuario = [
+                (usuario, total)
+                for usuario, total in reservas_por_usuario_todos
+                if usuario.puede_atender_sede(sede_filtro)
+            ]
+        else:
+            reservas_por_usuario = reservas_por_usuario_todos
 
         return render_template(
             "admin_estadisticas.html",
@@ -416,5 +434,7 @@ def register(app):
             usuarios_activos=usuarios_activos,
             total_reservas=total_reservas,
             reservas_por_usuario=reservas_por_usuario,
+            sedes_disponibles=sedes_disponibles,
+            sede_filtro=sede_filtro,
             username=session["username"],
         )
