@@ -90,6 +90,9 @@
                 <button class="btn btn-success me-2" onclick="mostrarModalEnviarEmails()">
                     <i class="fas fa-envelope"></i> Enviar Emails
                 </button>
+                <button class="btn btn-outline-success me-2" onclick="mostrarModalEnvioIndividual()">
+                    <i class="fas fa-user-check"></i> Envío Individual
+                </button>
                 <!-- <button class="btn btn-sm btn-outline-primary" onclick="exportarAsignaciones()">
                     <i class="fas fa-download"></i> Exportar
                 </button> -->
@@ -520,6 +523,66 @@ function imprimirAsignaciones() {
         </div>
     </div>
 </div>
+
+<!-- Modal de envío individual -->
+<div class="modal fade" id="modalEnvioIndividual" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-user-check"></i> Envío Individual de Emails
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">
+                    Elige exactamente a quién enviar, sin reenviar al resto de la semana —
+                    útil después de gestionar manualmente una sola entrevista.
+                </p>
+
+                <div id="individualCargando" class="text-center py-4">
+                    <div class="spinner-border text-success" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                </div>
+
+                <div id="individualContenido" style="display: none;">
+                    <h6 class="mt-2">
+                        📧 Candidatos con email pendiente de envío
+                        <span class="badge bg-secondary" id="contadorCandidatosPendientes">0</span>
+                    </h6>
+                    <div id="listaCandidatosPendientes" class="border rounded p-2 mb-3" style="max-height: 220px; overflow-y: auto;">
+                        <!-- Rellenado por JS -->
+                    </div>
+
+                    <h6>
+                        👨‍🏫 Profesores con asignaciones esta semana
+                        <span class="badge bg-secondary" id="contadorProfesoresSemana">0</span>
+                    </h6>
+                    <small class="text-muted d-block mb-2">
+                        Se incluyen todos, aunque ya se les haya enviado antes su resumen —
+                        el sistema no guarda ese estado para el profesor.
+                    </small>
+                    <div id="listaProfesoresSemana" class="border rounded p-2 mb-3" style="max-height: 220px; overflow-y: auto;">
+                        <!-- Rellenado por JS -->
+                    </div>
+                </div>
+
+                <div id="individualVacio" class="alert alert-info" style="display: none;">
+                    No hay candidatos pendientes de email ni profesores con asignaciones esta semana.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Cancelar
+                </button>
+                <button type="button" class="btn btn-success" id="btnEnviarIndividual" onclick="enviarEmailsIndividual()" disabled>
+                    <i class="fas fa-paper-plane"></i> Enviar a los seleccionados
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <!-- Código existente... -->
@@ -618,6 +681,142 @@ function enviarEmails() {
             // Recargar página para actualizar estados
             setTimeout(() => location.reload(), 1000);
             
+        } else {
+            alert('❌ Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        modalProgreso.hide();
+        console.error('Error:', error);
+        alert('❌ Error al enviar emails: ' + error.message);
+    });
+}
+
+// ===== Envío individual de emails =====
+
+function mostrarModalEnvioIndividual() {
+    const modal = new bootstrap.Modal(document.getElementById('modalEnvioIndividual'));
+    modal.show();
+
+    // Reset de estado cada vez que se abre
+    document.getElementById('individualCargando').style.display = 'block';
+    document.getElementById('individualContenido').style.display = 'none';
+    document.getElementById('individualVacio').style.display = 'none';
+    document.getElementById('btnEnviarIndividual').disabled = true;
+
+    const semana = '{{ semana }}';
+
+    fetch(`/admin/candidatos/envio-individual/${semana}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('individualCargando').style.display = 'none';
+
+            if (data.candidatos.length === 0 && data.profesores.length === 0) {
+                document.getElementById('individualVacio').style.display = 'block';
+                return;
+            }
+
+            document.getElementById('individualContenido').style.display = 'block';
+
+            // Candidatos pendientes de email
+            document.getElementById('contadorCandidatosPendientes').textContent = data.candidatos.length;
+            const listaCandidatos = document.getElementById('listaCandidatosPendientes');
+            if (data.candidatos.length === 0) {
+                listaCandidatos.innerHTML = '<p class="text-muted mb-0">No hay candidatos con email pendiente.</p>';
+            } else {
+                listaCandidatos.innerHTML = data.candidatos.map(c => `
+                    <div class="form-check">
+                        <input class="form-check-input check-candidato" type="checkbox"
+                               value="${c.asignacion_id}" id="cand-${c.asignacion_id}"
+                               onchange="actualizarBotonEnvioIndividual()">
+                        <label class="form-check-label" for="cand-${c.asignacion_id}">
+                            <strong>${c.nombre}</strong>
+                            <small class="text-muted"> — ${c.fecha} ${c.hora} con ${c.entrevistador}</small>
+                        </label>
+                    </div>
+                `).join('');
+            }
+
+            // Profesores de la semana
+            document.getElementById('contadorProfesoresSemana').textContent = data.profesores.length;
+            const listaProfesores = document.getElementById('listaProfesoresSemana');
+            if (data.profesores.length === 0) {
+                listaProfesores.innerHTML = '<p class="text-muted mb-0">No hay profesores con asignaciones esta semana.</p>';
+            } else {
+                listaProfesores.innerHTML = data.profesores.map(p => `
+                    <div class="form-check">
+                        <input class="form-check-input check-profesor" type="checkbox"
+                               value="${p.id}" id="prof-${p.id}"
+                               onchange="actualizarBotonEnvioIndividual()">
+                        <label class="form-check-label" for="prof-${p.id}">
+                            <strong>${p.nombre}</strong>
+                            <small class="text-muted"> — ${p.num_asignaciones} entrevista${p.num_asignaciones !== 1 ? 's' : ''} esta semana</small>
+                        </label>
+                    </div>
+                `).join('');
+            }
+        })
+        .catch(error => {
+            document.getElementById('individualCargando').style.display = 'none';
+            console.error('Error:', error);
+            alert('❌ Error al cargar los destinatarios: ' + error.message);
+        });
+}
+
+function actualizarBotonEnvioIndividual() {
+    const hayCandidatos = document.querySelectorAll('.check-candidato:checked').length > 0;
+    const hayProfesores = document.querySelectorAll('.check-profesor:checked').length > 0;
+    document.getElementById('btnEnviarIndividual').disabled = !(hayCandidatos || hayProfesores);
+}
+
+function enviarEmailsIndividual() {
+    const asignaciones = Array.from(document.querySelectorAll('.check-candidato:checked')).map(el => parseInt(el.value));
+    const profesores = Array.from(document.querySelectorAll('.check-profesor:checked')).map(el => parseInt(el.value));
+
+    if (asignaciones.length === 0 && profesores.length === 0) {
+        return;
+    }
+
+    if (!confirm(`¿Enviar email a ${asignaciones.length} candidato(s) y ${profesores.length} profesor(es) seleccionados?`)) {
+        return;
+    }
+
+    const semana = '{{ semana }}';
+
+    const modalIndividual = bootstrap.Modal.getInstance(document.getElementById('modalEnvioIndividual'));
+    modalIndividual.hide();
+
+    const modalProgreso = new bootstrap.Modal(document.getElementById('modalProgresoEmails'));
+    modalProgreso.show();
+
+    fetch(`/admin/candidatos/envio-individual/${semana}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asignaciones: asignaciones, profesores: profesores })
+    })
+    .then(response => response.json())
+    .then(data => {
+        modalProgreso.hide();
+
+        if (data.success) {
+            let mensaje = `✅ Envío individual completado\n\n`;
+            mensaje += `📧 Candidatos enviados: ${data.candidatos_enviados}\n`;
+            if (data.candidatos_error > 0) mensaje += `  • Errores: ${data.candidatos_error}\n`;
+            mensaje += `👨‍🏫 Profesores enviados: ${data.entrevistadores_enviados}\n`;
+            if (data.entrevistadores_error > 0) mensaje += `  • Errores: ${data.entrevistadores_error}\n`;
+            mensaje += `\n📊 Total: ${data.total_enviados} emails enviados`;
+            alert(mensaje);
+
+            if (data.errores && data.errores.length > 0) {
+                console.error('Errores al enviar emails:', data.errores);
+                let errorMsg = 'Errores encontrados:\n\n';
+                data.errores.forEach(err => {
+                    errorMsg += `• ${err.candidato || err.entrevistador}: ${err.error}\n`;
+                });
+                alert(errorMsg);
+            }
+
+            setTimeout(() => location.reload(), 1000);
         } else {
             alert('❌ Error: ' + data.error);
         }

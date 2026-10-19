@@ -106,6 +106,293 @@ def register(app):
         else:
             return jsonify({"error": "Formato no soportado"}), 400
 
+    @app.route("/admin/candidatos/envio-individual/<semana>")
+    @admin_required
+    def destinatarios_envio_individual(semana):
+        """
+        Quiénes se pueden elegir para un envío individual (o de 2-3
+        personas) en vez del envío masivo de toda la semana:
+
+        - Candidatos: solo los que ya están cargados Y asignados (tienen
+          una Asignacion para esta semana) y cuyo email todavía NO se ha
+          enviado — si ya se envió, no tiene sentido ofrecerlo aquí (para
+          reenviar a un candidato puntual se sigue usando la opción
+          "reenviar" del envío masivo).
+        - Profesores: todos los que tengan al menos una asignación esta
+          semana, se les haya enviado ya su resumen o no — a diferencia
+          de los candidatos, el sistema no guarda si a un profesor ya se
+          le envió su resumen semanal (no hay campo para ello), así que
+          siempre se ofrecen todos.
+
+        GET /admin/candidatos/envio-individual/2026-W43
+        """
+        asignaciones_pendientes = (
+            Asignacion.query.join(Candidato)
+            .filter(
+                Candidato.semana_carga == semana,
+                Asignacion.enviado_email.isnot(True),
+            )
+            .order_by(Candidato.apellidos, Candidato.nombre)
+            .all()
+        )
+
+        candidatos = [
+            {
+                "asignacion_id": a.id,
+                "clave_academica": a.candidato.clave_academica,
+                "nombre": f"{a.candidato.nombre} {a.candidato.apellidos}",
+                "email": a.candidato.email,
+                "entrevistador": (
+                    a.entrevistador.nombre_completo or a.entrevistador.username
+                    if a.entrevistador
+                    else "N/A"
+                ),
+                "fecha": a.reserva.fecha.strftime("%d/%m/%Y") if a.reserva else "N/A",
+                "hora": (
+                    a.hora_exacta.strftime("%H:%M")
+                    if a.hora_exacta
+                    else (a.reserva.hora_inicio.strftime("%H:%M") if a.reserva else "N/A")
+                ),
+            }
+            for a in asignaciones_pendientes
+        ]
+
+        profesores_semana = (
+            Usuario.query.join(
+                Asignacion, Asignacion.entrevistador_id == Usuario.id
+            )
+            .join(Candidato, Candidato.clave_academica == Asignacion.candidato_clave)
+            .filter(Candidato.semana_carga == semana)
+            .distinct()
+            .order_by(Usuario.username)
+            .all()
+        )
+
+        profesores = [
+            {
+                "id": u.id,
+                "nombre": u.nombre_completo or u.username,
+                "email": u.email,
+                "num_asignaciones": Asignacion.query.join(Candidato)
+                .filter(
+                    Candidato.semana_carga == semana,
+                    Asignacion.entrevistador_id == u.id,
+                )
+                .count(),
+            }
+            for u in profesores_semana
+        ]
+
+        return jsonify({"candidatos": candidatos, "profesores": profesores})
+
+    @app.route("/admin/candidatos/envio-individual/<semana>", methods=["POST"])
+    @admin_required
+    def enviar_emails_individual(semana):
+        """
+        Envío individual (o de un grupo pequeño) para una semana: a
+        diferencia de /admin/candidatos/enviar-emails/<semana>, aquí el
+        admin elige exactamente a quién, en vez de reenviar
+        automáticamente a toda la semana — pensado para cuando se
+        gestiona manualmente una sola entrevista y solo hace falta
+        avisar a esa persona (o a 2-3), sin tocar al resto.
+
+        A un profesor seleccionado se le manda su resumen de TODAS sus
+        entrevistas de esta semana (igual que en el envío masivo), no
+        solo la que motivó el envío — un profesor no recibe "medio"
+        resumen.
+
+        POST /admin/candidatos/envio-individual/2026-W43
+        {
+            "asignaciones": [12, 15],   // ids de Asignacion (candidatos)
+            "profesores": [3, 7]        // ids de Usuario (entrevistadores)
+        }
+        """
+        data = request.json or {}
+        asignacion_ids = data.get("asignaciones", [])
+        profesor_ids = data.get("profesores", [])
+
+        if not asignacion_ids and not profesor_ids:
+            return jsonify({"error": "No se ha seleccionado a nadie"}), 400
+
+        resultados = {
+            "candidatos_enviados": 0,
+            "candidatos_error": 0,
+            "entrevistadores_enviados": 0,
+            "entrevistadores_error": 0,
+            "errores": [],
+        }
+
+        # ===== Candidatos seleccionados =====
+        for asignacion_id in asignacion_ids:
+            asignacion = (
+                Asignacion.query.join(Candidato)
+                .filter(
+                    Asignacion.id == asignacion_id,
+                    Candidato.semana_carga == semana,
+                )
+                .first()
+            )
+            if not asignacion:
+                resultados["candidatos_error"] += 1
+                resultados["errores"].append(
+                    {
+                        "candidato": f"Asignación #{asignacion_id}",
+                        "error": "No encontrada en esta semana",
+                    }
+                )
+                continue
+
+            try:
+                if not validar_email(asignacion.candidato.email):
+                    resultados["errores"].append(
+                        {
+                            "candidato": f"{asignacion.candidato.nombre} {asignacion.candidato.apellidos}",
+                            "error": "Email inválido o vacío",
+                        }
+                    )
+                    resultados["candidatos_error"] += 1
+                    continue
+
+                subject, html = generar_email_candidato(asignacion)
+                msg = Message(
+                    subject=subject, recipients=[asignacion.candidato.email], html=html
+                )
+                mail.send(msg)
+
+                asignacion.enviado_email = True
+                asignacion.fecha_email = datetime.now()
+                resultados["candidatos_enviados"] += 1
+
+                registrar_log(
+                    accion="enviar_email",
+                    entidad="candidato",
+                    entidad_id=asignacion.candidato.clave_academica,
+                    descripcion=f"Email individual enviado a: {asignacion.candidato.nombre} {asignacion.candidato.apellidos} ({asignacion.candidato.email})",
+                    nivel="info",
+                    metadata={
+                        "tipo": "confirmacion_entrevista_individual",
+                        "asignacion_id": asignacion.id,
+                    },
+                )
+
+            except Exception as e:
+                resultados["candidatos_error"] += 1
+                resultados["errores"].append(
+                    {
+                        "candidato": f"{asignacion.candidato.nombre} {asignacion.candidato.apellidos}",
+                        "error": str(e),
+                    }
+                )
+                registrar_log(
+                    accion="enviar_email",
+                    entidad="candidato",
+                    entidad_id=asignacion.candidato.clave_academica,
+                    descripcion=f"Error al enviar email individual a: {asignacion.candidato.email} - {str(e)}",
+                    nivel="error",
+                )
+
+        # ===== Profesores seleccionados =====
+        for profesor_id in profesor_ids:
+            entrevistador = Usuario.query.get(profesor_id)
+            if not entrevistador:
+                resultados["entrevistadores_error"] += 1
+                resultados["errores"].append(
+                    {
+                        "entrevistador": f"Usuario #{profesor_id}",
+                        "error": "No encontrado",
+                    }
+                )
+                continue
+
+            try:
+                if not validar_email(entrevistador.email):
+                    resultados["errores"].append(
+                        {
+                            "entrevistador": entrevistador.nombre_completo
+                            or entrevistador.username,
+                            "error": "Email inválido o vacío",
+                        }
+                    )
+                    resultados["entrevistadores_error"] += 1
+                    continue
+
+                asignaciones_profesor = (
+                    Asignacion.query.join(Candidato)
+                    .filter(
+                        Candidato.semana_carga == semana,
+                        Asignacion.entrevistador_id == profesor_id,
+                    )
+                    .all()
+                )
+
+                if not asignaciones_profesor:
+                    resultados["entrevistadores_error"] += 1
+                    resultados["errores"].append(
+                        {
+                            "entrevistador": entrevistador.nombre_completo
+                            or entrevistador.username,
+                            "error": f"No tiene asignaciones en la semana {semana}",
+                        }
+                    )
+                    continue
+
+                subject, html = generar_email_entrevistador(
+                    entrevistador, asignaciones_profesor
+                )
+                msg = Message(
+                    subject=subject, recipients=[entrevistador.email], html=html
+                )
+                mail.send(msg)
+
+                resultados["entrevistadores_enviados"] += 1
+
+                registrar_log(
+                    accion="enviar_email",
+                    entidad="entrevistador",
+                    entidad_id=str(entrevistador.id),
+                    descripcion=f"Email individual (resumen semanal) enviado a: {entrevistador.nombre_completo or entrevistador.username} ({entrevistador.email})",
+                    nivel="info",
+                    metadata={
+                        "tipo": "resumen_entrevistador_individual",
+                        "semana": semana,
+                    },
+                )
+
+            except Exception as e:
+                resultados["entrevistadores_error"] += 1
+                resultados["errores"].append(
+                    {
+                        "entrevistador": entrevistador.nombre_completo
+                        or entrevistador.username,
+                        "error": str(e),
+                    }
+                )
+
+        db.session.commit()
+
+        registrar_log(
+            accion="enviar_email_individual",
+            entidad="sistema",
+            entidad_id=None,
+            descripcion=f'Envío individual: {resultados["candidatos_enviados"]} candidatos, {resultados["entrevistadores_enviados"]} entrevistadores',
+            datos_nuevos=resultados,
+            nivel="info",
+            metadata={"semana": semana},
+        )
+
+        return jsonify(
+            {
+                "success": True,
+                "candidatos_enviados": resultados["candidatos_enviados"],
+                "candidatos_error": resultados["candidatos_error"],
+                "entrevistadores_enviados": resultados["entrevistadores_enviados"],
+                "entrevistadores_error": resultados["entrevistadores_error"],
+                "total_enviados": resultados["candidatos_enviados"]
+                + resultados["entrevistadores_enviados"],
+                "errores": resultados["errores"],
+            }
+        )
+
     @app.route("/admin/candidatos/enviar-emails/<semana>", methods=["POST"])
     @admin_required
     def enviar_emails_semana(semana):

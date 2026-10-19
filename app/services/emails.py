@@ -93,6 +93,13 @@ def generar_email_candidato(asignacion):
         entrevistador.enlace_videollamada_personal if entrevistador else None
     )
 
+    # El enlace de entrevista depende del profesor (puede no haberlo
+    # configurado). BUG corregido: el enlace de la prueba de inglés vivía
+    # anidado dentro de este mismo bloque "seccion_videollamada", así que
+    # cuando el profesor no tenía enlace de videollamada, el candidato
+    # tampoco recibía el enlace a la prueba de inglés — pero la prueba de
+    # inglés es siempre la misma, independientemente del profesor, así
+    # que ahora es su propio bloque, que se muestra siempre.
     seccion_videollamada = ""
     if enlace_videollamada:
         seccion_videollamada = f"""
@@ -105,7 +112,15 @@ def generar_email_candidato(asignacion):
                                                    target="_blank">
                                                     Únete en la web
                                                 </a>
-                                                <br>
+                                            </span>
+                                        </p>
+        """
+
+    seccion_prueba_ingles = f"""
+                                        <p style="margin: 0 0 15px 0; font-size: 16px; color: #333333;">
+                                            <span style="font-size: 20px;">🇬🇧</span>
+                                            <strong>Prueba de inglés:</strong><br>
+                                            <span style="margin-left: 30px;">
                                                 <a href="http://www.comillas.edu/ingleseuef"
                                                    style="color: #0066B3; text-decoration: none; font-weight: 600;"
                                                    target="_blank">
@@ -188,6 +203,8 @@ def generar_email_candidato(asignacion):
                                         </p>
 
                                         {seccion_videollamada}
+
+                                        {seccion_prueba_ingles}
 
                                         <p style="margin: 0; font-size: 16px; color: #333333;">
                                             <span style="font-size: 20px;">👤</span>

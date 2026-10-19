@@ -231,6 +231,7 @@ tr:hover {
                 <th>Usuario</th>
                 <th>Email</th>
                 <th>Rol</th>
+                <th>Enlace Videollamada</th>
                 <th>Sede</th>
                 <th>Estado</th>
                 <th>Fecha Registro</th>
@@ -246,6 +247,13 @@ tr:hover {
                     <span class="badge badge-{{ usuario.rol }}">
                         {{ 'Administrador' if usuario.rol == 'admin' else 'Profesor' }}
                     </span>
+                </td>
+                <td style="text-align: center;">
+                    {% if usuario.enlace_videollamada_personal %}
+                    <span style="color: #16a34a; font-size: 18px;" title="Tiene enlace de videollamada configurado">✅</span>
+                    {% else %}
+                    <span style="color: #ef4444; font-size: 18px;" title="No ha introducido su enlace de videollamada">❌</span>
+                    {% endif %}
                 </td>
                 <td>
                     {% if usuario.sedes %}
