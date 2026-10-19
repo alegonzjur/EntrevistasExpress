@@ -229,6 +229,7 @@ tr:hover {
         <thead>
             <tr>
                 <th>Usuario</th>
+                <th>Nombre</th>
                 <th>Email</th>
                 <th>Rol</th>
                 <th>Enlace Videollamada</th>
@@ -242,6 +243,13 @@ tr:hover {
             {% for usuario in usuarios %}
             <tr id="usuario-{{ usuario.id }}">
                 <td><strong>{{ usuario.username }}</strong></td>
+                <td>
+                    {% if usuario.nombre_completo %}
+                        {{ usuario.nombre_completo }}
+                    {% else %}
+                        <span style="color: #999;">Sin nombre registrado</span>
+                    {% endif %}
+                </td>
                 <td>{{ usuario.email }}</td>
                 <td>
                     <span class="badge badge-{{ usuario.rol }}">
