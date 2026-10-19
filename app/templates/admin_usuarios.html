@@ -50,6 +50,21 @@ h2 {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
+/* Esta página tiene más columnas de las que caben en el ancho
+   general (1400px) de .container definido en base.html. Para que se
+   vea todo sin cortes, pero sin afectar al resto de páginas, esta
+   envoltura "rompe" el ancho del contenedor global y centra un
+   ancho propio y mayor solo aquí. */
+.pagina-ancha {
+    width: 100vw;
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 1800px;
+    box-sizing: border-box;
+    padding: 0 20px;
+}
+
 .usuarios-tabla {
     background: white;
     border-radius: 10px;
@@ -57,8 +72,13 @@ h2 {
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
+.usuarios-tabla-scroll {
+    overflow-x: auto;
+}
+
 table {
     width: 100%;
+    min-width: 1500px;
     border-collapse: collapse;
 }
 
@@ -199,6 +219,7 @@ tr:hover {
 {% endblock %}
 
 {% block content %}
+<div class="pagina-ancha">
 <div class="admin-header">
     <h2>👥 Gestión de Usuarios</h2>
     <a href="{{ url_for('registro') }}" class="btn-nuevo-usuario">+ Nuevo Usuario</a>
@@ -225,6 +246,7 @@ tr:hover {
 
 {% if usuarios %}
 <div class="usuarios-tabla">
+    <div class="usuarios-tabla-scroll">
     <table>
         <thead>
             <tr>
@@ -299,6 +321,7 @@ tr:hover {
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 {% else %}
 <div class="empty-state">
@@ -307,6 +330,7 @@ tr:hover {
     <p>Crea el primer usuario haciendo clic en "Nuevo Usuario"</p>
 </div>
 {% endif %}
+</div>
 {% endblock %}
 
 {% block scripts %}
