@@ -337,6 +337,25 @@ def register(app):
             username=session["username"],
         )
 
+    @app.route("/admin/candidato/<clave_academica>/detalle")
+    @admin_required
+    def ver_detalle_candidato(clave_academica):
+        """
+        Página de perfil de un candidato: muestra todos sus datos
+        cargados desde el Excel semanal. Disponible tanto para candidatos
+        pendientes como asignados (botón "Ver detalles" en
+        /admin/candidatos/semana/<semana>).
+        """
+        candidato = Candidato.query.filter_by(
+            clave_academica=clave_academica.strip()
+        ).first_or_404()
+
+        return render_template(
+            "candidato_detalle.html",
+            candidato=candidato,
+            username=session["username"],
+        )
+
     @app.route("/admin/candidatos/eliminar/<clave_academica>", methods=["POST"])
     @admin_required
     def eliminar_candidato_por_clave(clave_academica):

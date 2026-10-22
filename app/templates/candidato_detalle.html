@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}Perfil de {{ candidato.nombre }} {{ candidato.apellidos }}{% endblock %}
+
+{% block styles %}
+.perfil-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: linear-gradient(135deg, #0066B3 0%, #003D7A 100%);
+    border-radius: 10px;
+    color: white;
+}
+
+.perfil-header h2 {
+    margin: 0;
+    color: white;
+}
+
+.perfil-header .subtitulo {
+    margin-top: 5px;
+    opacity: 0.9;
+    font-size: 14px;
+}
+
+.btn-volver {
+    padding: 10px 20px;
+    background: white;
+    color: #0066B3;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.ficha-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+.ficha-card {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.ficha-card h4 {
+    color: #0066B3;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #E0E0E0;
+    font-size: 16px;
+}
+
+.dato {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #F0F0F0;
+    font-size: 14px;
+}
+
+.dato:last-child {
+    border-bottom: none;
+}
+
+.dato .etiqueta {
+    color: #666;
+    font-weight: 500;
+}
+
+.dato .valor {
+    color: #333;
+    text-align: right;
+    max-width: 60%;
+}
+
+.badge-estado {
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.badge-pendiente { background: #f59e0b; color: white; }
+.badge-asignado { background: #4ade80; color: white; }
+.badge-entrevistado { background: #0066B3; color: white; }
+
+.sin-dato {
+    color: #999;
+}
+{% endblock %}
+
+{% block content %}
+<div class="perfil-header">
+    <div>
+        <h2>🧑‍🎓 {{ candidato.nombre }} {{ candidato.apellidos }}</h2>
+        <div class="subtitulo">Clave académica: {{ candidato.clave_academica }} · Solicitud {{ candidato.solicitud }}</div>
+    </div>
+    <a href="{{ url_for('ver_candidatos_semana', semana=candidato.semana_carga) }}" class="btn-volver">← Volver a la semana</a>
+</div>
+
+<div class="ficha-grid">
+    <div class="ficha-card">
+        <h4>📋 Datos de Contacto</h4>
+        <div class="dato">
+            <span class="etiqueta">Email</span>
+            <span class="valor">
+                {% if candidato.email %}{{ candidato.email }}{% else %}<span class="sin-dato">Sin email</span>{% endif %}
+            </span>
+        </div>
+        <div class="dato">
+            <span class="etiqueta">Teléfono</span>
+            <span class="valor">
+                {% if candidato.telefono %}{{ candidato.telefono }}{% else %}<span class="sin-dato">No disponible</span>{% endif %}
+            </span>
+        </div>
+    </div>
+
+    <div class="ficha-card">
+        <h4>🎓 Datos Académicos</h4>
+        <div class="dato">
+            <span class="etiqueta">Media de estudios</span>
+            <span class="valor">{{ candidato.media_estudios_texto }}</span>
+        </div>
+        <div class="dato">
+            <span class="etiqueta">Primera opción (centro)</span>
+            <span class="valor">
+                {% if candidato.primera_opcion %}{{ candidato.primera_opcion }}{% else %}<span class="sin-dato">No disponible</span>{% endif %}
+            </span>
+        </div>
+        <div class="dato">
+            <span class="etiqueta">Sede</span>
+            <span class="valor">
+                {% if candidato.sede %}{{ candidato.sede }}{% else %}<span class="sin-dato">No disponible</span>{% endif %}
+            </span>
+        </div>
+        <div class="dato">
+            <span class="etiqueta">Forma de acceso</span>
+            <span class="valor">
+                {% if candidato.forma_acceso %}{{ candidato.forma_acceso }}{% else %}<span class="sin-dato">No disponible</span>{% endif %}
+            </span>
+        </div>
+        <div class="dato">
+            <span class="etiqueta">Tipo bachillerato</span>
+            <span class="valor">
+                {% if candidato.tipo_bachillerato %}{{ candidato.tipo_bachillerato }}{% else %}<span class="sin-dato">No disponible</span>{% endif %}
+            </span>
+        </div>
+        <div class="dato">
+            <span class="etiqueta">Tipo FPII / CGS</span>
+            <span class="valor">
+                {% if candidato.tipo_fpii_cgs %}{{ candidato.tipo_fpii_cgs }}{% else %}<span class="sin-dato">No disponible</span>{% endif %}
+            </span>
+        </div>
+        <div class="dato">
+            <span class="etiqueta">Convocatoria</span>
+            <span class="valor">
+                {% if candidato.convocatoria is not none %}{{ candidato.convocatoria }}{% else %}<span class="sin-dato">No disponible</span>{% endif %}
+            </span>
+        </div>
+    </div>
+
+    <div class="ficha-card">
+        <h4>📅 Disponibilidad</h4>
+        <div class="dato">
+            <span class="etiqueta">Tiene preferencias de franja</span>
+            <span class="valor">{{ 'Sí' if candidato.tiene_preferencias else 'No' }}</span>
+        </div>
+        <div class="dato">
+            <span class="etiqueta">Franjas indicadas</span>
+            <span class="valor">
+                {% if candidato.franjas_disponibilidad %}{{ candidato.franjas_disponibilidad }}{% else %}<span class="sin-dato">No disponible</span>{% endif %}
+            </span>
+        </div>
+    </div>
+
+    <div class="ficha-card">
+        <h4>📦 Carga y Estado</h4>
+        <div class="dato">
+            <span class="etiqueta">Estado</span>
+            <span class="valor">
+                <span class="badge-estado badge-{{ candidato.estado }}">
+                    {{ candidato.estado|capitalize }}
+                </span>
+            </span>
+        </div>
+        <div class="dato">
+            <span class="etiqueta">Semana de carga</span>
+            <span class="valor">{{ candidato.semana_carga or '—' }}</span>
+        </div>
+        <div class="dato">
+            <span class="etiqueta">Fecha de carga</span>
+            <span class="valor">
+                {% if candidato.fecha_carga %}{{ candidato.fecha_carga.strftime('%d/%m/%Y %H:%M') }}{% else %}<span class="sin-dato">No disponible</span>{% endif %}
+            </span>
+        </div>
+        <div class="dato">
+            <span class="etiqueta">Archivo de origen</span>
+            <span class="valor">
+                {% if candidato.archivo_origen %}{{ candidato.archivo_origen }}{% else %}<span class="sin-dato">No disponible</span>{% endif %}
+            </span>
+        </div>
+    </div>
+</div>
+{% endblock %}

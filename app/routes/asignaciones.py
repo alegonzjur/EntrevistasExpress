@@ -46,6 +46,13 @@ def register(app):
     def gestion_manual_candidatos(semana):
         """Vista de gestión manual de candidatos y asignaciones"""
 
+        # Clave del candidato a resaltar/preseleccionar al entrar (viene
+        # del botón "Reasignar" de /admin/candidatos/semana/<semana>), para
+        # que el admin llegue aquí viendo ya marcados tanto el candidato
+        # como la franja en la que estaba reservado, sin tener que buscarlo
+        # a mano entre toda la lista.
+        candidato_resaltado = request.args.get("candidato")
+
         # Obtener candidatos de la semana. Sin nota (media_estudios None)
         # se ordena como si fuera un 5, igual que en el resto de la app.
         candidatos = (
@@ -108,6 +115,7 @@ def register(app):
             lunes=siguiente_lunes,
             viernes=viernes,
             username=session["username"],
+            candidato_resaltado=candidato_resaltado,
         )
 
     @app.route("/admin/candidatos/asignar-manual", methods=["POST"])
@@ -391,6 +399,46 @@ def register(app):
 
             traceback.print_exc()
             return jsonify({"error": f"Error al reasignar candidato: {str(e)}"}), 500
+
+    @app.route("/admin/candidato/<clave_academica>/asignacion")
+    @admin_required
+    def ver_asignacion_candidato(clave_academica):
+        """
+        Detalle de la asignación (entrevista) de un candidato concreto:
+        día, hora, profesor y sede/espacio. Usado por el botón "Ver
+        asignación" de /admin/candidatos/semana/<semana>, que solo se
+        ofrece para candidatos en estado 'asignado'.
+        """
+        candidato = Candidato.query.filter_by(
+            clave_academica=clave_academica.strip()
+        ).first()
+
+        if not candidato or not candidato.asignacion:
+            return jsonify({"error": "Este candidato no tiene ninguna asignación."}), 404
+
+        asignacion = candidato.asignacion
+        reserva = asignacion.reserva
+
+        return jsonify(
+            {
+                "candidato": f"{candidato.nombre} {candidato.apellidos}",
+                "fecha": reserva.fecha.strftime("%d/%m/%Y") if reserva else None,
+                "dia_semana": reserva.fecha.strftime("%A") if reserva else None,
+                "hora": (
+                    asignacion.hora_exacta.strftime("%H:%M")
+                    if asignacion.hora_exacta
+                    else None
+                ),
+                "profesor": (
+                    (reserva.usuario.nombre_completo or reserva.usuario.username)
+                    if reserva and reserva.usuario
+                    else None
+                ),
+                "sede": reserva.espacio.nombre if reserva and reserva.espacio else None,
+                "posicion": asignacion.posicion,
+                "reserva_id": reserva.id if reserva else None,
+            }
+        )
 
     @app.route("/admin/candidatos/info-reserva/<int:reserva_id>")
     @admin_required

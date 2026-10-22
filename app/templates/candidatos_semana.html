@@ -192,23 +192,28 @@
                                 </span>
                             </td>
                             <td>
-                                <button class="btn btn-sm btn-info" 
-                                        onclick="verDetalle({{ candidato.id }})"
-                                        title="Ver detalles">
+                                <a href="{{ url_for('ver_detalle_candidato', clave_academica=candidato.clave_academica) }}"
+                                   class="btn btn-sm btn-info"
+                                   title="Ver detalles">
                                     <i class="fas fa-eye"></i>
-                                </button>
+                                </a>
                                 {% if candidato.estado == 'asignado' %}
-                                <button class="btn btn-sm btn-success" 
-                                        onclick="verAsignacion({{ candidato.id }})"
+                                <button class="btn btn-sm btn-success"
+                                        onclick="verAsignacion('{{ candidato.clave_academica }}')"
                                         title="Ver asignación">
                                     <i class="fas fa-calendar-check"></i>
                                 </button>
-                                <button class="btn btn-sm btn-danger" 
+                                <a href="{{ url_for('gestion_manual_candidatos', semana=candidato.semana_carga, candidato=candidato.clave_academica) }}"
+                                   class="btn btn-sm btn-warning"
+                                   title="Reasignar">
+                                    <i class="fas fa-random"></i>
+                                </a>
+                                {% endif %}
+                                <button class="btn btn-sm btn-danger"
                                         onclick="eliminarCandidato('{{ candidato.clave_academica }}', '{{ candidato.nombre }} {{ candidato.apellidos }}')"
                                         title="Eliminar candidato">
                                     <i class="fas fa-trash"></i>
                                 </button>
-                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -230,12 +235,12 @@
     </div>
 </div>
 
-<!-- Modal Detalle Candidato -->
+<!-- Modal Detalle de la Asignación (franja, profesor, sede del candidato) -->
 <div class="modal fade" id="modalDetalle" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Detalle del Candidato</h5>
+                <h5 class="modal-title" id="modalDetalleTitulo">Detalle de la Asignación</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="contenidoDetalle">
@@ -320,14 +325,42 @@ function ordenarTabla(columna) {
     ordenAscendente = !ordenAscendente;
 }
 
-// Ver detalle (placeholder - puedes implementar una ruta específica)
-function verDetalle(candidatoId) {
-    alert('Función de detalle para candidato ' + candidatoId + ' - A implementar');
-}
+// Ver asignación: abre un modal con la franja, el profesor y la sede en
+// la que está reservado el candidato (solo se ofrece si está asignado).
+function verAsignacion(clave) {
+    const modalEl = document.getElementById('modalDetalle');
+    const modal = new bootstrap.Modal(modalEl);
+    document.getElementById('modalDetalleTitulo').textContent = 'Detalle de la Asignación';
+    document.getElementById('contenidoDetalle').innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+        </div>`;
+    modal.show();
 
-// Ver asignación (placeholder)
-function verAsignacion(candidatoId) {
-    alert('Función de ver asignación para candidato ' + candidatoId + ' - A implementar');
+    fetch(`/admin/candidato/${clave}/asignacion`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('contenidoDetalle').innerHTML =
+                    `<div class="alert alert-warning">${data.error}</div>`;
+                return;
+            }
+            document.getElementById('contenidoDetalle').innerHTML = `
+                <table class="table">
+                    <tr><th>Candidato</th><td>${data.candidato}</td></tr>
+                    <tr><th>Fecha</th><td>${data.fecha || 'No disponible'} (${data.dia_semana || ''})</td></tr>
+                    <tr><th>Hora</th><td>${data.hora || 'No disponible'}</td></tr>
+                    <tr><th>Profesor</th><td>${data.profesor || 'No disponible'}</td></tr>
+                    <tr><th>Sede / Espacio</th><td>${data.sede || 'No disponible'}</td></tr>
+                </table>
+            `;
+        })
+        .catch(() => {
+            document.getElementById('contenidoDetalle').innerHTML =
+                `<div class="alert alert-danger">No se pudo cargar la asignación.</div>`;
+        });
 }
 
 // Exportar tabla
