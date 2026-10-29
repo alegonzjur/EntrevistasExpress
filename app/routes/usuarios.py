@@ -185,6 +185,19 @@ def register(app):
             nueva_contrasena = request.form.get("nueva_contrasena", "").strip()
             confirmar_contrasena = request.form.get("confirmar_contrasena", "").strip()
 
+            # Enlace de videollamada personal: lo puede añadir/sobrescribir
+            # un admin desde aquí (antes solo lo podía tocar el propio
+            # profesor desde /perfil). En blanco significa "no toques el
+            # que ya hay" — nunca borra el enlace existente.
+            enlace_videollamada_nuevo = request.form.get(
+                "enlace_videollamada_personal", ""
+            ).strip()
+            if enlace_videollamada_nuevo and not (
+                enlace_videollamada_nuevo.startswith("http://")
+                or enlace_videollamada_nuevo.startswith("https://")
+            ):
+                enlace_videollamada_nuevo = "https://" + enlace_videollamada_nuevo
+
             # Validar nombre completo
             if not nombre_completo_nuevo:
                 flash("El nombre completo es requerido", "error")
@@ -202,6 +215,7 @@ def register(app):
                 "nombre_completo": usuario.nombre_completo,
                 "rol": usuario.rol,
                 "sedes": [s.nombre for s in usuario.sedes],
+                "enlace_videollamada_personal": usuario.enlace_videollamada_personal,
             }
 
             # ========================================
@@ -267,6 +281,11 @@ def register(app):
             usuario.nombre_completo = nombre_completo_nuevo
             usuario.rol = rol_nuevo
 
+            # Solo se sobrescribe si se introdujo un enlace nuevo; en
+            # blanco se deja el que ya hubiera tal cual.
+            if enlace_videollamada_nuevo:
+                usuario.enlace_videollamada_personal = enlace_videollamada_nuevo
+
             # Actualizar sedes (relación muchos-a-muchos)
             if rol_nuevo == "profesor" and sedes_seleccionadas:
                 usuario.sedes = []
@@ -290,6 +309,7 @@ def register(app):
                     "sedes": (
                         [s.nombre for s in usuario.sedes] if rol_nuevo == "profesor" else []
                     ),
+                    "enlace_videollamada_personal": usuario.enlace_videollamada_personal,
                 }
 
                 if nueva_contrasena:

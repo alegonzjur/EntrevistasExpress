@@ -106,6 +106,62 @@
             </div>
             
             <!-- ========================================
+                 ENLACE DE VIDEOLLAMADA PERSONAL
+            ======================================== -->
+            <div style="margin-top: 30px; padding-top: 30px; border-top: 2px solid #e0e0e0;">
+                <h3 style="color: #0066B3; margin: 0 0 15px 0;">
+                    🔗 Enlace de Videollamada Personal
+                </h3>
+
+                {% if usuario.enlace_videollamada_personal %}
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">
+                        Enlace actual
+                    </label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text"
+                               id="enlace-actual"
+                               value="{{ usuario.enlace_videollamada_personal }}"
+                               readonly
+                               onclick="this.select()"
+                               style="flex: 1; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; background: #f5f5f5;">
+                        <button type="button"
+                                class="btn btn-secondary"
+                                onclick="copiarEnlaceVideollamada()"
+                                style="padding: 12px 20px; white-space: nowrap;">
+                            📋 Copiar
+                        </button>
+                    </div>
+                    <small style="color: #666; display: block; margin-top: 5px;" id="copia-confirmacion"></small>
+                </div>
+                {% else %}
+                <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px 15px; margin-bottom: 20px; border-radius: 4px;">
+                    <small style="color: #856404;">
+                        ⚠️ Este usuario todavía no ha introducido ningún enlace de videollamada.
+                    </small>
+                </div>
+                {% endif %}
+
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="enlace_videollamada_personal" style="font-weight: 600; margin-bottom: 8px; display: block;">
+                        {{ 'Sobrescribir con un enlace nuevo' if usuario.enlace_videollamada_personal else 'Añadir un enlace' }}
+                    </label>
+                    <input type="text"
+                           id="enlace_videollamada_personal"
+                           name="enlace_videollamada_personal"
+                           placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                           style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                    <small style="color: #666; display: block; margin-top: 5px;">
+                        {% if usuario.enlace_videollamada_personal %}
+                        Déjalo en blanco para no tocar el enlace actual. Si escribes uno, sustituirá al anterior al guardar.
+                        {% else %}
+                        Déjalo en blanco si no quieres añadir ninguno todavía.
+                        {% endif %}
+                    </small>
+                </div>
+            </div>
+
+            <!-- ========================================
                  ✅ NUEVA SECCIÓN: CAMBIAR CONTRASEÑA
             ======================================== -->
             <div style="margin-top: 30px; padding-top: 30px; border-top: 2px solid #e0e0e0;">
@@ -176,6 +232,22 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
+function copiarEnlaceVideollamada() {
+    const campo = document.getElementById('enlace-actual');
+    const confirmacion = document.getElementById('copia-confirmacion');
+
+    navigator.clipboard.writeText(campo.value).then(() => {
+        confirmacion.textContent = '✅ Enlace copiado al portapapeles';
+        confirmacion.style.color = '#10b981';
+    }).catch(() => {
+        // Fallback por si el navegador no permite navigator.clipboard
+        // (p. ej. sin HTTPS): seleccionar el texto para copiar a mano.
+        campo.select();
+        confirmacion.textContent = '⚠️ No se pudo copiar automáticamente. Selecciona y copia con Ctrl+C.';
+        confirmacion.style.color = '#f59e0b';
+    });
+}
+
 function toggleSedeField() {
     const rol = document.getElementById('rol').value;
     const sedesGroup = document.getElementById('sedes-group');
