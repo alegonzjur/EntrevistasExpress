@@ -20,6 +20,12 @@ class Reserva(db.Model):
     prioridad = db.Column(db.String(20), default="normal", nullable=False)
 
     @property
+    def turno(self):
+        """"manana" si la reserva empieza antes de las 14:00, "tarde" si no.
+        (Sin acento a propósito: se usa como valor en filtros HTML.)"""
+        return "manana" if self.hora_inicio.hour < 14 else "tarde"
+
+    @property
     def curso(self):
         """Curso académico (1 sep - 31 ago) al que pertenece esta reserva,
         calculado a partir de su fecha — no es una columna propia, para no

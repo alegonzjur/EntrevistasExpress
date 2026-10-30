@@ -221,6 +221,81 @@
         border-color: #0066B3;
     }
     
+    .filtros-candidatos {
+        margin-bottom: 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .filtros-candidatos input[type="text"],
+    .filtros-candidatos select {
+        padding: 8px 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 13px;
+        background: white;
+    }
+
+    .filtros-candidatos input[type="text"]:focus,
+    .filtros-candidatos select:focus {
+        outline: none;
+        border-color: #0066B3;
+    }
+
+    .filtros-candidatos-fila {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .filtros-candidatos-fila select {
+        flex: 1;
+        min-width: 130px;
+    }
+
+    .candidato-disponibilidad {
+        margin-top: 6px;
+        font-size: 12px;
+        color: #555;
+    }
+
+    .franja-chip {
+        display: inline-block;
+        margin: 2px 4px 2px 0;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: #e8f1fa;
+        color: #0066B3;
+        font-weight: 600;
+    }
+
+    .reserva-centros {
+        margin-top: 5px;
+        font-size: 12px;
+        color: #555;
+    }
+
+    .centro-chip {
+        display: inline-block;
+        margin: 2px 4px 2px 0;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: #0066B3;
+        color: white;
+        font-weight: 600;
+    }
+
+    .centro-chip.centro-todos {
+        background: #e2e3e5;
+        color: #41464b;
+    }
+
+    .sin-disponibilidad {
+        color: #999;
+        font-style: italic;
+    }
+
     @media (max-width: 1024px) {
         .gestion-container {
             grid-template-columns: 1fr;
@@ -297,17 +372,50 @@
             <span class="badge bg-warning">{{ stats.candidatos_pendientes }} pendientes</span>
         </div>
         
-        <div class="filtros">
-            <button class="filtro-btn activo" onclick="filtrarCandidatos('todos')">Todos</button>
-            <button class="filtro-btn" onclick="filtrarCandidatos('pendiente')">Pendientes</button>
-            <button class="filtro-btn" onclick="filtrarCandidatos('asignado')">Asignados</button>
+        <div class="filtros" id="filtros-estado-candidatos">
+            <button class="filtro-btn activo" data-estado-filtro="todos" onclick="filtrarCandidatos('todos', this)">Todos</button>
+            <button class="filtro-btn" data-estado-filtro="pendiente" onclick="filtrarCandidatos('pendiente', this)">Pendientes</button>
+            <button class="filtro-btn" data-estado-filtro="asignado" onclick="filtrarCandidatos('asignado', this)">Asignados</button>
         </div>
-        
+
+        <!-- Buscador y filtros de disponibilidad / centro -->
+        <div class="filtros-candidatos">
+            <input type="text" id="buscador-candidatos"
+                   placeholder="🔍 Buscar candidato por nombre..."
+                   oninput="aplicarFiltrosCandidatos()">
+            <div class="filtros-candidatos-fila">
+                <select id="filtro-dia" onchange="aplicarFiltrosCandidatos()">
+                    <option value="">Todos los días</option>
+                    <option value="0">Lunes</option>
+                    <option value="1">Martes</option>
+                    <option value="2">Miércoles</option>
+                    <option value="3">Jueves</option>
+                    <option value="4">Viernes</option>
+                </select>
+                <select id="filtro-turno" onchange="aplicarFiltrosCandidatos()">
+                    <option value="">Mañana y tarde</option>
+                    <option value="manana">Mañana</option>
+                    <option value="tarde">Tarde</option>
+                </select>
+                <select id="filtro-centro" onchange="aplicarFiltrosCandidatos()">
+                    <option value="">Todos los centros</option>
+                    {% for sede_nombre in sedes_filtro %}
+                    <option value="{{ sede_nombre }}">{{ sede_nombre }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="filtro-btn" onclick="limpiarFiltrosCandidatos()">✖ Limpiar</button>
+            </div>
+            <small id="contador-candidatos" style="color: #666;"></small>
+        </div>
+
         <div id="lista-candidatos">
             {% for candidato in candidatos %}
+            {% set disponibilidad = candidato.disponibilidad_resumen %}
             <div class="candidato-item {{ candidato.estado }}"
                  data-candidato-id="{{ candidato.clave_academica }}"
                  data-estado="{{ candidato.estado }}"
+                 data-sede="{{ candidato.sede or '' }}"
+                 data-franjas="{{ disponibilidad|map(attribute='clave')|join(',') }}"
                  data-nombre="{{ candidato.nombre }} {{ candidato.apellidos }}"
                  data-nota="{{ '' if candidato.media_estudios is none else candidato.media_estudios }}"
                  data-reserva-asignada-id="{{ candidato.asignacion.reserva_id if candidato.asignacion else '' }}"
@@ -330,6 +438,14 @@
                     🎓 {{ candidato.primera_opcion[:50] }}...
                 </div>
                 {% endif %}
+                <div class="candidato-disponibilidad">
+                    {% if disponibilidad %}
+                        🕒 Disponibilidad:
+                        {% for franja in disponibilidad %}<span class="franja-chip">{{ franja.texto }}</span>{% endfor %}
+                    {% else %}
+                        <span class="sin-disponibilidad">🕒 Sin disponibilidad indicada</span>
+                    {% endif %}
+                </div>
             </div>
             {% endfor %}
         </div>
@@ -342,16 +458,47 @@
             <span class="badge bg-primary">{{ reservas_info|length }} franjas</span>
         </div>
         
-        <div class="filtros">
-            <button class="filtro-btn activo" onclick="filtrarReservas('todas')">Todas</button>
-            <button class="filtro-btn" onclick="filtrarReservas('libres')">Libres</button>
-            <button class="filtro-btn" onclick="filtrarReservas('parciales')">Parciales</button>
+        <div class="filtros" id="filtros-estado-reservas">
+            <button class="filtro-btn activo" data-estado-filtro="todas" onclick="filtrarReservas('todas', this)">Todas</button>
+            <button class="filtro-btn" data-estado-filtro="libres" onclick="filtrarReservas('libres', this)">Libres</button>
+            <button class="filtro-btn" data-estado-filtro="parciales" onclick="filtrarReservas('parciales', this)">Parciales</button>
         </div>
-        
+
+        <!-- Filtros por día / turno / centro -->
+        <div class="filtros-candidatos">
+            <div class="filtros-candidatos-fila">
+                <select id="filtro-reserva-dia" onchange="aplicarFiltrosReservas()">
+                    <option value="">Todos los días</option>
+                    <option value="0">Lunes</option>
+                    <option value="1">Martes</option>
+                    <option value="2">Miércoles</option>
+                    <option value="3">Jueves</option>
+                    <option value="4">Viernes</option>
+                </select>
+                <select id="filtro-reserva-turno" onchange="aplicarFiltrosReservas()">
+                    <option value="">Mañana y tarde</option>
+                    <option value="manana">Mañana</option>
+                    <option value="tarde">Tarde</option>
+                </select>
+                <select id="filtro-reserva-centro" onchange="aplicarFiltrosReservas()">
+                    <option value="">Todos los centros</option>
+                    {% for sede_nombre in sedes_reservas %}
+                    <option value="{{ sede_nombre }}">{{ sede_nombre }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="filtro-btn" onclick="limpiarFiltrosReservas()">✖ Limpiar</button>
+            </div>
+            <small id="contador-reservas" style="color: #666;"></small>
+        </div>
+
         <div id="lista-reservas">
             {% for info in reservas_info %}
+            {% set profe = info.reserva.usuario %}
             <div class="reserva-item {% if info.num_asignaciones == 0 %}libre{% elif info.num_asignaciones == 1 %}parcial{% else %}completa{% endif %}"
                  data-reserva-id="{{ info.reserva.id }}"
+                 data-dia="{{ info.reserva.fecha.weekday() }}"
+                 data-turno="{{ info.reserva.turno }}"
+                 data-sedes="{{ profe.sedes_entrevista|join('|') if profe.sedes_entrevista else '*' }}"
                  data-num-asignaciones="{{ info.num_asignaciones }}"
                  data-fecha="{{ info.reserva.fecha.strftime('%d/%m/%Y') }}"
                  data-hora="{{ info.reserva.hora_inicio.strftime('%H:%M') }}"
@@ -368,9 +515,17 @@
                 </div>
                 
                 <div style="font-size: 13px; color: #666;">
-                    👤 {{ info.reserva.usuario.username }}
+                    👤 {% if profe.nombre_completo %}<strong>{{ profe.nombre_completo }}</strong> ({{ profe.username }}){% else %}<strong>{{ profe.username }}</strong>{% endif %}
                     {% if info.reserva.espacio %}
                     | 📍 {{ info.reserva.espacio.nombre }}
+                    {% endif %}
+                </div>
+                <div class="reserva-centros">
+                    🏢
+                    {% if profe.sedes_entrevista %}
+                        {% for sede_nombre in profe.sedes_entrevista %}<span class="centro-chip">{{ sede_nombre }}</span>{% endfor %}
+                    {% else %}
+                        <span class="centro-chip centro-todos">Cualquier centro</span>
                     {% endif %}
                 </div>
                 
@@ -793,47 +948,145 @@ async function desasignarCandidato(asignacionId, nombreCandidato) {
     }
 }
 
-function filtrarCandidatos(filtro) {
-    // Actualizar botones
-    document.querySelectorAll('.filtros .filtro-btn').forEach(btn => {
-        btn.classList.remove('activo');
-    });
-    event.currentTarget.classList.add('activo');
-    
-    // Filtrar candidatos
-    document.querySelectorAll('.candidato-item').forEach(item => {
-        const estado = item.dataset.estado;
-        if (filtro === 'todos' || estado === filtro) {
-            item.style.display = 'block';
-        } else {
-            item.style.display = 'none';
-        }
-    });
+// ---------------------------------------------------------------------
+// Filtros del panel de candidatos. Todos se combinan entre sí (AND):
+// estado (botones), nombre (buscador), día, turno (mañana/tarde) y centro.
+// ---------------------------------------------------------------------
+let filtroEstadoCandidatos = 'todos';
+
+function normalizarTexto(texto) {
+    // Minúsculas y sin acentos, para que "garcia" encuentre "García".
+    return (texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
-function filtrarReservas(filtro) {
-    // Actualizar botones
-    const filtrosContainer = document.querySelectorAll('.filtros')[1];
-    filtrosContainer.querySelectorAll('.filtro-btn').forEach(btn => {
+function filtrarCandidatos(filtro, boton) {
+    filtroEstadoCandidatos = filtro;
+    document.querySelectorAll('#filtros-estado-candidatos .filtro-btn').forEach(btn => {
         btn.classList.remove('activo');
     });
-    event.currentTarget.classList.add('activo');
-    
-    // Filtrar reservas
-    document.querySelectorAll('.reserva-item').forEach(item => {
-        const numAsignaciones = parseInt(item.dataset.numAsignaciones);
-        let mostrar = false;
-        
-        if (filtro === 'todas') {
-            mostrar = true;
-        } else if (filtro === 'libres' && numAsignaciones === 0) {
-            mostrar = true;
-        } else if (filtro === 'parciales' && numAsignaciones === 1) {
-            mostrar = true;
-        }
-        
-        item.style.display = mostrar ? 'block' : 'none';
-    });
+    if (boton) boton.classList.add('activo');
+    aplicarFiltrosCandidatos();
 }
+
+function aplicarFiltrosCandidatos() {
+    const texto = normalizarTexto(document.getElementById('buscador-candidatos').value.trim());
+    const dia = document.getElementById('filtro-dia').value;
+    const turno = document.getElementById('filtro-turno').value;
+    const centro = document.getElementById('filtro-centro').value;
+
+    const items = document.querySelectorAll('.candidato-item');
+    let visibles = 0;
+
+    items.forEach(item => {
+        let mostrar = true;
+
+        if (filtroEstadoCandidatos !== 'todos' && item.dataset.estado !== filtroEstadoCandidatos) {
+            mostrar = false;
+        }
+
+        if (mostrar && texto && !normalizarTexto(item.dataset.nombre).includes(texto)) {
+            mostrar = false;
+        }
+
+        if (mostrar && centro && item.dataset.sede !== centro) {
+            mostrar = false;
+        }
+
+        // Día y/o turno: se comprueba contra cada franja ("3-tarde") del
+        // candidato. Con día Y turno a la vez, debe existir UNA franja que
+        // cumpla las dos cosas (p. ej. "viernes tarde"). Quien no ha
+        // indicado disponibilidad no encaja en ningún día/turno concreto.
+        if (mostrar && (dia !== '' || turno !== '')) {
+            const franjas = (item.dataset.franjas || '').split(',').filter(f => f);
+            mostrar = franjas.some(franja => {
+                const [diaFranja, turnoFranja] = franja.split('-');
+                return (dia === '' || diaFranja === dia) &&
+                       (turno === '' || turnoFranja === turno);
+            });
+        }
+
+        item.style.display = mostrar ? 'block' : 'none';
+        if (mostrar) visibles++;
+    });
+
+    document.getElementById('contador-candidatos').textContent =
+        `Mostrando ${visibles} de ${items.length} candidatos`;
+}
+
+function limpiarFiltrosCandidatos() {
+    document.getElementById('buscador-candidatos').value = '';
+    document.getElementById('filtro-dia').value = '';
+    document.getElementById('filtro-turno').value = '';
+    document.getElementById('filtro-centro').value = '';
+    filtroEstadoCandidatos = 'todos';
+    document.querySelectorAll('#filtros-estado-candidatos .filtro-btn').forEach(btn => {
+        btn.classList.toggle('activo', btn.dataset.estadoFiltro === 'todos');
+    });
+    aplicarFiltrosCandidatos();
+}
+
+document.addEventListener('DOMContentLoaded', aplicarFiltrosCandidatos);
+
+// ---------------------------------------------------------------------
+// Filtros del panel de reservas. Se combinan entre sí (AND): ocupación
+// (botones), día de la semana, turno (mañana/tarde) y centro. El centro
+// de una reserva es el de su profesor: encaja si el profesor puede
+// atender ese centro ("*" = no tiene centros asignados, puede cualquiera;
+// mismo criterio que Usuario.puede_atender_sede).
+// ---------------------------------------------------------------------
+let filtroEstadoReservas = 'todas';
+
+function filtrarReservas(filtro, boton) {
+    filtroEstadoReservas = filtro;
+    document.querySelectorAll('#filtros-estado-reservas .filtro-btn').forEach(btn => {
+        btn.classList.remove('activo');
+    });
+    if (boton) boton.classList.add('activo');
+    aplicarFiltrosReservas();
+}
+
+function aplicarFiltrosReservas() {
+    const dia = document.getElementById('filtro-reserva-dia').value;
+    const turno = document.getElementById('filtro-reserva-turno').value;
+    const centro = document.getElementById('filtro-reserva-centro').value;
+
+    const items = document.querySelectorAll('.reserva-item');
+    let visibles = 0;
+
+    items.forEach(item => {
+        const numAsignaciones = parseInt(item.dataset.numAsignaciones);
+        let mostrar = true;
+
+        if (filtroEstadoReservas === 'libres' && numAsignaciones !== 0) mostrar = false;
+        if (filtroEstadoReservas === 'parciales' && numAsignaciones !== 1) mostrar = false;
+
+        if (mostrar && dia !== '' && item.dataset.dia !== dia) mostrar = false;
+        if (mostrar && turno !== '' && item.dataset.turno !== turno) mostrar = false;
+
+        if (mostrar && centro !== '') {
+            const sedes = (item.dataset.sedes || '').split('|');
+            if (!sedes.includes('*') && !sedes.includes(centro)) mostrar = false;
+        }
+
+        item.style.display = mostrar ? 'block' : 'none';
+        if (mostrar) visibles++;
+    });
+
+    document.getElementById('contador-reservas').textContent =
+        `Mostrando ${visibles} de ${items.length} franjas`;
+}
+
+function limpiarFiltrosReservas() {
+    document.getElementById('filtro-reserva-dia').value = '';
+    document.getElementById('filtro-reserva-turno').value = '';
+    document.getElementById('filtro-reserva-centro').value = '';
+    filtroEstadoReservas = 'todas';
+    document.querySelectorAll('#filtros-estado-reservas .filtro-btn').forEach(btn => {
+        btn.classList.toggle('activo', btn.dataset.estadoFiltro === 'todas');
+    });
+    aplicarFiltrosReservas();
+}
+
+document.addEventListener('DOMContentLoaded', aplicarFiltrosReservas);
 </script>
 {% endblock %}

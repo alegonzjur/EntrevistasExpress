@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from flask import jsonify, render_template, request, session
 
 from app.extensions import db
-from app.models import Asignacion, Candidato, LogAsignacion, Reserva, Usuario
+from app.models import Asignacion, Candidato, LogAsignacion, Reserva, Sede, Usuario
 from app.services.candidatos import obtener_estadisticas_semana_candidatos
 from app.services.logs import registrar_log
 from app.utils.decorators import admin_required
@@ -104,9 +104,19 @@ def register(app):
             Usuario.query.filter_by(activo=True).order_by(Usuario.username).all()
         )
 
+        # Centros que realmente aparecen entre los candidatos de la semana,
+        # para el desplegable de filtro por centro.
+        sedes_filtro = sorted({c.sede for c in candidatos if c.sede})
+
         return render_template(
             "gestion_manual.html",
             candidatos=candidatos,
+            sedes_filtro=sedes_filtro,
+            # Centros para el filtro del panel de reservas (el centro de una
+            # reserva es el de su profesor, no el de un candidato).
+            sedes_reservas=[
+                s.nombre for s in Sede.query.filter_by(activa=True).order_by(Sede.nombre)
+            ],
             reservas_info=reservas_info,
             semana=semana,
             semana_entrevistas=semana_entrevistas,

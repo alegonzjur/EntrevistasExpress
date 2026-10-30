@@ -49,6 +49,21 @@ class Usuario(db.Model):
             "enlace_videollamada_personal": self.enlace_videollamada_personal,
         }
 
+    @property
+    def sedes_entrevista(self):
+        """
+        Nombres de los centros en los que este profesor puede dar
+        entrevistas, con exactamente el mismo criterio que
+        `puede_atender_sede`: sus sedes asignadas; si no tiene, su sede
+        principal; y lista vacía si no tiene ninguna (= puede atender
+        cualquier centro).
+        """
+        if self.sedes:
+            return sorted(s.nombre for s in self.sedes)
+        if self.sede:
+            return [self.sede]
+        return []
+
     def puede_atender_sede(self, sede_nombre):
         """Verifica si el profesor puede atender entrevistas de esta sede"""
         if not sede_nombre:

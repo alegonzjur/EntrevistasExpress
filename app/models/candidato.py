@@ -92,6 +92,35 @@ class Candidato(db.Model):
             "franjas_disponibilidad": self.franjas_disponibilidad,
         }
 
+    @property
+    def disponibilidad_resumen(self):
+        """
+        Disponibilidad del candidato en formato corto para mostrar y filtrar:
+        solo día + turno, sin horas ("Jueves tarde", "Viernes mañana"...),
+        sin repetidos y ordenada de lunes a viernes (mañana antes que tarde).
+
+        Cada elemento es un dict:
+            {"dia_numero": 3, "turno": "tarde", "texto": "Jueves tarde",
+             "clave": "3-tarde"}
+        `clave` (día-turno, sin acentos) es lo que usa el filtro de la
+        gestión manual para comparar en el navegador.
+        """
+        resumen = {}
+        for franja in self.obtener_franjas_preferidas():
+            dia_numero = franja.get("dia_numero")
+            dia = franja.get("dia")
+            turno = (franja.get("turno") or "").strip().lower()
+            if dia_numero is None or not dia or not turno:
+                continue
+            turno_slug = turno.replace("ñ", "n")
+            resumen[(dia_numero, turno_slug)] = {
+                "dia_numero": dia_numero,
+                "turno": turno_slug,
+                "texto": f"{dia} {turno}",
+                "clave": f"{dia_numero}-{turno_slug}",
+            }
+        return [resumen[k] for k in sorted(resumen)]
+
     def obtener_franjas_preferidas(self):
         """
         Devuelve lista de franjas preferidas parseadas
