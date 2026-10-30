@@ -72,6 +72,68 @@ h2 {
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
+.filtros-usuarios {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    background: white;
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
+}
+
+.filtros-usuarios input[type="text"] {
+    flex: 2;
+    min-width: 240px;
+}
+
+.filtros-usuarios select {
+    flex: 1;
+    min-width: 160px;
+}
+
+.filtros-usuarios input[type="text"],
+.filtros-usuarios select {
+    padding: 9px 12px;
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
+}
+
+.filtros-usuarios input[type="text"]:focus,
+.filtros-usuarios select:focus {
+    outline: none;
+    border-color: #0066B3;
+}
+
+.btn-limpiar-filtros {
+    padding: 9px 15px;
+    border: 2px solid #E0E0E0;
+    background: white;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-limpiar-filtros:hover {
+    border-color: #0066B3;
+    color: #0066B3;
+}
+
+#contador-usuarios {
+    color: #666;
+    width: 100%;
+}
+
+.fila-sin-resultados td {
+    text-align: center;
+    color: #666;
+    padding: 30px;
+}
+
 .usuarios-tabla-scroll {
     overflow-x: auto;
 }
@@ -245,13 +307,43 @@ tr:hover {
 </div>
 
 {% if usuarios %}
+<div class="filtros-usuarios">
+    <input type="text" id="buscador-usuarios"
+           placeholder="🔍 Buscar por nombre, usuario o email..."
+           oninput="aplicarFiltrosUsuarios()">
+    <select id="filtro-rol" onchange="aplicarFiltrosUsuarios()">
+        <option value="">Todos los roles</option>
+        <option value="admin">Administrador</option>
+        <option value="profesor">Profesor</option>
+    </select>
+    <select id="filtro-enlace" onchange="aplicarFiltrosUsuarios()">
+        <option value="">Enlace: todos</option>
+        <option value="si">Con enlace de videollamada ✅</option>
+        <option value="no">Sin enlace de videollamada ❌</option>
+    </select>
+    <select id="filtro-sede" onchange="aplicarFiltrosUsuarios()">
+        <option value="">Todas las sedes</option>
+        {% for sede_nombre in sedes %}
+        <option value="{{ sede_nombre }}">{{ sede_nombre }}</option>
+        {% endfor %}
+        <option value="__ninguna__">Sin sede asignada</option>
+    </select>
+    <select id="filtro-estado" onchange="aplicarFiltrosUsuarios()">
+        <option value="">Estado: todos</option>
+        <option value="1">Activos</option>
+        <option value="0">Inactivos</option>
+    </select>
+    <button type="button" class="btn-limpiar-filtros" onclick="limpiarFiltrosUsuarios()">✖ Limpiar</button>
+    <small id="contador-usuarios"></small>
+</div>
+
 <div class="usuarios-tabla">
     <div class="usuarios-tabla-scroll">
     <table>
         <thead>
             <tr>
-                <th>Usuario</th>
                 <th>Nombre</th>
+                <th>Usuario</th>
                 <th>Email</th>
                 <th>Rol</th>
                 <th>Enlace Videollamada</th>
@@ -263,15 +355,20 @@ tr:hover {
         </thead>
         <tbody>
             {% for usuario in usuarios %}
-            <tr id="usuario-{{ usuario.id }}">
-                <td><strong>{{ usuario.username }}</strong></td>
+            <tr id="usuario-{{ usuario.id }}"
+                data-rol="{{ usuario.rol }}"
+                data-activo="{{ 1 if usuario.activo else 0 }}"
+                data-enlace="{{ 'si' if usuario.enlace_videollamada_personal else 'no' }}"
+                data-sedes="{{ usuario.sedes|map(attribute='nombre')|join('|') }}"
+                data-busqueda="{{ usuario.nombre_completo or '' }} {{ usuario.username }} {{ usuario.email }}">
                 <td>
                     {% if usuario.nombre_completo %}
-                        {{ usuario.nombre_completo }}
+                        <strong>{{ usuario.nombre_completo }}</strong>
                     {% else %}
                         <span style="color: #999;">Sin nombre registrado</span>
                     {% endif %}
                 </td>
+                <td>{{ usuario.username }}</td>
                 <td>{{ usuario.email }}</td>
                 <td>
                     <span class="badge badge-{{ usuario.rol }}">
@@ -335,6 +432,75 @@ tr:hover {
 
 {% block scripts %}
 <script>
+// ---------------------------------------------------------------------
+// Filtros de la tabla de usuarios (en el navegador, se combinan con AND).
+// ---------------------------------------------------------------------
+function normalizarTexto(texto) {
+    // Minúsculas y sin acentos: "garcia" encuentra "García".
+    return (texto || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function aplicarFiltrosUsuarios() {
+    const buscador = document.getElementById('buscador-usuarios');
+    if (!buscador) return;  // sin usuarios no hay filtros
+
+    const texto = normalizarTexto(buscador.value.trim());
+    const rol = document.getElementById('filtro-rol').value;
+    const enlace = document.getElementById('filtro-enlace').value;
+    const sede = document.getElementById('filtro-sede').value;
+    const estado = document.getElementById('filtro-estado').value;
+
+    const filas = document.querySelectorAll('tbody tr[data-rol]');
+    let visibles = 0;
+
+    filas.forEach(fila => {
+        let mostrar = true;
+
+        if (texto && !normalizarTexto(fila.dataset.busqueda).includes(texto)) mostrar = false;
+        if (mostrar && rol && fila.dataset.rol !== rol) mostrar = false;
+        if (mostrar && enlace && fila.dataset.enlace !== enlace) mostrar = false;
+        if (mostrar && estado !== '' && fila.dataset.activo !== estado) mostrar = false;
+
+        if (mostrar && sede) {
+            const sedes = fila.dataset.sedes ? fila.dataset.sedes.split('|') : [];
+            if (sede === '__ninguna__') {
+                mostrar = sedes.length === 0;
+            } else {
+                mostrar = sedes.includes(sede);
+            }
+        }
+
+        fila.style.display = mostrar ? '' : 'none';
+        if (mostrar) visibles++;
+    });
+
+    document.getElementById('contador-usuarios').textContent =
+        `Mostrando ${visibles} de ${filas.length} usuarios`;
+
+    // Aviso cuando ningún usuario cumple los filtros.
+    const tbody = document.querySelector('.usuarios-tabla tbody');
+    let aviso = document.getElementById('fila-sin-resultados');
+    if (visibles === 0 && filas.length > 0) {
+        if (!aviso) {
+            aviso = document.createElement('tr');
+            aviso.id = 'fila-sin-resultados';
+            aviso.className = 'fila-sin-resultados';
+            aviso.innerHTML = '<td colspan="9">Ningún usuario coincide con los filtros</td>';
+            tbody.appendChild(aviso);
+        }
+    } else if (aviso) {
+        aviso.remove();
+    }
+}
+
+function limpiarFiltrosUsuarios() {
+    ['buscador-usuarios', 'filtro-rol', 'filtro-enlace', 'filtro-sede', 'filtro-estado']
+        .forEach(id => { document.getElementById(id).value = ''; });
+    aplicarFiltrosUsuarios();
+}
+
+document.addEventListener('DOMContentLoaded', aplicarFiltrosUsuarios);
+
 async function toggleUsuario(id, username, activo) {
     const accion = activo ? 'desactivar' : 'activar';
     if (!confirm(`¿Estás seguro de que deseas ${accion} al usuario ${username}?`)) {
@@ -364,6 +530,10 @@ async function toggleUsuario(id, username, activo) {
                 estadoBadge.className = 'badge badge-inactivo';
             }
             
+            // Mantener el filtro de estado al día con el cambio
+            document.getElementById(`usuario-${id}`).dataset.activo = data.activo ? '1' : '0';
+            aplicarFiltrosUsuarios();
+
             // Actualizar el botón
             const btn = event.target;
             btn.textContent = data.activo ? 'Desactivar' : 'Activar';
@@ -425,6 +595,7 @@ async function eliminarUsuario(id, username) {
             alert(data.mensaje);
             // Eliminar la fila de la tabla
             document.getElementById(`usuario-${id}`).remove();
+            aplicarFiltrosUsuarios();
         } else {
             alert('Error: ' + data.error);
         }
