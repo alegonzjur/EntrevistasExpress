@@ -331,62 +331,68 @@ def transformar(df, umbral, solicitudes_seleccionadas, semana, archivo_origen):
     candidatos_con_preferencias = int(df_filtrado["tiene_preferencias"].sum())
     candidatos_sin_preferencias = candidatos_finales - candidatos_con_preferencias
 
-    # Deduplicar frente a lo que ya hay en base de datos (claves ya
-    # cargadas en una semana anterior).
-    claves_en_df = df_filtrado["clave_academica"].tolist()
-    candidatos_existentes = Candidato.query.filter(
-        Candidato.clave_academica.in_(claves_en_df)
-    ).all()
-    candidatos_duplicados = len(candidatos_existentes)
-
-    if candidatos_duplicados > 0:
-        claves_duplicadas = [c.clave_academica for c in candidatos_existentes]
-        df_filtrado = df_filtrado[
-            ~df_filtrado["clave_academica"].isin(claves_duplicadas)
-        ].copy()
+    # Repetidos dentro del propio Excel: si una misma clave aparece más de
+    # una vez, se conserva la primera. Sin esto, to_sql intentaba insertar
+    # la clave dos veces (o, en una base sin restricción única, dejaba
+    # filas duplicadas que luego rompen la asignación).
+    repetidos_en_archivo = int(df_filtrado["clave_academica"].duplicated().sum())
+    if repetidos_en_archivo > 0:
+        df_filtrado = df_filtrado.drop_duplicates(
+            subset="clave_academica", keep="first"
+        ).copy()
         candidatos_finales = len(df_filtrado)
-
-        if candidatos_finales == 0:
-            raise ErrorCargaExcel(
-                f"Todos los candidatos ({candidatos_duplicados}) ya están cargados",
-                duplicados=candidatos_duplicados,
-                total_leidos=int(total_leidos),
-            )
-
         candidatos_por_sede = _contar_por_sede(df_filtrado)
         candidatos_sin_sede = int(df_filtrado["sede"].isna().sum())
         candidatos_con_preferencias = int(df_filtrado["tiene_preferencias"].sum())
         candidatos_sin_preferencias = candidatos_finales - candidatos_con_preferencias
 
-    # Codificar campos de texto
-    for col in [
-        "apellidos",
-        "nombre",
-        "primera_opcion",
-        "archivo_origen",
-        "email",
-        "telefono",
-        "sede",
-        "franjas_disponibilidad",
-        "franjas_parseadas",
-        "forma_acceso",
-        "tipo_bachillerato",
-        "tipo_fpii_cgs",
-    ]:
-        if col in df_filtrado.columns:
-            df_filtrado[col] = df_filtrado[col].apply(
-                lambda x: (
-                    str(x).encode("utf-8", "ignore").decode("utf-8")
-                    if x is not None and str(x) not in ["nan", "None"]
-                    else None
-                )
+    # Deduplicar frente a lo que ya hay en base de datos (claves ya
+    # cargadas en una semana anterior). Las filas omitidas NO se
+    # descartan: se devuelven en `filas_duplicadas` para que el admin
+    # pueda decidir cuáles volver a cargar (candidatos que no llegaron a
+    # tener la entrevista y deben pasar a la semana actual).
+    claves_en_df = df_filtrado["clave_academica"].tolist()
+    candidatos_existentes = Candidato.query.filter(
+        Candidato.clave_academica.in_(claves_en_df)
+    ).all()
+    candidatos_duplicados = len(candidatos_existentes)
+    filas_duplicadas = []
+
+    if candidatos_duplicados > 0:
+        claves_duplicadas = [c.clave_academica for c in candidatos_existentes]
+        es_duplicada = df_filtrado["clave_academica"].isin(claves_duplicadas)
+        df_duplicadas = _limpiar_texto(df_filtrado[es_duplicada].copy())
+        filas_duplicadas = json.loads(
+            df_duplicadas.to_json(orient="records", date_format="iso")
+        )
+        df_filtrado = df_filtrado[~es_duplicada].copy()
+        candidatos_finales = len(df_filtrado)
+
+        # Si todo el Excel eran repetidos ya no es un error: no hay nada
+        # nuevo que insertar, pero el admin aún puede querer recargar
+        # alguno de ellos. La ruta se encarga de no insertar un df vacío.
+        if candidatos_finales > 0:
+            candidatos_por_sede = _contar_por_sede(df_filtrado)
+            candidatos_sin_sede = int(df_filtrado["sede"].isna().sum())
+            candidatos_con_preferencias = int(df_filtrado["tiene_preferencias"].sum())
+            candidatos_sin_preferencias = (
+                candidatos_finales - candidatos_con_preferencias
             )
+        else:
+            candidatos_por_sede = {}
+            candidatos_sin_sede = 0
+            candidatos_con_preferencias = 0
+            candidatos_sin_preferencias = 0
+
+    df_filtrado = _limpiar_texto(df_filtrado)
 
     estadisticas = {
         "total_leidos": int(total_leidos),
         "total_validos": int(total_validos),
         "candidatos_finales": int(candidatos_finales),
         "candidatos_duplicados": int(candidatos_duplicados),
+        "repetidos_en_archivo": repetidos_en_archivo,
+        "filas_duplicadas": filas_duplicadas,
         "candidatos_por_sede": candidatos_por_sede,
         "candidatos_sin_sede": candidatos_sin_sede,
         "candidatos_con_preferencias": candidatos_con_preferencias,
@@ -394,6 +400,37 @@ def transformar(df, umbral, solicitudes_seleccionadas, semana, archivo_origen):
     }
 
     return df_filtrado, estadisticas
+
+
+_COLUMNAS_TEXTO = [
+    "apellidos",
+    "nombre",
+    "primera_opcion",
+    "archivo_origen",
+    "email",
+    "telefono",
+    "sede",
+    "franjas_disponibilidad",
+    "franjas_parseadas",
+    "forma_acceso",
+    "tipo_bachillerato",
+    "tipo_fpii_cgs",
+]
+
+
+def _limpiar_texto(df):
+    """Normaliza a UTF-8 válido los campos de texto (y deja None en vez de
+    "nan"). Se aplica tanto a las filas a insertar como a las repetidas."""
+    for col in _COLUMNAS_TEXTO:
+        if col in df.columns:
+            df[col] = df[col].apply(
+                lambda x: (
+                    str(x).encode("utf-8", "ignore").decode("utf-8")
+                    if x is not None and str(x) not in ["nan", "None"]
+                    else None
+                )
+            )
+    return df
 
 
 def _contar_por_sede(df):

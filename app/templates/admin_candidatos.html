@@ -295,6 +295,13 @@
                                     <span class="badge bg-secondary">Semana {{ carga.semana_destino }}</span>
                                 </p>
                                 <small>{{ carga.mensaje }}</small>
+                                {% if repetidos_por_carga and repetidos_por_carga.get(carga.id) %}
+                                <div class="mt-2">
+                                    <button class="btn btn-sm btn-warning" data-accion="gestionar-repetidos" onclick="abrirGestorRepetidos({{ carga.id }})">
+                                        <i class="fas fa-redo"></i> Gestionar repetidos ({{ repetidos_por_carga[carga.id] }})
+                                    </button>
+                                </div>
+                                {% endif %}
                             </div>
                             {% endfor %}
                         </div>
@@ -427,14 +434,26 @@ document.getElementById('formCargarExcel').addEventListener('submit', async func
             
             mensajeHTML += '</div>';
             
-            await Swal.fire({
+            if (data.repetidos_en_archivo > 0) {
+                mensajeHTML = mensajeHTML.replace('</div>', '') +
+                    `<br>• ℹ️ Repetidos dentro del propio Excel (se conserva el primero): ${data.repetidos_en_archivo}</div>`;
+            }
+
+            const hayRepetidos = data.repetidos_recargables > 0;
+            const resultado = await Swal.fire({
                 icon: data.candidatos_duplicados > 0 ? 'warning' : 'success',
                 title: data.candidatos_duplicados > 0 ? '¡Importación con Advertencias!' : '¡Importación Exitosa!',
                 html: mensajeHTML,
                 confirmButtonColor: '#28a745',
+                showDenyButton: hayRepetidos,
+                denyButtonText: '🔁 Elegir repetidos a cargar',
+                denyButtonColor: '#f0ad4e',
                 width: 600
             });
-            
+
+            if (resultado.isDenied) {
+                await abrirGestorRepetidos(data.carga_id);
+            }
             location.reload();
         } else {
             if (data.duplicado) {
@@ -466,6 +485,210 @@ document.getElementById('formCargarExcel').addEventListener('submit', async func
         btnCargar.innerHTML = '<i class="fas fa-upload"></i> Cargar y Procesar';
     }
 });
+
+
+// ====================================================================
+// GESTIONAR REPETIDOS (recargar candidatos ya existentes en esta semana)
+// ====================================================================
+function escHtml(t) {
+    return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function normTxt(t) {
+    return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+async function abrirGestorRepetidos(cargaId) {
+    let datos;
+    try {
+        const r = await fetch(`/admin/candidatos/repetidos/${cargaId}`);
+        datos = await r.json();
+        if (!r.ok) throw new Error(datos.error || 'Error al cargar los repetidos');
+    } catch (err) {
+        await Swal.fire({icon: 'error', title: 'Error', text: err.message});
+        return false;
+    }
+
+    const reps = datos.repetidos || [];
+    if (!reps.length) {
+        await Swal.fire({icon: 'info', title: 'Sin repetidos', text: 'No quedan repetidos pendientes en esta carga.'});
+        return false;
+    }
+
+    const filas = reps.map(r => {
+        const badges = [];
+        if (!r.existe) badges.push('<span class="badge bg-secondary">Ya no existe</span>');
+        if (r.asignado) badges.push('<span class="badge bg-info text-dark">Con asignación</span>');
+        if (r.email_enviado) badges.push('<span class="badge bg-warning text-dark">Email enviado</span>');
+        if (r.entrevistado) badges.push('<span class="badge bg-danger">Entrevistado</span>');
+        return `<tr data-clave="${escHtml(r.clave)}" data-estado="${escHtml(r.estado_actual || '')}"
+                    data-busqueda="${escHtml(normTxt(r.nombre + ' ' + r.clave))}">
+            <td><input type="checkbox" class="rep-check" value="${escHtml(r.clave)}"></td>
+            <td><strong>${escHtml(r.nombre)}</strong><br><small class="text-muted">${escHtml(r.clave)}</small></td>
+            <td>${escHtml(r.sede || '—')}</td>
+            <td>${escHtml(r.semana_actual || '—')}</td>
+            <td>${escHtml(r.estado_actual || '—')}</td>
+            <td>${badges.join(' ')}</td>
+        </tr>`;
+    }).join('');
+
+    const html = `
+        <div style="text-align:left">
+            <p class="mb-2">Los candidatos que marques se <strong>borrarán de su semana anterior (con su asignación)</strong>
+            y quedarán como <strong>pendientes en la semana ${escHtml(datos.semana)}</strong>. Los que no marques se quedan como están.</p>
+            <div class="d-flex gap-2 mb-2 flex-wrap">
+                <input type="text" id="rep-buscar" class="form-control form-control-sm" style="flex:1;min-width:160px" placeholder="Buscar por nombre o clave...">
+                <select id="rep-estado" class="form-select form-select-sm" style="width:auto">
+                    <option value="">Todos los estados</option>
+                    <option value="pendiente">Pendiente</option>
+                    <option value="asignado">Asignado</option>
+                    <option value="entrevistado">Entrevistado</option>
+                </select>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="rep-todos">Marcar visibles</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="rep-ninguno">Desmarcar todos</button>
+            </div>
+            <div style="max-height:340px;overflow:auto;border:1px solid #dee2e6">
+                <table class="table table-sm table-hover mb-0" style="font-size:.9rem">
+                    <thead class="table-light" style="position:sticky;top:0"><tr>
+                        <th></th><th>Candidato</th><th>Sede</th><th>Semana anterior</th><th>Estado</th><th>Aviso</th>
+                    </tr></thead>
+                    <tbody id="rep-body">${filas}</tbody>
+                </table>
+                <div id="rep-vacio" class="text-center text-muted p-3" style="display:none">Ningún repetido coincide</div>
+            </div>
+            <div class="mt-2"><strong id="rep-contador"></strong></div>
+            <small class="text-muted">Los «Entrevistado» perderían su resultado y notas de entrevista al recargarse.</small>
+        </div>`;
+
+    const resultado = await Swal.fire({
+        title: `Repetidos omitidos (${reps.length})`,
+        html,
+        width: 900,
+        showCancelButton: true,
+        confirmButtonText: 'Cargar seleccionados a la semana actual',
+        cancelButtonText: 'Cerrar sin cargar',
+        confirmButtonColor: '#28a745',
+        showDenyButton: true,
+        denyButtonText: 'Eliminar sin cargar',
+        denyButtonColor: '#dc3545',
+        didOpen: () => {
+            const body = document.getElementById('rep-body');
+            const checks = () => Array.from(body.querySelectorAll('.rep-check'));
+            const actualizar = () => {
+                const q = normTxt(document.getElementById('rep-buscar').value.trim());
+                const est = document.getElementById('rep-estado').value;
+                let visibles = 0;
+                body.querySelectorAll('tr').forEach(tr => {
+                    const ok = (!q || tr.dataset.busqueda.includes(q)) && (!est || tr.dataset.estado === est);
+                    tr.style.display = ok ? '' : 'none';
+                    if (ok) visibles++;
+                });
+                document.getElementById('rep-vacio').style.display = visibles ? 'none' : '';
+                const n = checks().filter(c => c.checked).length;
+                document.getElementById('rep-contador').textContent =
+                    `${n} seleccionados de ${reps.length} (${visibles} visibles)`;
+            };
+            document.getElementById('rep-buscar').addEventListener('input', actualizar);
+            document.getElementById('rep-estado').addEventListener('change', actualizar);
+            body.addEventListener('change', actualizar);
+            document.getElementById('rep-todos').addEventListener('click', () => {
+                body.querySelectorAll('tr').forEach(tr => {
+                    if (tr.style.display !== 'none') tr.querySelector('.rep-check').checked = true;
+                });
+                actualizar();
+            });
+            document.getElementById('rep-ninguno').addEventListener('click', () => {
+                checks().forEach(c => c.checked = false);
+                actualizar();
+            });
+            actualizar();
+        },
+        preConfirm: () => {
+            const claves = Array.from(document.querySelectorAll('#rep-body .rep-check'))
+                .filter(c => c.checked).map(c => c.value);
+            if (!claves.length) {
+                Swal.showValidationMessage('Selecciona al menos un candidato');
+                return false;
+            }
+            const avisos = Array.from(document.querySelectorAll('#rep-body tr'))
+                .filter(tr => tr.querySelector('.rep-check').checked && tr.dataset.estado === 'entrevistado').length;
+            return {claves, avisos};
+        },
+        preDeny: () => {
+            const claves = Array.from(document.querySelectorAll('#rep-body .rep-check'))
+                .filter(c => c.checked).map(c => c.value);
+            return {claves};
+        }
+    });
+
+    if (resultado.isDenied) {
+        const claves = resultado.value.claves;
+        const todos = claves.length === 0;
+        const conf = await Swal.fire({
+            icon: 'warning',
+            title: todos ? '¿Eliminar TODOS los repetidos sin cargar?' : `¿Eliminar ${claves.length} repetidos sin cargar?`,
+            html: 'Se borrará la información guardada de estos candidatos del Excel. ' +
+                  'Los candidatos que ya existen en la base de datos <strong>no se tocan</strong>, ' +
+                  'pero ya no podrás recargarlos desde esta carga.' +
+                  (todos ? '<br><br><small>No has marcado ninguno, así que se eliminarían todos los repetidos de esta carga.</small>' : ''),
+            showCancelButton: true,
+            confirmButtonText: 'Sí, eliminar',
+            confirmButtonColor: '#dc3545',
+            cancelButtonText: 'Cancelar'
+        });
+        if (!conf.isConfirmed) return false;
+        try {
+            const r = await fetch(`/admin/candidatos/repetidos/${cargaId}/descartar`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(todos ? {todos: true} : {claves})
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error || 'Error al eliminar');
+            await Swal.fire({icon: 'success', title: 'Repetidos eliminados',
+                text: `${d.descartados} repetidos eliminados sin cargar.`});
+            location.reload();
+            return true;
+        } catch (err) {
+            await Swal.fire({icon: 'error', title: 'Error', text: err.message});
+            return false;
+        }
+    }
+
+    if (!resultado.isConfirmed) return false;
+
+    if (resultado.value.avisos > 0) {
+        const conf = await Swal.fire({
+            icon: 'warning',
+            title: 'Hay candidatos ya entrevistados',
+            text: `${resultado.value.avisos} de los seleccionados ya están entrevistados. Se perderán su resultado y sus notas. ¿Continuar?`,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, recargar',
+            cancelButtonText: 'Cancelar'
+        });
+        if (!conf.isConfirmed) return false;
+    }
+
+    try {
+        const r = await fetch(`/admin/candidatos/repetidos/${cargaId}/recargar`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({claves: resultado.value.claves})
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Error al recargar');
+        await Swal.fire({
+            icon: 'success',
+            title: 'Repetidos recargados',
+            text: `${d.recargados} candidatos pasan a pendientes en la semana ${d.semana}.`
+        });
+        if (!document.getElementById('formCargarExcel')) return true;
+        location.reload();
+        return true;
+    } catch (err) {
+        await Swal.fire({icon: 'error', title: 'Error', text: err.message});
+        return false;
+    }
+}
 
 // ====================================================================
 // EJECUTAR ASIGNACIÓN

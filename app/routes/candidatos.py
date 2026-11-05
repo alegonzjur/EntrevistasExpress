@@ -27,6 +27,13 @@ from app.services.etl_candidatos import (
     transformar,
 )
 from app.services.logs import registrar_log
+from app.services.repetidos import (
+    cargas_con_repetidos,
+    descartar_repetidos,
+    guardar_repetidos,
+    listar_repetidos,
+    recargar_repetidos,
+)
 from app.utils.archivos import allowed_file
 from app.utils.decorators import admin_required
 from app.utils.semanas import obtener_semanas_disponibles
@@ -85,6 +92,7 @@ def register(app):
             candidatos_entrevistados=candidatos_entrevistados,
             semanas_con_candidatos=semanas_con_candidatos,
             ultimas_cargas=ultimas_cargas,
+            repetidos_por_carga=cargas_con_repetidos([c.id for c in ultimas_cargas]),
             ultimos_logs=ultimos_logs,
             semanas_disponibles=semanas_disponibles,
             username=session["username"],
@@ -210,8 +218,12 @@ def register(app):
             candidatos_con_preferencias = stats["candidatos_con_preferencias"]
             candidatos_sin_preferencias = stats["candidatos_sin_preferencias"]
 
+            repetidos_en_archivo = stats["repetidos_en_archivo"]
+            filas_duplicadas = stats["filas_duplicadas"]
+
             # --- ETL: Load ---
-            cargar(df_filtrado)
+            if candidatos_finales > 0:
+                cargar(df_filtrado)
 
             # Registrar carga
             filtro_nota_texto = f"con nota < {umbral}" if umbral > 0 else "sin filtro de nota"
@@ -236,6 +248,9 @@ def register(app):
             )
             db.session.add(carga)
             db.session.commit()
+
+            # Guardar las filas omitidas para poder recargarlas después.
+            guardar_repetidos(carga.id, filas_duplicadas)
 
             # Registrar en logs
             registrar_log(
@@ -292,6 +307,9 @@ def register(app):
                     "total_validos": int(total_validos),
                     "candidatos_finales": int(candidatos_finales),
                     "candidatos_duplicados": int(candidatos_duplicados),
+                    "repetidos_en_archivo": int(repetidos_en_archivo),
+                    "carga_id": carga.id,
+                    "repetidos_recargables": len(filas_duplicadas),
                     "umbral": float(umbral),
                     "solicitudes": sorted(solicitudes_seleccionadas) if solicitudes_seleccionadas else None,
                     "semana": str(semana),
@@ -312,6 +330,101 @@ def register(app):
 
             traceback.print_exc()
             return jsonify({"error": f"Error al procesar el archivo: {str(e)}"}), 500
+
+    @app.route("/admin/candidatos/repetidos/<int:carga_id>")
+    @admin_required
+    def listar_repetidos_carga(carga_id):
+        """Repetidos omitidos de una carga, con su estado actual."""
+        carga = db.get_or_404(CargaExcel, carga_id)
+        return jsonify(
+            {
+                "carga_id": carga.id,
+                "archivo": carga.archivo_nombre,
+                "semana": carga.semana_destino,
+                "repetidos": listar_repetidos(carga.id),
+            }
+        )
+
+    @app.route("/admin/candidatos/repetidos/<int:carga_id>/recargar", methods=["POST"])
+    @admin_required
+    def recargar_repetidos_carga(carga_id):
+        """Mueve los repetidos seleccionados a la semana de esta carga."""
+        carga = db.get_or_404(CargaExcel, carga_id)
+        datos = request.get_json(silent=True) or {}
+        claves = datos.get("claves")
+        if not isinstance(claves, list) or not claves:
+            return jsonify({"error": "No se ha seleccionado ningún candidato"}), 400
+
+        previos = {
+            r["clave"]: r for r in listar_repetidos(carga.id) if r["clave"] in claves
+        }
+        try:
+            recargados = recargar_repetidos(carga, [str(c) for c in claves])
+        except Exception as e:
+            return jsonify({"error": f"No se pudo recargar: {e}"}), 500
+
+        if not recargados:
+            return jsonify({"error": "Ninguna de las claves es un repetido de esta carga"}), 400
+
+        registrar_log(
+            accion="recargar_repetidos",
+            entidad="candidatos",
+            entidad_id=None,
+            descripcion=f"{len(recargados)} candidatos repetidos recargados en semana {carga.semana_destino}",
+            datos_anteriores={
+                c: {
+                    "semana": previos[c]["semana_actual"],
+                    "estado": previos[c]["estado_actual"],
+                    "asignado": previos[c]["asignado"],
+                }
+                for c in recargados
+                if c in previos
+            },
+            datos_nuevos={"semana": carga.semana_destino, "claves": recargados},
+            nivel="info",
+        )
+        return jsonify(
+            {
+                "success": True,
+                "recargados": len(recargados),
+                "semana": carga.semana_destino,
+                "restantes": len(listar_repetidos(carga.id)),
+            }
+        )
+
+    @app.route("/admin/candidatos/repetidos/<int:carga_id>/descartar", methods=["POST"])
+    @admin_required
+    def descartar_repetidos_carga(carga_id):
+        """Elimina repetidos guardados sin cargarlos (no toca candidatos)."""
+        carga = db.get_or_404(CargaExcel, carga_id)
+        datos = request.get_json(silent=True) or {}
+        if datos.get("todos") is True:
+            claves = None
+        else:
+            claves = datos.get("claves")
+            if not isinstance(claves, list) or not claves:
+                return jsonify({"error": "No se ha seleccionado ningún candidato"}), 400
+            claves = [str(c) for c in claves]
+
+        descartados = descartar_repetidos(carga.id, claves)
+        if descartados == 0:
+            return jsonify({"error": "No había repetidos que descartar"}), 400
+
+        registrar_log(
+            accion="descartar_repetidos",
+            entidad="candidatos",
+            entidad_id=None,
+            descripcion=f"{descartados} repetidos descartados sin cargar (carga {carga.archivo_nombre})",
+            datos_nuevos={"carga_id": carga.id, "claves": claves if claves is not None else "todos"},
+            nivel="info",
+        )
+        return jsonify(
+            {
+                "success": True,
+                "descartados": descartados,
+                "restantes": len(listar_repetidos(carga.id)),
+            }
+        )
 
     @app.route("/admin/candidatos/semana/<semana>")
     @admin_required

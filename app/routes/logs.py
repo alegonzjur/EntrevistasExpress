@@ -14,6 +14,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from app.extensions import db
 from app.models import Asignacion, Candidato, CargaExcel, LogActividad
 from app.services.logs import registrar_log
+from app.services.repetidos import borrar_repetidos
 from app.utils.decorators import admin_required
 
 
@@ -333,6 +334,7 @@ def register(app):
             # Eliminar registro de carga
             db.session.delete(carga)
             db.session.commit()
+            borrar_repetidos(carga_id)
 
             # Registrar en logs
             registrar_log(
