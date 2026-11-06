@@ -7,18 +7,111 @@ log de asignación individual). La ejecución del algoritmo automático y el
 CRUD de candidatos viven en routes/candidatos.py.
 """
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from flask import jsonify, render_template, request, session
 
 from app.extensions import db
-from app.models import Asignacion, Candidato, LogAsignacion, Reserva, Sede, Usuario
+from app.models import (
+    Asignacion,
+    Candidato,
+    DiaBloqueado,
+    LogAsignacion,
+    Reserva,
+    Sede,
+    Usuario,
+)
 from app.services.candidatos import obtener_estadisticas_semana_candidatos
 from app.services.logs import registrar_log
 from app.utils.decorators import admin_required
 
 
+def _sedes_para_bloqueo():
+    """Campus que se pueden bloquear: activos, o con `activa` sin rellenar
+    (una sede creada a mano en SQL puede tener NULL en vez de True)."""
+    return (
+        Sede.query.filter(db.or_(Sede.activa.is_(True), Sede.activa.is_(None)))
+        .order_by(Sede.nombre)
+        .all()
+    )
+
+
 def register(app):
+    @app.route("/admin/dias-bloqueados")
+    @admin_required
+    def admin_dias_bloqueados():
+        """Días en los que no se asignan entrevistas a candidatos de un campus."""
+        bloqueos = DiaBloqueado.query.order_by(DiaBloqueado.fecha, DiaBloqueado.sede).all()
+        sedes = _sedes_para_bloqueo()
+        return render_template(
+            "dias_bloqueados.html",
+            bloqueos=bloqueos,
+            sedes=sedes,
+            hoy=date.today(),
+            username=session["username"],
+        )
+
+    @app.route("/admin/dias-bloqueados/crear", methods=["POST"])
+    @admin_required
+    def crear_dia_bloqueado():
+        datos = request.get_json(silent=True) or {}
+        try:
+            fecha = datetime.strptime(str(datos.get("fecha", "")), "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": "Fecha no válida"}), 400
+
+        sedes_validas = {s.nombre for s in _sedes_para_bloqueo()}
+        sedes = datos.get("sedes")
+        if not isinstance(sedes, list) or not sedes:
+            return jsonify({"error": "Selecciona al menos un campus"}), 400
+        if any(s not in sedes_validas for s in sedes):
+            return jsonify({"error": "Campus no válido"}), 400
+
+        motivo = (datos.get("motivo") or "").strip()[:255] or None
+        creadas, existentes = [], []
+        for sede in dict.fromkeys(sedes):
+            if DiaBloqueado.query.filter_by(fecha=fecha, sede=sede).first():
+                existentes.append(sede)
+                continue
+            db.session.add(
+                DiaBloqueado(
+                    fecha=fecha, sede=sede, motivo=motivo,
+                    creado_por_usuario_id=session.get("user_id"),
+                )
+            )
+            creadas.append(sede)
+
+        if not creadas:
+            return jsonify({"error": "Ese día ya está bloqueado para los campus elegidos"}), 400
+        db.session.commit()
+
+        registrar_log(
+            accion="bloquear_dia",
+            entidad="dia_bloqueado",
+            entidad_id=None,
+            descripcion=f"Día {fecha.isoformat()} bloqueado para: {', '.join(creadas)}",
+            datos_nuevos={"fecha": fecha.isoformat(), "sedes": creadas, "motivo": motivo},
+            nivel="info",
+        )
+        return jsonify({"success": True, "creadas": creadas, "ya_existian": existentes})
+
+    @app.route("/admin/dias-bloqueados/eliminar/<int:bloqueo_id>", methods=["POST"])
+    @admin_required
+    def eliminar_dia_bloqueado(bloqueo_id):
+        bloqueo = db.get_or_404(DiaBloqueado, bloqueo_id)
+        info = {"fecha": bloqueo.fecha.isoformat(), "sede": bloqueo.sede, "motivo": bloqueo.motivo}
+        db.session.delete(bloqueo)
+        db.session.commit()
+        registrar_log(
+            accion="desbloquear_dia",
+            entidad="dia_bloqueado",
+            entidad_id=bloqueo_id,
+            descripcion=f"Día {info['fecha']} desbloqueado para {info['sede']}",
+            datos_anteriores=info,
+            nivel="info",
+        )
+        return jsonify({"success": True})
+
     @app.route("/admin/candidatos/asignaciones/<semana>")
     @admin_required
     def ver_asignaciones_semana(semana):

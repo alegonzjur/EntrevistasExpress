@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Días bloqueados{% endblock %}
+
+{% block styles %}
+.bloq-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,.1); margin-bottom: 20px; }
+.bloq-card h3 { color: #0066B3; margin-top: 0; }
+.bloq-form { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; }
+.bloq-form label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 14px; }
+.bloq-form input[type=date], .bloq-form input[type=text] { padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; }
+.bloq-form select { padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; min-width: 200px; background: white; }
+.btn-bloquear { padding: 9px 20px; background: #dc3545; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; }
+.bloq-tabla { width: 100%; border-collapse: collapse; }
+.bloq-tabla th, .bloq-tabla td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; }
+.bloq-tabla th { background: #f5f7fa; color: #555; }
+.bloq-pasado { opacity: .5; }
+.btn-quitar { background: none; border: 1px solid #dc3545; color: #dc3545; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.bloq-ayuda { color: #666; font-size: 14px; margin-bottom: 15px; }
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>🚫 Días bloqueados por campus</h2>
+    <p class="bloq-ayuda">
+        En un día bloqueado, la asignación automática <strong>no asigna entrevistas a los candidatos de ese campus</strong>,
+        aunque haya reservas ese día. Pasan a otros días, o a la semana siguiente si no hay hueco.
+        No afecta a la gestión manual.
+    </p>
+
+    <div class="bloq-card">
+        <h3>Bloquear un día</h3>
+        <form id="formBloquear" class="bloq-form">
+            <div>
+                <label for="bloq-fecha">Día</label>
+                <input type="date" id="bloq-fecha" required>
+            </div>
+            <div>
+                <label for="bloq-sede">Campus</label>
+                <select id="bloq-sede" required>
+                    <option value="">— Elige un campus —</option>
+                    {% if sedes|length > 1 %}
+                    <option value="__todos__">Todos los campus</option>
+                    {% endif %}
+                    {% for sede in sedes %}
+                    <option value="{{ sede.nombre }}">{{ sede.nombre }}</option>
+                    {% endfor %}
+                </select>
+                {% if not sedes %}
+                <small style="color:#dc3545;display:block">No hay campus configurados.</small>
+                {% endif %}
+            </div>
+            <div style="flex:1;min-width:200px">
+                <label for="bloq-motivo">Motivo (opcional)</label>
+                <input type="text" id="bloq-motivo" maxlength="255" placeholder="Ej. Festivo local" style="width:100%">
+            </div>
+            <button type="submit" class="btn-bloquear">Bloquear</button>
+        </form>
+    </div>
+
+    <div class="bloq-card">
+        <h3>Días bloqueados ({{ bloqueos|length }})</h3>
+        {% if bloqueos %}
+        <table class="bloq-tabla">
+            <thead><tr><th>Día</th><th>Campus</th><th>Motivo</th><th></th></tr></thead>
+            <tbody>
+                {% for b in bloqueos %}
+                <tr class="{{ 'bloq-pasado' if b.fecha < hoy }}">
+                    <td>{{ b.fecha.strftime('%d/%m/%Y') }}</td>
+                    <td>{{ b.sede }}</td>
+                    <td>{{ b.motivo or '—' }}</td>
+                    <td><button class="btn-quitar" data-id="{{ b.id }}">Desbloquear</button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted">No hay días bloqueados.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('formBloquear').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const sel = document.getElementById('bloq-sede');
+    if (!sel.value) {
+        Swal.fire({icon: 'warning', title: 'Elige un campus'});
+        return;
+    }
+    const sedes = sel.value === '__todos__'
+        ? Array.from(sel.options).map(o => o.value).filter(v => v && v !== '__todos__')
+        : [sel.value];
+    const r = await fetch('/admin/dias-bloqueados/crear', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            fecha: document.getElementById('bloq-fecha').value,
+            sedes: sedes,
+            motivo: document.getElementById('bloq-motivo').value
+        })
+    });
+    const d = await r.json();
+    if (!r.ok) { Swal.fire({icon: 'error', title: 'No se pudo bloquear', text: d.error}); return; }
+    location.reload();
+});
+document.querySelectorAll('.btn-quitar').forEach(btn => btn.addEventListener('click', async () => {
+    const c = await Swal.fire({icon: 'question', title: '¿Desbloquear este día?', showCancelButton: true,
+        confirmButtonText: 'Desbloquear', cancelButtonText: 'Cancelar'});
+    if (!c.isConfirmed) return;
+    const r = await fetch('/admin/dias-bloqueados/eliminar/' + btn.dataset.id, {method: 'POST'});
+    if (r.ok) location.reload();
+    else Swal.fire({icon: 'error', title: 'Error', text: 'No se pudo desbloquear'});
+}));
+</script>
+{% endblock %}

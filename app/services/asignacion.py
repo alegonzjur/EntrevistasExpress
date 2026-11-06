@@ -19,7 +19,15 @@ preserva tal cual estaba, sin usarla ni eliminarla.
 from datetime import datetime, timedelta
 
 from app.extensions import db
-from app.models import Asignacion, Candidato, Espacio, LogAsignacion, Reserva, Usuario
+from app.models import (
+    Asignacion,
+    Candidato,
+    DiaBloqueado,
+    Espacio,
+    LogAsignacion,
+    Reserva,
+    Usuario,
+)
 from app.services.franjas import franja_coincide_con_reserva
 from app.services.logs import registrar_log
 
@@ -68,16 +76,26 @@ def calcular_score_candidato(candidato, reserva, espacio):
 
 def ejecutar_asignacion_automatica(semana_carga, usuario_id, max_por_profesor=None):
     """
-    Ejecuta el algoritmo de asignación automática MEJORADO
+    Ejecuta el algoritmo de asignación automática (v4, por niveles)
 
-    PRIORIZACIÓN:
-    1. Candidatos CON preferencias que coinciden con reservas disponibles
-    2. Candidatos SIN preferencias (asignación por nota)
-    3. Candidatos CON preferencias pero sin coincidencias (asignación por nota)
+    Se hace por PASADAS sobre todos los candidatos (de menor a mayor
+    nota dentro de cada pasada), no candidato a candidato, para que un
+    nivel "amplio" nunca le quite el hueco exacto a otro candidato:
 
-    MEJORA: Prioriza profesores con menos sedes asignadas
+    1. NIVEL 1 — candidatos con preferencias: coincidencia de día + turno
+       + hora con una reserva.
+    2. NIVEL 2 — los que sigan pendientes: coincidencia solo de TURNO
+       (mañana/tarde, el que indicaron), en cualquier día.
+    3. SIN PREFERENCIAS — cualquier hueco compatible (como antes).
+    4. TRASPASO — todo candidato que siga sin hueco pasa a la semana de
+       carga siguiente (sigue `pendiente`); allí se asignará cuando se
+       ejecute la asignación de esa semana.
 
-    No captura excepciones: si algo falla (BD, datos inconsistentes...),
+    En todas las pasadas se respeta la sede del profesor, el máximo por
+    profesor y los días bloqueados (`DiaBloqueado`: fecha + sede del
+    candidato). Entre huecos válidos gana el profesor con menos sedes.
+
+        No captura excepciones: si algo falla (BD, datos inconsistentes...),
     se propaga tal cual al llamador, que debe hacer db.session.rollback()
     y traducirlo a una respuesta HTTP — exactamente lo que hacía el único
     try/except que envolvía toda la vista `ejecutar_asignacion` original.
@@ -142,31 +160,34 @@ def ejecutar_asignacion_automatica(semana_carga, usuario_id, max_por_profesor=No
     inicio = datetime.now()
 
     # ========================================
-    # FASE 1: OBTENER CANDIDATOS Y CLASIFICAR
+    # FASE 1: CANDIDATOS Y CLASIFICACIÓN
     # ========================================
 
-    # Obtener TODOS los candidatos pendientes. Un candidato sin nota
-    # (media_estudios None, desde que esa celda del Excel dejó de ser
-    # obligatoria) se trata, a efectos de este orden, como si tuviera
-    # una nota de 5 — ni al principio ni al final de la cola.
+    # Un candidato sin nota (media_estudios None) se trata, a efectos de
+    # este orden, como si tuviera un 5 — ni al principio ni al final.
     candidatos_todos = (
         Candidato.query.filter_by(semana_carga=semana_carga, estado="pendiente")
         .order_by(db.func.coalesce(Candidato.media_estudios, 5).asc())
         .all()
     )
 
-    # Clasificar candidatos
-    candidatos_con_preferencias = [c for c in candidatos_todos if c.tiene_preferencias]
+    def _nota(c):
+        return c.media_estudios if c.media_estudios is not None else 5
+
+    # "Con preferencias" = tiene alguna franja con turno legible. Un
+    # candidato marcado con preferencias pero cuyas franjas no se pudieron
+    # interpretar se trata como sin preferencias (antes tampoco podía
+    # coincidir con nada y acababa en cualquier hueco).
+    turnos_por_candidato = {c.clave_academica: _turnos_preferidos(c) for c in candidatos_todos}
+    candidatos_con_preferencias = [
+        c for c in candidatos_todos if turnos_por_candidato[c.clave_academica]
+    ]
     candidatos_sin_preferencias = [
-        c for c in candidatos_todos if not c.tiene_preferencias
+        c for c in candidatos_todos if not turnos_por_candidato[c.clave_academica]
     ]
 
-    print(f"📊 Candidatos totales: {len(candidatos_todos)}")
-    print(f"   - Con preferencias: {len(candidatos_con_preferencias)}")
-    print(f"   - Sin preferencias: {len(candidatos_sin_preferencias)}")
-
     # ========================================
-    # FASE 2: OBTENER RESERVAS DISPONIBLES
+    # FASE 2: HUECOS DISPONIBLES Y DÍAS BLOQUEADOS
     # ========================================
 
     reservas_obj = (
@@ -176,288 +197,132 @@ def ejecutar_asignacion_automatica(semana_carga, usuario_id, max_por_profesor=No
         .all()
     )
 
-    # Crear estructura de franjas con espacios
     franjas_disponibles = []
-
     for reserva in reservas_obj:
-        espacio = Espacio.query.get(reserva.espacio_id)
-        entrevistador = Usuario.query.get(reserva.usuario_id)
-
-        asignaciones_existentes = Asignacion.query.filter_by(
-            reserva_id=reserva.id
-        ).count()
+        espacio = db.session.get(Espacio, reserva.espacio_id)
+        entrevistador = db.session.get(Usuario, reserva.usuario_id)
+        asignaciones_existentes = Asignacion.query.filter_by(reserva_id=reserva.id).count()
         espacios_libres = 2 - asignaciones_existentes
-
         if espacios_libres > 0:
-            franja_info = {
-                "reserva": reserva,
-                "espacio": espacio,
-                "espacios_libres": espacios_libres,
-                "asignaciones_actuales": asignaciones_existentes,
-                "entrevistador_id": reserva.usuario_id,
-                "entrevistador": entrevistador,
-            }
-            franjas_disponibles.append(franja_info)
+            franjas_disponibles.append(
+                {
+                    "reserva": reserva,
+                    "espacio": espacio,
+                    "espacios_libres": espacios_libres,
+                    "asignaciones_actuales": asignaciones_existentes,
+                    "entrevistador_id": reserva.usuario_id,
+                    "entrevistador": entrevistador,
+                    "num_sedes": len(entrevistador.sedes) if entrevistador else 0,
+                }
+            )
 
-    print(f"📅 Franjas disponibles: {len(franjas_disponibles)}")
+    bloqueados = {
+        (d.fecha, d.sede)
+        for d in DiaBloqueado.query.filter(
+            DiaBloqueado.fecha >= primer_dia_ent, DiaBloqueado.fecha <= viernes_ent
+        ).all()
+    }
 
     # ========================================
-    # FASE 3: ASIGNACIÓN CON PREFERENCIAS (MEJORADA)
+    # FASE 3: ASIGNACIÓN POR NIVELES
     # ========================================
 
     asignaciones_creadas = []
     asignaciones_por_profesor = {}
-    candidatos_asignados_con_preferencia = 0
+    contadores = {"nivel1": 0, "nivel2": 0, "sin_preferencia": 0}
 
-    print("\n🎯 FASE 1: Asignando candidatos CON preferencias...")
+    def _hueco_valido(candidato, franja_info):
+        """Condiciones comunes a todos los niveles."""
+        if franja_info["espacios_libres"] <= 0:
+            return False
+        if max_por_profesor:
+            actual = asignaciones_por_profesor.get(franja_info["entrevistador_id"], 0)
+            if actual >= int(max_por_profesor):
+                return False
+        if candidato.sede and franja_info["entrevistador"]:
+            if not franja_info["entrevistador"].puede_atender_sede(candidato.sede):
+                return False
+        if candidato.sede and (franja_info["reserva"].fecha, candidato.sede) in bloqueados:
+            return False
+        return True
 
-    for candidato in candidatos_con_preferencias:
-        if candidato.estado != "pendiente":
-            continue
+    def _asignar(candidato, franja_info, tipo, contador):
+        reserva = franja_info["reserva"]
+        if franja_info["asignaciones_actuales"] == 0:
+            posicion, minuto_inicio = 1, 0
+        else:
+            posicion, minuto_inicio = 2, 15
 
-        franjas_preferidas = candidato.obtener_franjas_preferidas()
-
-        # Lista de franjas candidatas con sus scores
-        franjas_candidatas = []
-
-        # Buscar todas las coincidencias posibles
-        for franja_info in franjas_disponibles:
-            if franja_info["espacios_libres"] <= 0:
-                continue
-
-            # Verificar límite por profesor
-            if max_por_profesor:
-                actual = asignaciones_por_profesor.get(
-                    franja_info["entrevistador_id"], 0
-                )
-                if actual >= int(max_por_profesor):
-                    continue
-
-            # Verificar sede
-            if candidato.sede and franja_info["entrevistador"]:
-                if not franja_info["entrevistador"].puede_atender_sede(
-                    candidato.sede
-                ):
-                    continue
-
-            # Calcular score base
-            score = 0
-
-            # Verificar coincidencia con preferencias
-            coincide_horario = False
-            for franja_pref in franjas_preferidas:
-                if franja_coincide_con_reserva(
-                    franja_pref, franja_info["reserva"], franja_info["espacio"]
-                ):
-                    score = 1000  # Máxima prioridad por coincidencia de horario
-                    coincide_horario = True
-                    break
-
-            # Si coincide el horario, añadir a candidatas
-            if coincide_horario:
-                # Calcular número de sedes del entrevistador
-                num_sedes = len(franja_info["entrevistador"].sedes)
-
-                franjas_candidatas.append(
-                    {"franja": franja_info, "score": score, "num_sedes": num_sedes}
-                )
-
-        # Si hay franjas candidatas, elegir la mejor
-        mejor_franja = None
-        mejor_score = -1
-
-        if franjas_candidatas:
-            # Ordenar por:
-            # 1. Score (descendente) - prioridad de coincidencia
-            # 2. Número de sedes (ascendente) - menos sedes = mejor
-            # 3. ID de reserva (para consistencia)
-            franjas_candidatas.sort(
-                key=lambda x: (
-                    -x["score"],  # Mayor score primero
-                    x["num_sedes"],  # Menos sedes primero
-                    x["franja"]["reserva"].id,  # ID menor primero (desempate)
-                )
-            )
-
-            mejor_candidata = franjas_candidatas[0]
-            mejor_franja = mejor_candidata["franja"]
-            mejor_score = mejor_candidata["score"]
-
-            # DEBUG: Mostrar decisión (solo si hay múltiples opciones)
-            if len(franjas_candidatas) > 1:
-                print(
-                    f"   📋 Candidato: {candidato.nombre} {candidato.apellidos} (Sede: {candidato.sede})"
-                )
-                print(f"      Opciones compatibles: {len(franjas_candidatas)}")
-                print(
-                    f"      → Elegido: {mejor_franja['entrevistador'].username} ({mejor_candidata['num_sedes']} sede(s))"
-                )
-
-        # Si encontró coincidencia, asignar
-        if mejor_franja and mejor_score >= 1000:
-            reserva = mejor_franja["reserva"]
-            entrevistador_id = mejor_franja["entrevistador_id"]
-
-            # Determinar posición
-            if mejor_franja["asignaciones_actuales"] == 0:
-                posicion = 1
-                minuto_inicio = 0
-            else:
-                posicion = 2
-                minuto_inicio = 15
-
-            # Crear asignación
-            asignacion = Asignacion(
+        db.session.add(
+            Asignacion(
                 candidato_clave=candidato.clave_academica,
                 reserva_id=reserva.id,
-                entrevistador_id=entrevistador_id,
+                entrevistador_id=franja_info["entrevistador_id"],
                 posicion=posicion,
                 minuto_inicio=minuto_inicio,
                 estado="confirmado",
                 fecha_asignacion=datetime.now(),
                 asignado_por_admin_id=usuario_id,
             )
+        )
+        candidato.estado = "asignado"
+        asignaciones_creadas.append(
+            {"candidato_clave": candidato.clave_academica, "reserva_id": reserva.id, "tipo": tipo}
+        )
+        asignaciones_por_profesor[franja_info["entrevistador_id"]] = (
+            asignaciones_por_profesor.get(franja_info["entrevistador_id"], 0) + 1
+        )
+        franja_info["espacios_libres"] -= 1
+        franja_info["asignaciones_actuales"] += 1
+        contadores[contador] += 1
 
-            db.session.add(asignacion)
-            candidato.estado = "asignado"
-
-            asignaciones_creadas.append(
-                {
-                    "candidato_clave": candidato.clave_academica,
-                    "reserva_id": reserva.id,
-                    "tipo": "con_preferencia",
-                }
-            )
-
-            asignaciones_por_profesor[entrevistador_id] = (
-                asignaciones_por_profesor.get(entrevistador_id, 0) + 1
-            )
-            mejor_franja["espacios_libres"] -= 1
-            mejor_franja["asignaciones_actuales"] += 1
-            candidatos_asignados_con_preferencia += 1
-
-    print(f"   ✅ Asignados con preferencia: {candidatos_asignados_con_preferencia}")
-
-    # ========================================
-    # FASE 4: ASIGNACIÓN SIN PREFERENCIAS (MEJORADA)
-    # ========================================
-
-    print("\n📝 FASE 2: Asignando candidatos SIN preferencias...")
-
-    # Combinar candidatos sin preferencias + candidatos con preferencias no asignados
-    candidatos_restantes = [c for c in candidatos_todos if c.estado == "pendiente"]
-    # Ordenar por nota; sin nota -> se trata como un 5 (ver Fase 1).
-    candidatos_restantes.sort(
-        key=lambda x: x.media_estudios if x.media_estudios is not None else 5
-    )
-
-    candidatos_asignados_sin_preferencia = 0
-
-    for candidato in candidatos_restantes:
-        if candidato.estado != "pendiente":
-            continue
-
-        # Buscar TODAS las franjas compatibles y elegir la mejor
-        franjas_compatibles = []
-
-        for franja_info in franjas_disponibles:
-            if franja_info["espacios_libres"] <= 0:
+    def _pasada(candidatos, filtro_extra, clave_orden, tipo, contador):
+        """Una pasada: cada candidato pendiente toma el mejor hueco válido."""
+        for candidato in candidatos:
+            if candidato.estado != "pendiente":
                 continue
+            opciones = [
+                f
+                for f in franjas_disponibles
+                if _hueco_valido(candidato, f) and filtro_extra(candidato, f)
+            ]
+            if opciones:
+                opciones.sort(key=clave_orden)
+                _asignar(candidato, opciones[0], tipo, contador)
 
-            # Verificar límite por profesor
-            if max_por_profesor:
-                actual = asignaciones_por_profesor.get(
-                    franja_info["entrevistador_id"], 0
-                )
-                if actual >= int(max_por_profesor):
-                    continue
+    def _orden_nivel1(f):
+        return (f["num_sedes"], f["reserva"].id)
 
-            # Verificar sede
-            if candidato.sede and franja_info["entrevistador"]:
-                if not franja_info["entrevistador"].puede_atender_sede(
-                    candidato.sede
-                ):
-                    continue
+    def _orden_fecha(f):
+        return (f["num_sedes"], f["reserva"].fecha, f["reserva"].hora_inicio)
 
-            # Añadir a franjas compatibles
-            num_sedes = len(franja_info["entrevistador"].sedes)
-            franjas_compatibles.append({"franja": franja_info, "num_sedes": num_sedes})
+    def _coincide_dia_turno_hora(candidato, f):
+        return any(
+            franja_coincide_con_reserva(fp, f["reserva"], f["espacio"])
+            for fp in candidato.obtener_franjas_preferidas()
+        )
 
-        # Si hay franjas compatibles, elegir la mejor
-        franja_asignada = None
+    def _coincide_turno(candidato, f):
+        return f["reserva"].turno in turnos_por_candidato[candidato.clave_academica]
 
-        if franjas_compatibles:
-            # Ordenar por:
-            # 1. Número de sedes (menos sedes = mejor)
-            # 2. Fecha más temprana
-            # 3. Hora más temprana
-            franjas_compatibles.sort(
-                key=lambda x: (
-                    x["num_sedes"],  # Menos sedes primero
-                    x["franja"]["reserva"].fecha,  # Fecha más temprana
-                    x["franja"]["reserva"].hora_inicio,  # Hora más temprana
-                )
-            )
+    # NIVEL 1: día + turno + hora
+    _pasada(candidatos_con_preferencias, _coincide_dia_turno_hora, _orden_nivel1,
+            "con_preferencia", "nivel1")
+    # NIVEL 2: solo turno (cualquier día)
+    _pasada(candidatos_con_preferencias, _coincide_turno, _orden_fecha,
+            "con_preferencia_turno", "nivel2")
+    # SIN PREFERENCIAS: cualquier hueco compatible
+    _pasada(candidatos_sin_preferencias, lambda c, f: True, _orden_fecha,
+            "sin_preferencia", "sin_preferencia")
 
-            franja_asignada = franjas_compatibles[0]["franja"]
+    # ========================================
+    # FASE 4: TRASPASO A LA SEMANA SIGUIENTE
+    # ========================================
 
-            # DEBUG: Mostrar decisión (solo si hay múltiples opciones)
-            if len(franjas_compatibles) > 1:
-                print(
-                    f"   📋 Candidato: {candidato.nombre} {candidato.apellidos} (Sede: {candidato.sede})"
-                )
-                print(f"      Opciones compatibles: {len(franjas_compatibles)}")
-                print(
-                    f"      → Elegido: {franja_asignada['entrevistador'].username} ({franjas_compatibles[0]['num_sedes']} sede(s))"
-                )
-
-        if franja_asignada:
-            reserva = franja_asignada["reserva"]
-            entrevistador_id = franja_asignada["entrevistador_id"]
-
-            # Determinar posición
-            if franja_asignada["asignaciones_actuales"] == 0:
-                posicion = 1
-                minuto_inicio = 0
-            else:
-                posicion = 2
-                minuto_inicio = 15
-
-            # Crear asignación
-            asignacion = Asignacion(
-                candidato_clave=candidato.clave_academica,
-                reserva_id=reserva.id,
-                entrevistador_id=entrevistador_id,
-                posicion=posicion,
-                minuto_inicio=minuto_inicio,
-                estado="confirmado",
-                fecha_asignacion=datetime.now(),
-                asignado_por_admin_id=usuario_id,
-            )
-
-            db.session.add(asignacion)
-            candidato.estado = "asignado"
-
-            asignaciones_creadas.append(
-                {
-                    "candidato_clave": candidato.clave_academica,
-                    "reserva_id": reserva.id,
-                    "tipo": (
-                        "sin_preferencia"
-                        if not candidato.tiene_preferencias
-                        else "con_preferencia_sin_match"
-                    ),
-                }
-            )
-
-            asignaciones_por_profesor[entrevistador_id] = (
-                asignaciones_por_profesor.get(entrevistador_id, 0) + 1
-            )
-            franja_asignada["espacios_libres"] -= 1
-            franja_asignada["asignaciones_actuales"] += 1
-            candidatos_asignados_sin_preferencia += 1
-
-    print(f"   ✅ Asignados sin preferencia: {candidatos_asignados_sin_preferencia}")
+    trasladados = [c for c in candidatos_todos if c.estado == "pendiente"]
+    for candidato in trasladados:
+        candidato.semana_carga = semana_entrevistas
+    claves_trasladadas = [c.clave_academica for c in trasladados]
 
     # ========================================
     # FASE 5: GUARDAR Y REPORTAR
@@ -466,66 +331,81 @@ def ejecutar_asignacion_automatica(semana_carga, usuario_id, max_por_profesor=No
     db.session.flush()
 
     tiempo_total = (datetime.now() - inicio).total_seconds()
+    total_asignados = len(asignaciones_creadas)
+    n_nivel1 = contadores["nivel1"]
+    n_nivel2 = contadores["nivel2"]
+    n_sin_pref = contadores["sin_preferencia"]
 
-    # Crear log
     log = LogAsignacion(
         fecha_ejecucion=datetime.now(),
         semana_objetivo=semana_carga,
         candidatos_procesados=len(candidatos_todos),
         candidatos_filtrados=0,
-        candidatos_asignados=len(asignaciones_creadas),
-        candidatos_sin_asignar=len(candidatos_todos) - len(asignaciones_creadas),
-        franjas_utilizadas=len(set([a["reserva_id"] for a in asignaciones_creadas])),
-        algoritmo_usado="asignacion_pref_sedes_v3",
+        candidatos_asignados=total_asignados,
+        candidatos_sin_asignar=len(trasladados),
+        franjas_utilizadas=len(set(a["reserva_id"] for a in asignaciones_creadas)),
+        algoritmo_usado="asignacion_niveles_v4",
         tiempo_ejecucion_segundos=round(tiempo_total, 2),
-        estado=(
-            "exito" if len(asignaciones_creadas) == len(candidatos_todos) else "parcial"
+        estado="exito" if total_asignados == len(candidatos_todos) else "parcial",
+        mensaje=(
+            f"Asignación por niveles. {n_nivel1} día+turno+hora, {n_nivel2} solo turno, "
+            f"{n_sin_pref} sin preferencias, {len(trasladados)} trasladados a {semana_entrevistas}"
         ),
-        mensaje=f"Asignación con preferencias y priorización por sedes. {candidatos_asignados_con_preferencia} con match, {candidatos_asignados_sin_preferencia} sin preferencia/match",
         ejecutado_por_usuario_id=usuario_id,
     )
-
     db.session.add(log)
     db.session.commit()
 
-    # Registrar en logs
     registrar_log(
         accion="asignacion_automatica",
         entidad="sistema",
         entidad_id=None,
-        descripcion=f"Asignación con preferencias y priorización por sedes: {len(asignaciones_creadas)} asignados ({candidatos_asignados_con_preferencia} con match)",
+        descripcion=(
+            f"Asignación por niveles: {total_asignados} asignados "
+            f"({n_nivel1} nivel 1, {n_nivel2} nivel 2, {n_sin_pref} sin preferencias), "
+            f"{len(trasladados)} trasladados a la semana {semana_entrevistas}"
+        ),
         datos_nuevos={
             "semana_carga": semana_carga,
             "semana_entrevistas": semana_entrevistas,
-            "total_asignados": len(asignaciones_creadas),
-            "con_preferencia_match": candidatos_asignados_con_preferencia,
-            "sin_preferencia": candidatos_asignados_sin_preferencia,
-            "sin_asignar": len(candidatos_todos) - len(asignaciones_creadas),
+            "total_asignados": total_asignados,
+            "nivel1_dia_turno_hora": n_nivel1,
+            "nivel2_turno": n_nivel2,
+            "sin_preferencia": n_sin_pref,
+            "trasladados_semana_siguiente": len(trasladados),
+            "claves_trasladadas": claves_trasladadas,
+            "dias_bloqueados_aplicados": sorted(f"{f.isoformat()} {s}" for f, s in bloqueados),
             "tiempo_segundos": round(tiempo_total, 2),
         },
         nivel="info",
     )
 
-    print(f"\n✅ ASIGNACIÓN COMPLETADA:")
-    print(f"   Total asignados: {len(asignaciones_creadas)}/{len(candidatos_todos)}")
-    print(f"   Con preferencia match: {candidatos_asignados_con_preferencia}")
-    print(f"   Sin preferencia/sin match: {candidatos_asignados_sin_preferencia}")
-    print(f"   Tiempo: {round(tiempo_total, 2)}s")
-
     return (
         {
             "success": True,
-            "mensaje": f"{len(asignaciones_creadas)} candidatos asignados correctamente",
-            "candidatos_asignados": len(asignaciones_creadas),
-            "candidatos_sin_asignar": len(candidatos_todos) - len(asignaciones_creadas),
-            "con_preferencia_match": candidatos_asignados_con_preferencia,
-            "sin_preferencia_o_sin_match": candidatos_asignados_sin_preferencia,
-            "franjas_utilizadas": len(
-                set([a["reserva_id"] for a in asignaciones_creadas])
-            ),
+            "mensaje": f"{total_asignados} candidatos asignados correctamente",
+            "candidatos_asignados": total_asignados,
+            # Los no asignados no se pierden: pasan a la semana siguiente.
+            "candidatos_sin_asignar": len(trasladados),
+            "trasladados_semana_siguiente": len(trasladados),
+            "con_preferencia_match": n_nivel1,
+            "asignados_nivel2_turno": n_nivel2,
+            "sin_preferencia_o_sin_match": n_nivel2 + n_sin_pref,
+            "franjas_utilizadas": len(set(a["reserva_id"] for a in asignaciones_creadas)),
             "semana_carga": semana_carga,
             "semana_entrevistas": semana_entrevistas,
             "tiempo_segundos": round(tiempo_total, 2),
         },
         200,
     )
+
+
+def _turnos_preferidos(candidato):
+    """Turnos ("manana"/"tarde") que el candidato indicó en sus franjas.
+    Mismo formato que `Reserva.turno` para poder compararlos."""
+    turnos = set()
+    for franja in candidato.obtener_franjas_preferidas():
+        turno = (franja.get("turno") or "").strip().lower().replace("ñ", "n")
+        if turno in ("manana", "tarde"):
+            turnos.add(turno)
+    return turnos

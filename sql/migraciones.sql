@@ -74,6 +74,27 @@ ALTER TABLE candidatos ALTER COLUMN media_estudios DROP NOT NULL;
 -- media_estudios NULL; si lo tiene, decide primero qué nota ponerle):
 -- ALTER TABLE candidatos ALTER COLUMN media_estudios SET NOT NULL;
 
+-- [2026-11-05] Días bloqueados por campus: festivos locales u otros días en
+-- los que no se asignan entrevistas a los candidatos de un campus. La
+-- asignación automática ignora cada pareja fecha + sede (ver
+-- services/asignacion.py y models/dia_bloqueado.py). Tabla nueva: no se
+-- toca ningún dato existente.
+-- ✅ Aplicado en: (pendiente)
+
+CREATE TABLE IF NOT EXISTS dias_bloqueados (
+    id SERIAL PRIMARY KEY,
+    fecha DATE NOT NULL,
+    sede VARCHAR(50) NOT NULL,
+    motivo VARCHAR(255),
+    creado_por_usuario_id INTEGER REFERENCES usuarios(id),
+    fecha_creacion TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT uq_dia_bloqueado_fecha_sede UNIQUE (fecha, sede)
+);
+CREATE INDEX IF NOT EXISTS ix_dias_bloqueados_fecha ON dias_bloqueados (fecha);
+
+-- Rollback:
+-- DROP TABLE dias_bloqueados;
+
 -- ====================================================================
 -- Plantilla para la siguiente entrada (bórrala y sustitúyela cuando
 -- añadas la próxima migración real):

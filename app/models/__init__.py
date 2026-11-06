@@ -21,6 +21,7 @@ from app.models.asignacion import Asignacion
 from app.models.carga_excel import CargaExcel
 from app.models.log_asignacion import LogAsignacion
 from app.models.log_actividad import LogActividad
+from app.models.dia_bloqueado import DiaBloqueado
 
 __all__ = [
     "usuario_sede",
@@ -33,4 +34,5 @@ __all__ = [
     "CargaExcel",
     "LogAsignacion",
     "LogActividad",
+    "DiaBloqueado",
 ]
