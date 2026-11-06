@@ -11,6 +11,9 @@ from flask import jsonify, render_template, request, session
 from app.constants import MAX_RESERVAS_POR_FRANJA
 from app.extensions import db
 from app.models import Espacio, Reserva, Sede, Usuario
+from app.services.exportacion_todas_reservas import (
+    exportar_todas_reservas_xlsx as exportar_todas_reservas_xlsx_archivo,
+)
 from app.services.logs import registrar_log
 from app.utils.cursos import obtener_cursos_disponibles, rango_fechas_curso
 from app.utils.decorators import admin_required, login_required
@@ -330,9 +333,10 @@ def register(app):
             es_admin=session.get("rol") == "admin",
         )
 
-    @app.route("/admin/todas-reservas")
-    @admin_required
-    def todas_reservas():
+    def _filtrar_todas_reservas():
+        """Filtros de /admin/todas-reservas leídos de la query string.
+        Los comparten la vista y la exportación a Excel, para que el
+        archivo contenga exactamente lo que se ve en pantalla."""
         usuario_filtro = request.args.get("usuario", "")
         dia_filtro = request.args.get("dia", "")
         fecha_desde = request.args.get("fecha_desde", "")
@@ -383,6 +387,23 @@ def register(app):
                 r for r in reservas_filtradas if r.usuario.puede_atender_sede(sede_filtro)
             ]
 
+        filtros = {
+            "usuario": usuario_filtro, "dia": dia_filtro, "fecha_desde": fecha_desde,
+            "fecha_hasta": fecha_hasta, "curso": curso_filtro, "sede": sede_filtro,
+        }
+        return reservas_filtradas, filtros
+
+    @app.route("/admin/todas-reservas")
+    @admin_required
+    def todas_reservas():
+        reservas_filtradas, filtros = _filtrar_todas_reservas()
+        usuario_filtro = filtros["usuario"]
+        dia_filtro = filtros["dia"]
+        fecha_desde = filtros["fecha_desde"]
+        fecha_hasta = filtros["fecha_hasta"]
+        curso_filtro = filtros["curso"]
+        sede_filtro = filtros["sede"]
+
         usuarios = Usuario.query.filter_by(activo=True).order_by(Usuario.username).all()
         espacios = Espacio.query.order_by(Espacio.id).all()
         sedes_disponibles = (
@@ -417,3 +438,23 @@ def register(app):
             sede_filtro=sede_filtro,
             username=session["username"],
         )
+
+    @app.route("/admin/todas-reservas/exportar-xlsx")
+    @admin_required
+    def exportar_todas_reservas_xlsx():
+        """Excel con las reservas de /admin/todas-reservas, respetando los
+        mismos filtros que tenga la vista."""
+        try:
+            reservas_filtradas, filtros = _filtrar_todas_reservas()
+        except ValueError:
+            return jsonify({"error": "Filtros no válidos"}), 400
+
+        registrar_log(
+            accion="exportar",
+            entidad="reserva",
+            entidad_id=None,
+            descripcion=f"Exportación a Excel de {len(reservas_filtradas)} reservas",
+            datos_nuevos={"filtros": {k: v for k, v in filtros.items() if v}},
+            nivel="info",
+        )
+        return exportar_todas_reservas_xlsx_archivo(reservas_filtradas, filtros)

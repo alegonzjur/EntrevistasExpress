@@ -98,7 +98,13 @@
         <h3>
             Mostrando {{ reservas|length }} reserva{{ 's' if reservas|length != 1 else '' }}
         </h3>
-        <button class="btn-exportar" onclick="exportarCSV()">📥 Exportar CSV</button>
+        <div>
+            {% if reservas %}
+            <a class="btn-exportar" style="text-decoration:none;display:inline-block"
+               href="{{ url_for('exportar_todas_reservas_xlsx', usuario=usuario_filtro or None, dia=dia_filtro or None, fecha_desde=fecha_desde or None, fecha_hasta=fecha_hasta or None, curso=curso_filtro or None, sede=sede_filtro or None) }}">📊 Exportar Excel</a>
+            {% endif %}
+            <button class="btn-exportar" onclick="exportarCSV()">📥 Exportar CSV</button>
+        </div>
     </div>
     
     {% if reservas %}
